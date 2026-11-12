@@ -40,17 +40,53 @@ Each of these is a complete beat packed into a URL. Click one and it plays.
 
 ## ✨ Features
 
-| | |
-| :-- | :-- |
-| 🥁 **Step sequencer** | 16 or 32 steps, up to 8 tracks, per-step velocity, swing, and four patterns you can chain into a song |
-| 🎛️ **Sounds** | Four built-in drum kits (40 CC0 samples), drag-and-drop your own audio, and a built-in synth with oscillator, filter and envelope |
-| 🎹 **Piano roll** | Draw bass lines and melodies. Scale lock removes every out-of-key row, so wrong notes are hard to play |
-| 🎚️ **Mixer and FX** | Volume, pan, mute and solo per track, plus reverb, tempo-synced delay, filter and a master compressor |
-| 🔗 **Share links** | The whole beat is encoded into the URL (about 350 characters). Opening it loads and plays, nothing is uploaded |
-| 💾 **Export** | Render to 24-bit WAV, export a stem per track, export MIDI, or save a project file that bundles your samples |
-| 🎮 **Hardware** | Web MIDI pads and keyboards work as soon as they are plugged in, and the computer keyboard plays pads and notes |
-| 📱 **Anywhere** | Installs as a PWA, works offline, and has big touch pads on tablets |
-| 🎨 **Themes** | Cream, Night, Slate and Arcade |
+<table>
+  <tr>
+    <td align="center" width="56">🥁</td>
+    <td width="170"><b>Step sequencer</b></td>
+    <td>16 or 32 steps, up to 8 tracks, per-step velocity, swing, and four patterns you can chain into a song</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎛️</td>
+    <td width="170"><b>Sounds</b></td>
+    <td>Four built-in drum kits (40 CC0 samples), drag-and-drop your own audio, and a built-in synth with oscillator, filter and envelope</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎹</td>
+    <td width="170"><b>Piano roll</b></td>
+    <td>Draw bass lines and melodies. Scale lock removes every out-of-key row, so wrong notes are hard to play</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎚️</td>
+    <td width="170"><b>Mixer and FX</b></td>
+    <td>Volume, pan, mute and solo per track, plus reverb, tempo-synced delay, filter and a master compressor</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🔗</td>
+    <td width="170"><b>Share links</b></td>
+    <td>The whole beat is encoded into the URL (about 350 characters). Opening it loads and plays, nothing is uploaded</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">💾</td>
+    <td width="170"><b>Export</b></td>
+    <td>Render to 24-bit WAV, export a stem per track, export MIDI, or save a project file that bundles your samples</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎮</td>
+    <td width="170"><b>Hardware</b></td>
+    <td>Web MIDI pads and keyboards work as soon as they are plugged in, and the computer keyboard plays pads and notes</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">📱</td>
+    <td width="170"><b>Anywhere</b></td>
+    <td>Installs as a PWA, works offline, and has big touch pads on tablets</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎨</td>
+    <td width="170"><b>Themes</b></td>
+    <td>Cream, Night, Slate and Arcade</td>
+  </tr>
+</table>
 
 <br>
 
@@ -222,7 +258,7 @@ The grid position is kept as a floating-point frame count and only rounded when 
 | :-- | :-- |
 | Drift after 20,000 steps, at six tempo and sample-rate combinations | Never more than half a frame |
 | Real Chromium, main thread frozen 43 times for up to 398 ms each | All 161 steps on their exact frame, no underruns |
-| Worst-case project (every step on, 12 synth voices, all effects), 99.9th percentile block | About 4% of the real-time budget |
+| Worst-case project (every step on, 12 synth voices, all effects), 99.9th percentile block | About 4% of the real-time budget on a desktop CPU |
 | Frame rate while a 32-step beat plays | 60 fps on every panel, no frame over 20 ms |
 
 The lights are driven the other way round: the audio thread reports each step with its frame number, and one `requestAnimationFrame` loop shows it when that frame reaches the speakers. Playback never triggers a framework re-render.
