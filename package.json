@@ -13,6 +13,7 @@
     "test": "vitest run",
     "kits": "tsx scripts/build-kits.ts",
     "test:realtime": "tsx scripts/realtime-check.ts",
+    "test:e2e": "vite build && tsx tests/e2e/run.ts",
     "bench": "tsx scripts/bench.ts",
     "demos": "tsx scripts/demo-links.ts"
   },

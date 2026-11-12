@@ -104,8 +104,9 @@ export class AudioHost {
     if (!this.ctx) return null;
     const t = this.ctx.currentTime;
     while (this.queue.length && this.queue[0].time <= t) {
-      this.head = this.queue.shift()!;
-      this.headTime = this.head.time;
+      const next = this.queue.shift()!;
+      this.head = next;
+      this.headTime = next.time;
     }
     return this.playing ? this.head : null;
   }
