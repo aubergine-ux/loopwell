@@ -1,0 +1,39 @@
+{
+  "name": "loopwell",
+  "version": "0.1.0",
+  "description": "A tactile beat maker that lives in your browser.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "kits": "tsx scripts/build-kits.ts",
+    "test:realtime": "tsx scripts/realtime-check.ts",
+    "bench": "tsx scripts/bench.ts",
+    "demos": "tsx scripts/demo-links.ts"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^26.6.6",
+    "playwright-core": "^1.65.0",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "fflate": "^0.8.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
