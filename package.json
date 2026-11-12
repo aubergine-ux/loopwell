@@ -18,7 +18,8 @@
     "test:community": "vite build && tsx tests/e2e/community.ts",
     "test:live": "vite build && tsx tests/e2e/live.ts",
     "desktop": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "tauri": "tauri"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

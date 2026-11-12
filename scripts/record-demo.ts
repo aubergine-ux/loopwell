@@ -82,7 +82,7 @@ for (const [s, row, len] of [[0, 0, 2], [3, 0, 1], [6, -2, 2], [10, 0, 2], [13, 
 await wait(900);
 
 // sweep the master filter
-await click('[role=tab]:nth-child(4)', 400);
+await click('[role=tab]:nth-child(5)', 400);
 const knob = (await page.locator('.fx section:nth-child(3) .knob').first().boundingBox())!;
 const kx = knob.x + knob.width / 2, ky = knob.y + 30;
 await page.mouse.move(kx, ky, { steps: 8 });
@@ -93,6 +93,24 @@ await page.mouse.move(kx, ky, { steps: 28 });
 await page.mouse.up();
 await wait(500);
 
+// arrange it: over to the song view, stretch every part to four bars, draw a fade-in on the bass
+await click('.seg.view button:nth-child(2)', 700);
+for (const t of [0, 2, 3, 4, 6]) {
+  const c = (await page.locator(`.lane.clips[data-lane="${t}"] .clip`).first().boundingBox())!;
+  await page.mouse.move(c.x + c.width - 3, c.y + c.height / 2, { steps: 6 });
+  await page.mouse.down();
+  await page.mouse.move(c.x + c.width * 4 - 3, c.y + c.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await wait(120);
+}
+await click('[aria-label="Add automation to BASS"]', 300);
+const lane = (await page.locator('svg.curve').first().boundingBox())!;
+await page.mouse.move(lane.x + 4, lane.y + lane.height - 8, { steps: 6 });
+await page.mouse.down();
+for (let i = 1; i <= 20; i++) await page.mouse.move(lane.x + 4 + i * 25, lane.y + lane.height - 8 - i * 1.9, { steps: 2 });
+await page.mouse.up();
+await wait(2200);
+
 // show off a second theme
 await click('[aria-label="Change colour theme"]', 1900);
 const total = (Date.now() - t0) / 1000;
@@ -101,7 +119,7 @@ await b.close();
 const file = join(dir, readdirSync(dir).find((f) => f.endsWith('.webm'))!);
 const lead = 0.4; // skip the blank frames before the page paints
 execFileSync('ffmpeg', ['-y', '-v', 'error', '-ss', String(lead), '-t', String(total), '-i', file,
-  '-vf', 'fps=12,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
+  '-vf', 'fps=10,scale=860:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
   join(root, 'docs/demo.gif')]);
 console.log(`wrote docs/demo.gif (${total.toFixed(1)}s)`);
 process.exit(0);
