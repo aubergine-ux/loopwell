@@ -113,10 +113,6 @@ export class Engine {
     this.samples.set(id, { l, r: r ?? l });
   }
 
-  hasSample(id: string): boolean {
-    return this.samples.has(id);
-  }
-
   /**
    * Start from the top. With `chain`, plays those patterns in order (and stops
    * at the end unless `loop`); otherwise follows the project's song/pattern mode.
