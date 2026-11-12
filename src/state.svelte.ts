@@ -1,7 +1,7 @@
 import { emptyProject, type Project } from './core/types';
 
 export type Tab = 'sound' | 'keys' | 'rack' | 'mix' | 'fx' | 'song' | 'live';
-export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join';
+export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders';
 
 export const THEMES = [
   { id: 'cream', name: 'Cream' },
@@ -25,6 +25,8 @@ export const app = $state({
   sel: 0, // selected track
   pat: 0, // pattern being shown and edited
   tab: 'sound' as Tab,
+  /** Pads-first performance screen instead of the editor. */
+  perform: false,
   playing: false,
   rec: false,
   queued: -1, // pattern waiting for the bar line

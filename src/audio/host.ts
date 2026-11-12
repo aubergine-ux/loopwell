@@ -9,6 +9,23 @@ import type { Project } from '../core/types';
 import type { FromRecorder, FromWorklet, ToWorklet } from './worklet';
 import workletUrl from './worklet.ts?worker&url';
 
+/** How hard to push for a small output buffer. Lower latency means tighter pads; a bigger buffer is safer on a slow machine. */
+export const LATENCY_MODES = ['lowest', 'balanced', 'safe'] as const;
+export type LatencyMode = (typeof LATENCY_MODES)[number];
+const LATENCY_HINTS: Record<LatencyMode, number | AudioContextLatencyCategory> = { lowest: 0, balanced: 'interactive', safe: 'playback' };
+const LATENCY_KEY = 'loopwell:latency';
+
+export function latencySetting(): LatencyMode {
+  let saved = '';
+  try { saved = localStorage.getItem(LATENCY_KEY) ?? ''; } catch { /* private mode */ }
+  return (LATENCY_MODES as readonly string[]).includes(saved) ? (saved as LatencyMode) : 'balanced';
+}
+
+/** Takes effect the next time the app starts, since a browser fixes the buffer size when audio is set up. */
+export function setLatencySetting(mode: LatencyMode): void {
+  try { localStorage.setItem(LATENCY_KEY, mode); } catch { /* private mode */ }
+}
+
 export interface Playhead {
   /** Step of the pattern, or of the song when `song` is not -1. */
   step: number;
@@ -52,7 +69,7 @@ export class AudioHost {
   }
 
   private async start(): Promise<void> {
-    const ctx = new AudioContext({ latencyHint: 'interactive' });
+    const ctx = new AudioContext({ latencyHint: LATENCY_HINTS[latencySetting()] });
     await ctx.audioWorklet.addModule(workletUrl);
     const node = new AudioWorkletNode(ctx, 'loopwell', { numberOfInputs: 0, outputChannelCount: [2] });
     node.port.onmessage = (e: MessageEvent<FromWorklet>) => this.receive(e.data);
@@ -65,6 +82,12 @@ export class AudioHost {
     this.node = node;
     for (const m of this.backlog) node.port.postMessage(m);
     this.backlog = [];
+  }
+
+  /** Seconds between the engine producing a sound and it leaving the speakers, as the browser reports it. */
+  get latency(): number {
+    const ctx = this.ctx;
+    return ctx ? (ctx.baseLatency || 0) + (ctx.outputLatency || 0) : 0;
   }
 
   get running(): boolean {

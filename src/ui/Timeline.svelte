@@ -471,7 +471,8 @@
   .inner { position: relative; min-width: 100%; }
   .row { display: flex; position: relative; }
   .head {
-    position: sticky; left: 0; z-index: 4; flex: 0 0 var(--head); display: flex; align-items: center; gap: 5px; padding: 0 6px;
+    position: sticky; left: 0; z-index: 4; flex: 0 0 var(--head); width: var(--head); min-width: 0; overflow: hidden;
+    display: flex; align-items: center; gap: 5px; padding: 0 6px;
     background: var(--panel); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
   }
   .lane { position: relative; flex: 1; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
@@ -541,7 +542,8 @@
   @media (max-width: 720px) {
     .tools { padding: 10px 12px 0; }
     .scroll { margin: 10px 12px 12px; }
-    .ms.solo { display: none; }
+    .ms.solo, .chip { display: none; }
+    .head { gap: 3px; padding: 0 4px; }
     .edit { margin-left: 0; }
   }
 </style>

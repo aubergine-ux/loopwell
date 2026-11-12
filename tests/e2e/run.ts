@@ -265,6 +265,46 @@ check('recording from the audio input lands on the track as a sample', /Stop \d/
   && (await page.locator('.row[data-row="5"] .name b').textContent()) === 'TAKE 1' && /take-1\.wav/.test((await page.locator('.wave .note').textContent()) ?? ''), recLabel);
 await page.waitForSelector('.toast', { state: 'detached', timeout: 8000 }).catch(() => {});
 
+// ---- pads view ----
+await page.keyboard.press('p');
+await page.waitForSelector('.perform');
+check('P opens the pads view, with a second bank for the selected track', (await page.locator('.perform .pad[data-pad]').count()) === 8 && (await page.locator('.cell').count()) === 0);
+// this track has a slow, swelling sound by now, so hold the pads rather than tapping them
+const hold = async (sel: string, n = 0) => {
+  const box = (await page.locator(sel).nth(n).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 12);
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  const heard = await sounded();
+  await page.mouse.up();
+  return heard;
+};
+check('a pad plays its track and selects it, bringing up its notes', (await hold('.perform .pad[data-pad="6"]')) && (await page.locator('.perform .pad.note').count()) === 8);
+check('the note pads play up the scale', await hold('.perform .pad.note', 4));
+await page.locator('.perform').getByRole('button', { name: 'Mute KICK' }).click();
+check('tracks can be muted from the pads view', (await page.locator('.perform .pad[data-pad="0"].muted').count()) === 1);
+await page.locator('.perform').getByRole('button', { name: 'Mute KICK' }).click();
+const strip = (await page.locator('.touch').boundingBox())!;
+await page.mouse.move(strip.x + strip.width * 0.5, strip.y + 20);
+await page.mouse.down();
+await page.mouse.move(strip.x + strip.width * 0.1, strip.y + 20, { steps: 4 });
+const swept = await page.locator('.touch').getAttribute('aria-valuenow');
+await page.mouse.up();
+check('the touch strip sweeps the filter and springs back on release', +swept! < -40 && (await page.locator('.touch').getAttribute('aria-valuenow')) === '0', `${swept} -> ${await page.locator('.touch').getAttribute('aria-valuenow')}`);
+await page.locator('.perform').getByRole('button', { name: 'Pattern C' }).click();
+check('patterns can be switched there too', (await page.locator('.perform').getByRole('button', { name: 'Pattern C' }).getAttribute('aria-pressed')) === 'true');
+await page.locator('.perform').getByRole('button', { name: 'Pattern A' }).click();
+await page.keyboard.press('p');
+await page.waitForSelector('.cell');
+
+// ---- audio latency setting ----
+await page.keyboard.press('Shift+Slash');
+await page.locator('.modal').getByRole('radio', { name: 'lowest' }).click();
+check('the latency setting is saved for next time', (await page.evaluate(() => localStorage.getItem('loopwell:latency'))) === 'lowest'
+  && /takes effect when Loopwell is next opened/.test((await page.locator('.modal').textContent())!) && /Output latency right now: \d+ ms/.test((await page.locator('.modal').textContent())!));
+await page.locator('.modal').getByRole('radio', { name: 'balanced' }).click();
+await page.keyboard.press('Escape');
+
 // ---- demos + share link ----
 await page.getByTitle('Demo beats and new beat').click();
 await page.getByText('Dust Loop').click();

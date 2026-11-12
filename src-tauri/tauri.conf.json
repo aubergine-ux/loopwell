@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Loopwell",
+  "version": "2.0.0",
+  "identifier": "io.github.aubergine-ux.loopwell",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Loopwell",
+        "width": 1380,
+        "height": 940,
+        "minWidth": 380,
+        "minHeight": 560,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Music",
+    "shortDescription": "A tactile beat maker",
+    "longDescription": "Make beats with a step sequencer, sampler, synth and song arranger. Works offline; nothing leaves your computer unless you share it.",
+    "copyright": "MIT License",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "fileAssociations": [
+      { "ext": ["loopwell"], "name": "Loopwell project", "description": "Loopwell project", "mimeType": "application/x-loopwell", "role": "Editor" }
+    ]
+  }
+}

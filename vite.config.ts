@@ -2,12 +2,15 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
+// The desktop app (Tauri sets this while building) loads from disk, so it has no use for a service worker.
+const desktop = !!process.env.TAURI_ENV_PLATFORM;
+
 export default defineConfig({
   // relative base, so the build works from any path (GitHub Pages serves it from /loopwell/)
   base: './',
   plugins: [
     svelte(),
-    VitePWA({
+    !desktop && VitePWA({
       registerType: 'autoUpdate',
       workbox: {
         // precache everything, drum kits included, so the app works fully offline
@@ -33,6 +36,8 @@ export default defineConfig({
       },
     }),
   ],
-  build: { target: 'es2022' },
+  // WebKit on macOS and Linux is the desktop app's browser
+  build: { target: desktop ? ['es2022', 'safari15'] : 'es2022' },
+  clearScreen: false,
   test: { include: ['tests/**/*.test.ts'] },
 });

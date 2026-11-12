@@ -17,6 +17,7 @@ import { encodeWav } from './core/wav';
 import { app, THEMES } from './state.svelte';
 import { getSamples, loadSaved, loadTheme, putSample, saveProject, saveTheme } from './storage';
 import { flash, startVisuals } from './visual';
+import { isDesktop, log, onProjectOpened, saveFile } from './desktop';
 import { initCommunity } from './community/store.svelte';
 
 // --- small helpers ---------------------------------------------------------
@@ -33,6 +34,11 @@ const slug = () => (app.project.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,
 const nextPaint = () => new Promise<void>((r) => setTimeout(r));
 
 function download(data: Uint8Array<ArrayBuffer>, name: string, type: string): void {
+  // the desktop app has no downloads folder to drop things in: it asks where to save
+  if (isDesktop) {
+    void saveFile(name, data).catch((e) => toast(String(e), 'error'));
+    return;
+  }
   const url = URL.createObjectURL(new Blob([data], { type }));
   const a = document.createElement('a');
   a.href = url;
@@ -614,4 +620,6 @@ export function boot(): void {
   checkHash();
   addEventListener('hashchange', checkHash);
   void initCommunity();
+  void onProjectOpened((bytes, name) => void openProjectBytes(bytes).then((ok) => log(ok ? `opened ${name}: "${app.project.name}", ${app.project.tracks.length} tracks` : `could not open ${name}`)));
+  if (isDesktop) void audio.init().then(() => log(`ready: audio ${audio.ctx?.state}, ${audio.sampleRate} Hz, latency ${Math.round(audio.latency * 1000)} ms`));
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { LATENCY_MODES, audio, latencySetting, setLatencySetting } from '../audio/host';
   import { connectMidi } from '../audio/midi-in';
   import { app } from '../state.svelte';
   import Modal from './Modal.svelte';
@@ -14,6 +15,7 @@
     ['↑ / ↓', 'Select track'],
     ['← / →', 'Previous / next pattern'],
     ['V', 'Switch between pattern view and song view'],
+    ['P', 'Pads: a full-screen view for playing live'],
     ['Del / Ctrl+D', 'Delete / duplicate the selected clip (song view)'],
     ['M / Shift+M', 'Mute / solo the selected track'],
     ['[ / ]', 'Previous / next panel'],
@@ -22,6 +24,9 @@
     ['Shift+C', 'Change colour theme'],
     ['?', 'This help'],
   ];
+  const startedWith = latencySetting();
+  let latency = $state(startedWith);
+  const changed = $derived(latency !== startedWith);
   const MOUSE: [string, string][] = [
     ['Click a step', 'Turn it on or off'],
     ['Drag a step up / down', 'Set its velocity'],
@@ -53,6 +58,14 @@
         <button class="btn" onclick={connectMidi}>Connect MIDI</button>
       {/if}
       <p class="small">Pad controllers (notes from C1, or anything on channel 10) hit the pads. Keyboards play the selected synth track, snapped to the scale when scale lock is on. CC7 is volume, CC1 the master filter, CC74 synth cutoff. MIDI start and stop work too.</p>
+      <h3>Audio</h3>
+      <div class="seg" role="radiogroup" aria-label="Audio latency">
+        {#each LATENCY_MODES as m}
+          <button class:on={latency === m} onclick={() => { latency = m; setLatencySetting(m); }} role="radio" aria-checked={latency === m}>{m}</button>
+        {/each}
+      </div>
+      <p class="small">Output latency right now: <b>{Math.round(audio.latency * 1000)} ms</b> at {audio.sampleRate} Hz. “Lowest” asks for the smallest buffer the device allows, which makes pads feel tighter; “safe” trades that for fewer dropouts on a slow machine.
+        {#if changed}A change takes effect when Loopwell is next opened.{/if}</p>
       <h3>About</h3>
       <p class="small">Loopwell is free and open source under the MIT licence. Everything runs in your browser, and it keeps working offline once loaded.
         <a href="https://github.com/aubergine-ux/loopwell" target="_blank" rel="noreferrer">Source on GitHub</a></p>

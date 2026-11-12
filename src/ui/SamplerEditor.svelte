@@ -3,6 +3,7 @@
   import { assignSample, handleFiles, sampleMissing, sampleName, useKit } from '../actions.svelte';
   import { audio } from '../audio/host';
   import { KITS, SLOTS, isBuiltin, slotLabel } from '../core/kits';
+  import { isDesktop } from '../desktop';
   import { clamp } from '../core/types';
   import { addSlice, auditionSlice, autoSlice, listInputs, removeSlice, setKind, sliceEvenly, startRecording, stopRecording } from '../sound.svelte';
   import { app } from '../state.svelte';
@@ -142,6 +143,7 @@
     </div>
     <button class="btn ghost" onclick={() => useKit(kit)} title="Switch every drum track to the {kit} kit">Kit → all</button>
     <button class="btn ghost" onclick={() => picker?.click()} title="Use your own audio file. You can also drop one on a track."><Icon name="open" size={14} />Load</button>
+    {#if isDesktop}<button class="btn ghost" onclick={() => (app.modal = 'folders')} title="Browse folders of samples on this computer"><Icon name="grid" size={14} />Folders</button>{/if}
     <input bind:this={picker} type="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.aiff,.m4a" multiple hidden onchange={pick} />
     <button class="btn rec" class:on={recHere} onclick={rec} disabled={!!app.recording && !recHere} aria-pressed={recHere}
       title="Record from a microphone or audio interface onto this track">

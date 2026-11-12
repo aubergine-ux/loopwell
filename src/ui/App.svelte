@@ -18,7 +18,9 @@
   import LivePanel from './LivePanel.svelte';
   import Icon from './Icon.svelte';
   import MixPanel from './MixPanel.svelte';
+  import PerformView from './PerformView.svelte';
   import PresetsModal from './PresetsModal.svelte';
+  import FoldersModal from './FoldersModal.svelte';
   import RackPanel from './RackPanel.svelte';
   import Pads from './Pads.svelte';
   import RollPanel from './RollPanel.svelte';
@@ -78,6 +80,9 @@
   <main class="device" bind:this={device}>
     {#if live.on && device}<LiveCursors host={device} />{/if}
     <Transport />
+    {#if app.perform}
+      <PerformView />
+    {:else}
     {#if app.project.songMode}<Timeline />{:else}<Grid />{/if}
     <section class="lower">
       <div class="padwrap">
@@ -106,6 +111,7 @@
         </div>
       </div>
     </section>
+    {/if}
   </main>
   <footer>
     <span>Loopwell</span>
@@ -121,6 +127,7 @@
 {:else if app.modal === 'presets'}<PresetsModal />
 {:else if app.modal === 'community'}<CommunityModal />
 {:else if app.modal === 'join'}<JoinModal />
+{:else if app.modal === 'folders'}<FoldersModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}

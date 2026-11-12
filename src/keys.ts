@@ -74,7 +74,8 @@ export function onKeyDown(e: KeyboardEvent): void {
     case 'ArrowDown': app.sel = clamp(app.sel + 1, 0, p.tracks.length - 1); break;
     case 'ArrowLeft': selectPattern((app.pat + NUM_PATTERNS - 1) % NUM_PATTERNS); break;
     case 'ArrowRight': selectPattern((app.pat + 1) % NUM_PATTERNS); break;
-    case 'KeyV': setView(!p.songMode); break;
+    case 'KeyV': app.perform = false; setView(!p.songMode); break;
+    case 'KeyP': app.perform = !app.perform; break;
     case 'Minus': p.bpm = clamp(p.bpm - (e.shiftKey ? 10 : 1), 40, 240); break;
     case 'Equal': p.bpm = clamp(p.bpm + (e.shiftKey ? 10 : 1), 40, 240); break;
     case 'KeyZ': app.octave = clamp(app.octave - 1, -3, 3); break;

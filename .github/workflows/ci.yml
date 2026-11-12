@@ -55,7 +55,24 @@ jobs:
         with:
           path: dist
 
-  deploy:
+  desktop:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: A placeholder for the web build the shell embeds
+        run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
+      - name: Desktop shell tests
+        run: cargo test
+        working-directory: src-tauri
+
     if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
