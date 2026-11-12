@@ -13,6 +13,8 @@
     ['− / =', 'Tempo down / up (Shift: by 10)'],
     ['↑ / ↓', 'Select track'],
     ['← / →', 'Previous / next pattern'],
+    ['V', 'Switch between pattern view and song view'],
+    ['Del / Ctrl+D', 'Delete / duplicate the selected clip (song view)'],
     ['M / Shift+M', 'Mute / solo the selected track'],
     ['[ / ]', 'Previous / next panel'],
     ['Shift+Backspace', 'Clear the selected track'],

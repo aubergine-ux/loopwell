@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { cycleTheme, redo, selectPattern, stop, togglePlay, undo } from '../actions.svelte';
+  import { cycleTheme, redo, selectPattern, setSteps, setView, togglePlay, undo } from '../actions.svelte';
+  import { PATTERN_NAMES } from '../core/types';
   import { connectMidi } from '../audio/midi-in';
   import { app, THEMES } from '../state.svelte';
   import { onFlash, onFrame } from '../visual';
@@ -77,20 +78,26 @@
     <div class="group">
       <span class="label">Steps</span>
       <div class="seg">
-        <button class:on={p.steps === 16} onclick={() => (p.steps = 16)}>16</button>
-        <button class:on={p.steps === 32} onclick={() => (p.steps = 32)}>32</button>
+        <button class:on={p.steps === 16} onclick={() => setSteps(16)}>16</button>
+        <button class:on={p.steps === 32} onclick={() => setSteps(32)}>32</button>
       </div>
     </div>
 
     <div class="group">
       <span class="label">Pattern</span>
       <div class="pats">
-        {#each 'ABCD' as name, i}
+        {#each PATTERN_NAMES as name, i}
           <button class="btn sq pat" class:on={app.pat === i} class:queued={app.queued === i} onclick={() => selectPattern(i)}
             aria-pressed={app.pat === i} title="Pattern {name}">{name}</button>
         {/each}
-        <button class="btn song" class:on={p.songMode} onclick={() => { p.songMode = !p.songMode; if (p.songMode) app.tab = 'song'; }}
-          aria-pressed={p.songMode} title="Song mode: play the pattern chain">Song</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="label">View</span>
+      <div class="seg view">
+        <button class:on={!p.songMode} onclick={() => setView(false)} aria-pressed={!p.songMode} title="Build loops: the pattern on screen plays round and round (V)">Pattern</button>
+        <button class:on={p.songMode} onclick={() => setView(true)} aria-pressed={p.songMode} title="Arrange patterns on the timeline and play the song (V)">Song</button>
       </div>
     </div>
   </div>
@@ -128,8 +135,8 @@
   .lcdwrap { flex: 1 1 260px; min-width: 200px; }
   .knobs { display: flex; gap: 2px; }
   .group { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
-  .pats { display: flex; gap: 5px; }
-  .pat { font-size: 13px; }
+  .pats { display: flex; gap: 3px; }
+  .pat { font-size: 12px; width: 27px !important; height: 30px; }
   .pat.queued { animation: queued 0.4s steps(2, jump-none) infinite; }
   @keyframes queued { 50% { background: var(--accent); color: var(--accent-ink); } }
 

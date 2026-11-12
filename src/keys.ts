@@ -2,10 +2,11 @@
 // works the same on any layout.
 
 import {
-  cycleTheme, noteDown, noteUp, padDown, padUp, redo, selectPattern, tapTempo, togglePlay, undo, clearTrack,
+  cycleTheme, noteDown, noteUp, padDown, padUp, redo, selectPattern, setView, tapTempo, togglePlay, undo, clearTrack,
 } from './actions.svelte';
 import { degreeToPitch } from './core/scales';
-import { clamp } from './core/types';
+import { NUM_PATTERNS, clamp } from './core/types';
+import { deleteClip, duplicateClip } from './song.svelte';
 import { app, TABS } from './state.svelte';
 
 const HOME = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'];
@@ -49,6 +50,7 @@ export function onKeyDown(e: KeyboardEvent): void {
   if (mod) {
     if (e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
     else if (e.code === 'KeyY') { e.preventDefault(); redo(); }
+    else if (e.code === 'KeyD' && app.clip && app.project.songMode) { e.preventDefault(); duplicateClip(app.clip); }
     return;
   }
   if (e.altKey) return;
@@ -65,8 +67,9 @@ export function onKeyDown(e: KeyboardEvent): void {
       break;
     case 'ArrowUp': app.sel = clamp(app.sel - 1, 0, p.tracks.length - 1); break;
     case 'ArrowDown': app.sel = clamp(app.sel + 1, 0, p.tracks.length - 1); break;
-    case 'ArrowLeft': selectPattern((app.pat + 3) % 4); break;
-    case 'ArrowRight': selectPattern((app.pat + 1) % 4); break;
+    case 'ArrowLeft': selectPattern((app.pat + NUM_PATTERNS - 1) % NUM_PATTERNS); break;
+    case 'ArrowRight': selectPattern((app.pat + 1) % NUM_PATTERNS); break;
+    case 'KeyV': setView(!p.songMode); break;
     case 'Minus': p.bpm = clamp(p.bpm - (e.shiftKey ? 10 : 1), 40, 240); break;
     case 'Equal': p.bpm = clamp(p.bpm + (e.shiftKey ? 10 : 1), 40, 240); break;
     case 'KeyZ': app.octave = clamp(app.octave - 1, -3, 3); break;
@@ -76,7 +79,11 @@ export function onKeyDown(e: KeyboardEvent): void {
       app.tab = TABS[(i + (e.code === 'BracketLeft' ? TABS.length - 1 : 1)) % TABS.length].id;
       break;
     }
-    case 'Backspace': case 'Delete': if (e.shiftKey) clearTrack(app.sel); else return; break;
+    case 'Backspace': case 'Delete':
+      if (e.shiftKey) clearTrack(app.sel);
+      else if (app.clip && p.songMode) deleteClip(app.clip);
+      else return;
+      break;
     case 'KeyC': if (e.shiftKey) cycleTheme(); else return; break;
     case 'Slash': if (e.shiftKey) app.modal = 'help'; else return; break;
     default: return;

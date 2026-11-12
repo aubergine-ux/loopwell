@@ -19,7 +19,7 @@ for (const id of ALL_SAMPLES) bank[id] = { l: decodeWav(readFileSync(join(root, 
 for (const d of DEMOS) {
   const p = d.make();
   const t0 = performance.now();
-  const r = await renderProject(p, bank, { sampleRate: 44100, chain: p.songMode ? p.song : [0, 0] });
+  const r = await renderProject(p, bank, { sampleRate: 44100, chain: p.songMode ? undefined : [0, 0] });
   let peak = 0, sum = 0;
   for (let i = 0; i < r.l.length; i++) { peak = Math.max(peak, Math.abs(r.l[i]), Math.abs(r.r[i])); sum += r.l[i] * r.l[i] + r.r[i] * r.r[i]; }
   const rms = Math.sqrt(sum / (2 * r.l.length));

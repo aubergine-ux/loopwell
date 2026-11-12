@@ -1,7 +1,8 @@
 // A few beats to open, pull apart and steal from. They are plain projects
 // built with a tiny text notation: X accent, x hit, o ghost, - rest.
 
-import { MAX_STEPS, defaultTracks, emptyProject, newPattern, type Note, type Pattern, type Project } from './types';
+import { isDefaultArrangement } from './arrange';
+import { MAX_STEPS, chainToClips, defaultTracks, emptyArrangement, emptyProject, newPattern, type Note, type Pattern, type Project } from './types';
 
 const VEL: Record<string, number> = { X: 122, x: 100, o: 58 };
 
@@ -35,6 +36,8 @@ function beat(name: string, kit: string, pats: Pat[], edit: (p: Project) => void
   p.tracks = defaultTracks(kit);
   pats.forEach((pat, i) => (p.patterns[i] = pattern(pat)));
   edit(p);
+  // demos that don't arrange anything get the stock timeline at their own pattern length
+  if (isDefaultArrangement({ ...p, steps: 16 })) p.arr = emptyArrangement(p.tracks.length, p.steps);
   return p;
 }
 
@@ -58,7 +61,7 @@ const nightDrive = () => beat('Night Drive', 'boom', [
   },
 ], (p) => {
   p.bpm = 122; p.scaleRoot = 9; p.scaleType = 1;
-  p.song = [0, 0, 1, 1, 0, 0, 1, 2]; p.songMode = true;
+  p.arr.clips = chainToClips([0, 0, 1, 1, 0, 0, 1, 2], 8, 16); p.songMode = true;
   p.tracks[0].vol = 108;
   p.tracks[3].vol = 62; p.tracks[4].vol = 66; p.tracks[4].decay = 86; p.tracks[5].vol = 60; p.tracks[5].rev = 60;
   p.tracks[2].rev = 46;
@@ -85,7 +88,7 @@ const dustLoop = () => beat('Dust Loop', 'dust', [
   },
 ], (p) => {
   p.bpm = 86; p.swing = 58; p.scaleRoot = 2; p.scaleType = 1;
-  p.song = [0, 0, 0, 1]; p.songMode = true;
+  p.arr.clips = chainToClips([0, 0, 0, 1], 8, 16); p.songMode = true;
   p.tracks[2].vol = 70; p.tracks[3].vol = 70; p.tracks[4].vol = 60; p.tracks[5].vol = 74; p.tracks[5].pan = -24;
   p.tracks[1].rev = 30;
   p.tracks[6].note = 38;
@@ -136,7 +139,7 @@ const punchCard = () => beat('Punch Card', 'punch', [
   },
 ], (p) => {
   p.bpm = 112; p.swing = 22; p.scaleRoot = 4; p.scaleType = 2;
-  p.song = [0, 0, 0, 1]; p.songMode = true;
+  p.arr.clips = chainToClips([0, 0, 0, 1], 8, 16); p.songMode = true;
   p.tracks[3].vol = 62; p.tracks[4].vol = 58; p.tracks[5].vol = 44; p.tracks[5].pan = 34; p.tracks[2].vol = 76;
   p.tracks[1].rev = 34;
   p.tracks[6].note = 40;

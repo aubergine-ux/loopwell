@@ -8,8 +8,9 @@ import { exportMidi } from './core/midi';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
 import { renderProject } from './core/render';
 import { beatFromHash, beatUrl, HASH_KEY } from './core/share';
+import { isDefaultArrangement, tempoAt, trackStepAt } from './core/arrange';
 import {
-  DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyProject, newTrack, sanitize,
+  DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyArrangement, emptyProject, newId, newTrack, sanitize,
   type Project, type TrackKind,
 } from './core/types';
 import { encodeWav } from './core/wav';
@@ -61,6 +62,11 @@ function commit(): void {
   app.canRedo = false;
 }
 
+/** Close the current undo step now, so that the next edit is undone on its own. */
+export function checkpoint(): void {
+  commit();
+}
+
 /** Called (via an effect) whenever anything in the project changes. */
 export function projectChanged(snap: Project): void {
   audio.setProject(snap);
@@ -96,6 +102,7 @@ export function redo(): void {
 function fixSelection(): void {
   app.sel = clamp(app.sel, 0, app.project.tracks.length - 1);
   app.pat = clamp(app.pat, 0, app.project.patterns.length - 1);
+  if (app.clip && !app.project.arr.clips.some((c) => c.id === app.clip)) app.clip = null;
 }
 
 /** Replace the whole beat. The old one stays reachable with undo. */
@@ -103,8 +110,10 @@ export function loadProject(p: Project): void {
   commit();
   stop();
   app.project = p;
-  app.pat = p.songMode ? p.song[0] : 0;
+  app.pat = 0;
   app.sel = 0;
+  app.cursor = 0;
+  app.clip = null;
   fixSelection();
   commit();
 }
@@ -144,7 +153,7 @@ export async function play(): Promise<void> {
     return;
   }
   app.needsTap = false;
-  audio.play(app.pat);
+  audio.play(app.pat, app.cursor);
   app.playing = true;
 }
 
@@ -152,7 +161,6 @@ export function stop(): void {
   audio.stop();
   app.playing = false;
   app.queued = -1;
-  app.songPos = 0;
 }
 
 export function togglePlay(): void {
@@ -161,16 +169,32 @@ export function togglePlay(): void {
 }
 
 export function selectPattern(i: number): void {
-  if (!app.playing) {
+  // the song decides what plays; picking a pattern there only changes what you are editing
+  if (!app.playing || app.project.songMode) {
     app.pat = i;
     audio.setPattern(i);
     return;
   }
-  // while playing, the switch waits for the bar line (and leaves song mode)
-  const wasSong = app.project.songMode;
-  if (wasSong) app.project.songMode = false;
+  // a looping pattern hands over on the bar line
   app.queued = i === app.pat ? -1 : i;
   audio.setPattern(i);
+}
+
+/** Pattern view loops one pattern; song view plays the timeline. Playback carries on across the switch. */
+export function setView(song: boolean): void {
+  if (app.project.songMode === song) return;
+  if (!song) audio.setPattern(app.pat);
+  app.project.songMode = song;
+  app.queued = -1;
+}
+
+export function setSteps(n: 16 | 32): void {
+  const p = app.project;
+  if (p.steps === n) return;
+  const untouched = isDefaultArrangement(p);
+  p.steps = n;
+  if (untouched) p.arr = emptyArrangement(p.tracks.length, n);
+  for (const c of p.arr.clips) c.offset %= n;
 }
 
 const taps: number[] = [];
@@ -217,12 +241,15 @@ export function addTrack(kind: TrackKind): void {
   let color = 0;
   while (used.has(color) && color < 7) color++;
   const kit = p.tracks.find((t) => t.kind === 'drum' && isBuiltin(t.sample))?.sample.split('/')[0] ?? KITS[0].id;
+  const untouched = isDefaultArrangement(p);
   p.tracks.push(newTrack(kind, color, kind === 'drum' ? 'RIM' : 'SYNTH', `${kit}/rim`));
   for (const pat of p.patterns) {
     pat.steps.push(new Array<number>(MAX_STEPS).fill(0));
     pat.notes.push([]);
   }
   app.sel = p.tracks.length - 1;
+  // a beat that has never been arranged keeps playing all of its tracks in song view
+  if (untouched) p.arr.clips.push({ id: newId(), track: app.sel, pattern: 0, start: 0, len: p.steps, offset: 0 });
 }
 
 export function removeTrack(i: number): void {
@@ -233,6 +260,11 @@ export function removeTrack(i: number): void {
     pat.steps.splice(i, 1);
     pat.notes.splice(i, 1);
   }
+  const a = p.arr;
+  a.clips = a.clips.filter((c) => c.track !== i);
+  a.lanes = a.lanes.filter((l) => l.track !== i);
+  for (const c of a.clips) if (c.track > i) c.track--;
+  for (const l of a.lanes) if (l.track > i) l.track--;
   fixSelection();
 }
 
@@ -271,7 +303,17 @@ export function useKit(kit: string): void {
 
 // --- playing live ----------------------------------------------------------
 
-const stepSeconds = () => 60 / app.project.bpm / 4;
+const stepSeconds = () => 15 / (app.project.songMode ? tempoAt(app.project, app.cursor) : app.project.bpm);
+
+/** Where a live hit lands: the heard step, mapped through the track's clip when the song is playing. */
+function recordTarget(t: number): { step: number; pattern: number; wait: number } | null {
+  const n = audio.nearest(stepSeconds());
+  if (!n) return null;
+  const p = app.project;
+  if (n.song < 0) return { step: n.step % p.steps, pattern: n.pattern, wait: n.wait };
+  const at = trackStepAt(p, t, n.step);
+  return at ? { step: at.local, pattern: at.pattern, wait: n.wait } : null;
+}
 const heldNotes = new Map<string, { step: number; pattern: number; at: number; wait: number; vel: number }>();
 
 export function padDown(t: number, vel = 110): void {
@@ -282,13 +324,12 @@ export function padDown(t: number, vel = 110): void {
   audio.trigger(t, vel);
   flash(t, vel);
   if (!app.rec || !app.playing) return;
-  const n = audio.nearest(stepSeconds());
+  const n = recordTarget(t);
   if (!n) return;
   // Written once the step has gone by, so the hit you just played isn't doubled by the sequencer.
-  const step = n.step % app.project.steps;
   setTimeout(() => {
     const row = app.project.patterns[n.pattern]?.steps[t];
-    if (row) row[step] = vel;
+    if (row) row[n.step] = vel;
   }, n.wait * 1000 + 40);
 }
 
@@ -305,8 +346,8 @@ export function noteDown(t: number, pitch: number, vel = 100): void {
   audio.noteOn(t, pitch, vel);
   flash(t, vel);
   if (app.rec && app.playing) {
-    const n = audio.nearest(stepSeconds());
-    if (n) heldNotes.set(`${t}:${pitch}`, { step: n.step % app.project.steps, pattern: n.pattern, at: performance.now(), wait: n.wait, vel });
+    const n = recordTarget(t);
+    if (n) heldNotes.set(`${t}:${pitch}`, { step: n.step, pattern: n.pattern, at: performance.now(), wait: n.wait, vel });
   }
 }
 
@@ -428,7 +469,14 @@ export function customSampleCount(): number {
   return app.project.tracks.filter((t) => t.kind === 'drum' && isUser(t.sample)).length;
 }
 
-const exportChain = () => (app.project.songMode ? [...app.project.song] : [app.pat]);
+/** Song view exports the timeline; pattern view exports the pattern on screen, once through. */
+const exportChain = () => (app.project.songMode ? undefined : [app.pat]);
+
+/** Does track `i` play anything in what is about to be exported? */
+function trackHasNotes(p: Project, i: number, chain: number[] | undefined): boolean {
+  const pats = chain ?? p.arr.clips.filter((c) => c.track === i).map((c) => c.pattern);
+  return pats.some((c) => (p.tracks[i].kind === 'drum' ? p.patterns[c].steps[i].some((v) => v > 0) : p.patterns[c].notes[i].length > 0));
+}
 
 async function withBusy(label: string, job: (progress: (p: number) => Promise<void>) => Promise<void>): Promise<void> {
   if (app.busy) return;
@@ -463,9 +511,8 @@ export function exportStems(): Promise<void> {
     const p = snapshot();
     await loadAllSamples(p);
     const chain = exportChain();
-    const active = p.tracks.map((t, i) => i).filter((i) =>
-      chain.some((c) => (p.tracks[i].kind === 'drum' ? p.patterns[c].steps[i].some((v) => v > 0) : p.patterns[c].notes[i].length > 0)));
-    if (!active.length) throw new Error('Nothing to export yet: the pattern is empty.');
+    const active = p.tracks.map((t, i) => i).filter((i) => trackHasNotes(p, i, chain));
+    if (!active.length) throw new Error(`Nothing to export yet: the ${chain ? 'pattern' : 'song'} is empty.`);
     const files: Record<string, Uint8Array> = {};
     for (let k = 0; k < active.length; k++) {
       const i = active[k];

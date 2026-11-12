@@ -9,9 +9,11 @@ import type { FromWorklet, ToWorklet } from './worklet';
 import workletUrl from './worklet.ts?worker&url';
 
 export interface Playhead {
+  /** Step of the pattern, or of the song when `song` is not -1. */
   step: number;
   pattern: number;
-  songPos: number;
+  /** Timeline position in steps; -1 while a single pattern loops. */
+  song: number;
 }
 
 interface QueuedStep extends Playhead {
@@ -89,7 +91,7 @@ export class AudioHost {
       this.onStepFired?.(m, m.frame);
       if (!this.playing) return;
       const latency = Math.min(0.25, ctx.outputLatency || ctx.baseLatency || 0);
-      this.queue.push({ step: m.step, pattern: m.pattern, songPos: m.songPos, time: m.frame / ctx.sampleRate + latency });
+      this.queue.push({ step: m.step, pattern: m.pattern, song: m.song, time: m.frame / ctx.sampleRate + latency });
       if (this.queue.length > 256) this.queue.splice(0, 128); // tab hidden: nobody is reading these
     } else {
       this.peaks.set(m.peaks);
@@ -116,12 +118,12 @@ export class AudioHost {
    * The step closest to "now" as the listener hears it, for live recording.
    * `wait` is how long until that step sounds (0 if it already has).
    */
-  nearest(stepSeconds: number): { step: number; pattern: number; wait: number } | null {
+  nearest(stepSeconds: number): { step: number; pattern: number; song: number; wait: number } | null {
     const head = this.playhead();
     if (!head || !this.ctx) return null;
     const since = this.ctx.currentTime - this.headTime;
     const ahead = Math.max(0, Math.round(since / stepSeconds));
-    return { step: head.step + ahead, pattern: head.pattern, wait: Math.max(0, ahead * stepSeconds - since) };
+    return { step: head.step + ahead, pattern: head.pattern, song: head.song, wait: Math.max(0, ahead * stepSeconds - since) };
   }
 
   /** Waveform of the master output, for the scope. Returns false while nothing is connected. */
@@ -184,11 +186,21 @@ export class AudioHost {
     return this.ctx?.sampleRate ?? 48000;
   }
 
-  play(pattern: number): void {
+  play(pattern: number, from = 0): void {
     this.queue = [];
     this.head = null;
     this.playing = true;
-    this.send({ t: 'play', pattern });
+    this.send({ t: 'play', pattern, from });
+  }
+
+  /** Move the song position (and where the next play starts). */
+  seek(step: number): void {
+    this.send({ t: 'seek', step });
+  }
+
+  /** Seconds since the audible step began, for drawing a smooth playhead. */
+  sinceHead(): number {
+    return this.ctx && this.head ? Math.max(0, this.ctx.currentTime - this.headTime) : 0;
   }
 
   stop(): void {

@@ -15,7 +15,8 @@ declare class AudioWorkletProcessor {
 export type ToWorklet =
   | { t: 'project'; project: Project }
   | { t: 'sample'; id: string; l: Float32Array; r?: Float32Array }
-  | { t: 'play'; pattern: number }
+  | { t: 'play'; pattern: number; from: number }
+  | { t: 'seek'; step: number }
   | { t: 'stop' }
   | { t: 'panic' }
   | { t: 'pattern'; pattern: number }
@@ -24,7 +25,7 @@ export type ToWorklet =
   | { t: 'off'; track: number; pitch: number };
 
 export type FromWorklet =
-  | { t: 'step'; step: number; pattern: number; songPos: number; frame: number }
+  | { t: 'step'; step: number; pattern: number; song: number; frame: number }
   | { t: 'meter'; peaks: Float32Array; l: number; r: number; gr: number; load: number };
 
 const METER_BLOCKS = 6;
@@ -41,7 +42,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
     super();
     this.port.onmessage = (e: MessageEvent<ToWorklet>) => this.handle(e.data);
     this.engine.onStep = (i) =>
-      this.post({ t: 'step', step: i.step, pattern: i.pattern, songPos: i.songPos, frame: currentFrame + i.offset });
+      this.post({ t: 'step', step: i.step, pattern: i.pattern, song: i.song, frame: currentFrame + i.offset });
   }
 
   private post(m: FromWorklet): void {
@@ -53,7 +54,8 @@ class LoopwellProcessor extends AudioWorkletProcessor {
     switch (m.t) {
       case 'project': e.setProject(m.project); break;
       case 'sample': e.setSample(m.id, m.l, m.r); break;
-      case 'play': e.play({ pattern: m.pattern }); break;
+      case 'play': e.play({ pattern: m.pattern, from: m.from }); break;
+      case 'seek': e.seek(m.step); break;
       case 'stop': e.stop(); break;
       case 'panic': e.stop(); e.panic(); break;
       case 'pattern': e.setPattern(m.pattern); break;

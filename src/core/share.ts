@@ -2,12 +2,24 @@
 // deflated, and base64url-encoded into the URL fragment. Nothing is uploaded
 // anywhere. Built-in samples are stored as a one-byte reference; samples you
 // dropped in yourself cannot travel in a link (use a project file for those).
+//
+// Format history. The first byte is the version; every version ever released
+// still loads.
+//   1  beats: tracks, four patterns and a chain of patterns
+//   2  songs: a list of tagged chunks (settings, tracks, patterns, timeline).
+//      Readers skip chunks and trailing bytes they don't know, so later
+//      additions don't need a new version.
 
 import { deflateSync, inflateSync } from 'fflate';
 import { KITS, SLOTS, isBuiltin } from './kits';
-import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, sanitize, type Project } from './types';
+import { isDefaultArrangement } from './arrange';
+import { PARAMS } from './params';
+import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, sanitize, type Clip, type Project } from './types';
 
-const VERSION = 1;
+const VERSION = 2;
+const V1_PATTERNS = 4;
+const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4 }
+const ALL_TRACKS = 255;
 export const HASH_KEY = 'b';
 
 class Writer {
@@ -23,6 +35,17 @@ class Writer {
   }
   u32(v: number): void {
     this.u8(v); this.u8(v >>> 8); this.u8(v >>> 16); this.u8(v >>> 24);
+  }
+  /** Unsigned LEB128: small numbers take one byte. */
+  vu(v: number): void {
+    while (v > 127) { this.u8((v & 127) | 128); v = Math.floor(v / 128); }
+    this.u8(v);
+  }
+  chunk(tag: number, body: Writer): void {
+    const b = body.bytes();
+    this.u8(tag);
+    this.vu(b.length);
+    for (const c of b) this.u8(c);
   }
   str(s: string): void {
     const b = new TextEncoder().encode(s).subarray(0, 255);
@@ -44,6 +67,26 @@ class Reader {
   u32(): number {
     return (this.u8() | (this.u8() << 8) | (this.u8() << 16) | (this.u8() << 24)) >>> 0;
   }
+  vu(): number {
+    let v = 0, mul = 1;
+    for (let i = 0; i < 5; i++) {
+      const b = this.u8();
+      v += (b & 127) * mul;
+      if (b < 128) return v;
+      mul *= 128;
+    }
+    throw new Error('bad number');
+  }
+  get more(): boolean {
+    return this.n < this.buf.length;
+  }
+  /** A reader over the next `len` bytes, which are skipped here. */
+  sub(len: number): Reader {
+    if (this.n + len > this.buf.length) throw new Error('truncated');
+    const r = new Reader(this.buf.subarray(this.n, this.n + len));
+    this.n += len;
+    return r;
+  }
   str(): string {
     const len = this.u8();
     if (this.n + len > this.buf.length) throw new Error('truncated');
@@ -53,9 +96,7 @@ class Reader {
   }
 }
 
-export function packProject(p: Project): Uint8Array {
-  const w = new Writer();
-  w.u8(VERSION);
+function writeSettings(w: Writer, p: Project): void {
   w.u8(p.bpm - 40);
   w.u8(p.swing);
   w.u8((p.steps === 32 ? 1 : 0) | (p.songMode ? 2 : 0) | (p.scaleLock ? 4 : 0) | (p.fx.compOn ? 8 : 0));
@@ -63,7 +104,27 @@ export function packProject(p: Project): Uint8Array {
   w.u8(p.master);
   const f = p.fx;
   for (const v of [f.revSize, f.revDamp, f.revLevel, f.dlyTime, f.dlyFb, f.dlyLevel, f.filter + 64, f.filterRes, f.compThresh, f.compRatio, f.compMakeup]) w.u8(v);
+}
 
+function readSettings(r: Reader, raw: any): void {
+  raw.bpm = r.u8() + 40;
+  raw.swing = r.u8();
+  const flags = r.u8();
+  raw.steps = flags & 1 ? 32 : 16;
+  raw.songMode = !!(flags & 2);
+  raw.scaleLock = !!(flags & 4);
+  const sc = r.u8();
+  raw.scaleRoot = sc >> 4;
+  raw.scaleType = sc & 15;
+  raw.master = r.u8();
+  raw.fx = {
+    revSize: r.u8(), revDamp: r.u8(), revLevel: r.u8(), dlyTime: r.u8(), dlyFb: r.u8(), dlyLevel: r.u8(),
+    filter: r.u8() - 64, filterRes: r.u8(), compThresh: r.u8(), compRatio: r.u8(), compMakeup: r.u8(),
+    compOn: !!(flags & 8),
+  };
+}
+
+function writeTracks(w: Writer, p: Project): void {
   w.u8(p.tracks.length);
   for (const t of p.tracks) {
     const builtin = isBuiltin(t.sample);
@@ -85,56 +146,9 @@ export function packProject(p: Project): Uint8Array {
     }
     for (const v of [t.vol, t.pan + 64, t.filter + 64, t.rev, t.dly]) w.u8(v);
   }
-
-  w.u8(p.song.length);
-  for (const s of p.song) w.u8(s);
-  w.str(p.name);
-
-  const used = p.patterns.map((pat, i) =>
-    p.tracks.some((t, ti) => (t.kind === 'synth' ? pat.notes[ti].length > 0 : pat.steps[ti].some((v) => v > 0))) ? 1 << i : 0);
-  w.u8(used.reduce((a, b) => a | b, 0));
-  p.patterns.forEach((pat, i) => {
-    if (!used[i]) return;
-    p.tracks.forEach((t, ti) => {
-      if (t.kind === 'synth') {
-        const notes = pat.notes[ti].slice(0, 255);
-        w.u8(notes.length);
-        for (const n of notes) { w.u8(n.s); w.u8(n.l); w.u8(n.p); w.u8(n.v); }
-      } else {
-        const steps = pat.steps[ti];
-        let mask = 0;
-        for (let s = 0; s < MAX_STEPS; s++) if (steps[s]) mask |= 1 << s;
-        w.u32(mask >>> 0);
-        if (!mask) return;
-        // most beats leave velocity alone, so that case costs a single byte
-        const plain = steps.every((v) => v === 0 || v === DEFAULT_VEL);
-        w.u8(plain ? 0 : 1);
-        if (!plain) for (const v of steps) if (v) w.u8(v);
-      }
-    });
-  });
-  return w.bytes();
 }
 
-export function unpackProject(bytes: Uint8Array): Project {
-  const r = new Reader(bytes);
-  if (r.u8() !== VERSION) throw new Error('unsupported version');
-  const raw: any = { v: 1 };
-  raw.bpm = r.u8() + 40;
-  raw.swing = r.u8();
-  const flags = r.u8();
-  raw.steps = flags & 1 ? 32 : 16;
-  raw.songMode = !!(flags & 2);
-  raw.scaleLock = !!(flags & 4);
-  const sc = r.u8();
-  raw.scaleRoot = sc >> 4;
-  raw.scaleType = sc & 15;
-  raw.master = r.u8();
-  raw.fx = {
-    revSize: r.u8(), revDamp: r.u8(), revLevel: r.u8(), dlyTime: r.u8(), dlyFb: r.u8(), dlyLevel: r.u8(),
-    filter: r.u8() - 64, filterRes: r.u8(), compThresh: r.u8(), compRatio: r.u8(), compMakeup: r.u8(),
-    compOn: !!(flags & 8),
-  };
+function readTracks(r: Reader, raw: any): void {
   const nt = r.u8();
   if (nt < 1 || nt > 8) throw new Error('bad track count');
   raw.tracks = [];
@@ -159,13 +173,39 @@ export function unpackProject(bytes: Uint8Array): Project {
     t.vol = r.u8(); t.pan = r.u8() - 64; t.filter = r.u8() - 64; t.rev = r.u8(); t.dly = r.u8();
     raw.tracks.push(t);
   }
-  const sl = r.u8();
-  raw.song = [];
-  for (let i = 0; i < sl; i++) raw.song.push(r.u8());
-  raw.name = r.str();
+}
+
+function writePatterns(w: Writer, p: Project): void {
+  const used = p.patterns.map((pat, i) =>
+    p.tracks.some((t, ti) => (t.kind === 'synth' ? pat.notes[ti].length > 0 : pat.steps[ti].some((v) => v > 0))) ? 1 << i : 0);
+  w.u8(used.reduce((a, b) => a | b, 0));
+  p.patterns.forEach((pat, i) => {
+    if (!used[i]) return;
+    p.tracks.forEach((t, ti) => {
+      if (t.kind === 'synth') {
+        const notes = pat.notes[ti].slice(0, 255);
+        w.u8(notes.length);
+        for (const n of notes) { w.u8(n.s); w.u8(n.l); w.u8(n.p); w.u8(n.v); }
+      } else {
+        const steps = pat.steps[ti];
+        let mask = 0;
+        for (let s = 0; s < MAX_STEPS; s++) if (steps[s]) mask |= 1 << s;
+        w.u32(mask >>> 0);
+        if (!mask) return;
+        // most beats leave velocity alone, so that case costs a single byte
+        const plain = steps.every((v) => v === 0 || v === DEFAULT_VEL);
+        w.u8(plain ? 0 : 1);
+        if (!plain) for (const v of steps) if (v) w.u8(v);
+      }
+    });
+  });
+}
+
+function readPatterns(r: Reader, raw: any, count: number): void {
+  const nt = raw.tracks.length;
   const used = r.u8();
   raw.patterns = [];
-  for (let i = 0; i < NUM_PATTERNS; i++) {
+  for (let i = 0; i < count; i++) {
     const pat: any = { steps: [], notes: [] };
     for (let ti = 0; ti < nt; ti++) {
       const steps = new Array(MAX_STEPS).fill(0);
@@ -187,6 +227,121 @@ export function unpackProject(bytes: Uint8Array): Project {
     }
     raw.patterns.push(pat);
   }
+}
+
+function writeTimeline(w: Writer, p: Project): void {
+  const a = p.arr;
+  w.u8(a.loopOn ? 1 : 0);
+  w.vu(a.loopStart);
+  w.vu(a.loopEnd);
+
+  // a clip that sits on every track at once (a whole section) is written once
+  const key = (c: Clip) => `${c.pattern},${c.start},${c.len},${c.offset}`;
+  const groups = new Map<string, Clip[]>();
+  for (const c of a.clips) groups.set(key(c), [...(groups.get(key(c)) ?? []), c]);
+  const out: [number, Clip][] = [];
+  for (const g of groups.values()) {
+    if (g.length === p.tracks.length && p.tracks.length > 1) out.push([ALL_TRACKS, g[0]]);
+    else for (const c of g) out.push([c.track, c]);
+  }
+  w.vu(out.length);
+  for (const [track, c] of out) { w.u8(track); w.u8(c.pattern); w.vu(c.start); w.vu(c.len); w.u8(c.offset); }
+
+  w.u8(a.lanes.length);
+  for (const l of a.lanes) {
+    const pi = PARAMS.findIndex((d) => d.id === l.param);
+    w.u8(l.track + 1); w.u8(pi); w.u8(l.on ? 1 : 0);
+    w.vu(l.points.length);
+    let last = 0;
+    for (const pt of l.points) { w.vu(pt.t - last); w.u8(pt.v - PARAMS[pi].min); last = pt.t; }
+  }
+  let last = 0;
+  w.u8(a.tempo.length);
+  for (const e of a.tempo) { w.vu(e.at - last); w.u8(e.bpm - 40); last = e.at; }
+  last = 0;
+  w.u8(a.sigs.length);
+  for (const e of a.sigs) { w.vu(e.at - last); w.u8(e.num); w.u8(Math.round(Math.log2(e.den))); last = e.at; }
+  last = 0;
+  w.u8(a.markers.length);
+  for (const m of a.markers) { w.vu(m.at - last); w.u8(m.color); w.str(m.name); last = m.at; }
+}
+
+function readTimeline(r: Reader, raw: any): void {
+  const nt = raw.tracks.length;
+  const a: any = { loopOn: !!(r.u8() & 1), loopStart: r.vu(), loopEnd: r.vu(), clips: [], lanes: [], tempo: [], sigs: [], markers: [] };
+  for (let n = r.vu(); n > 0; n--) {
+    const track = r.u8();
+    const c = { pattern: r.u8(), start: r.vu(), len: r.vu(), offset: r.u8() };
+    if (track === ALL_TRACKS) for (let t = 0; t < nt; t++) a.clips.push({ ...c, track: t });
+    else a.clips.push({ ...c, track });
+  }
+  for (let n = r.u8(); n > 0; n--) {
+    const track = r.u8() - 1;
+    const def = PARAMS[r.u8()];
+    const on = !!(r.u8() & 1);
+    const points: any[] = [];
+    let t = 0;
+    for (let k = r.vu(); k > 0; k--) { t += r.vu(); points.push({ t, v: r.u8() + (def?.min ?? 0) }); }
+    if (def) a.lanes.push({ track, param: def.id, on, points }); // a knob this version doesn't know is dropped
+  }
+  let at = 0;
+  for (let n = r.u8(); n > 0; n--) { at += r.vu(); a.tempo.push({ at, bpm: r.u8() + 40 }); }
+  at = 0;
+  for (let n = r.u8(); n > 0; n--) { at += r.vu(); a.sigs.push({ at, num: r.u8(), den: 1 << r.u8() }); }
+  at = 0;
+  for (let n = r.u8(); n > 0; n--) { at += r.vu(); a.markers.push({ at, color: r.u8(), name: r.str() }); }
+  raw.arr = a;
+}
+
+export function packProject(p: Project): Uint8Array {
+  const w = new Writer();
+  w.u8(VERSION);
+  const part = (tag: Chunk, write: (w: Writer, p: Project) => void) => {
+    const c = new Writer();
+    write(c, p);
+    w.chunk(tag, c);
+  };
+  part(Chunk.Settings, (c) => { writeSettings(c, p); c.str(p.name); });
+  part(Chunk.Tracks, writeTracks);
+  part(Chunk.Patterns, writePatterns);
+  if (!isDefaultArrangement(p)) part(Chunk.Timeline, writeTimeline);
+  return w.bytes();
+}
+
+/** Version 1: one flat record, four patterns, and a pattern chain where the timeline is now. */
+function unpackV1(r: Reader): any {
+  const raw: any = {};
+  readSettings(r, raw);
+  readTracks(r, raw);
+  const sl = r.u8();
+  raw.song = [];
+  for (let i = 0; i < sl; i++) raw.song.push(r.u8());
+  raw.name = r.str();
+  readPatterns(r, raw, V1_PATTERNS);
+  return raw;
+}
+
+export function unpackProject(bytes: Uint8Array): Project {
+  const r = new Reader(bytes);
+  const version = r.u8();
+  if (version === 1) return sanitize(unpackV1(r));
+  if (version !== VERSION) throw new Error('unsupported version');
+  const raw: any = {};
+  while (r.more) {
+    const tag = r.u8();
+    const c = r.sub(r.vu());
+    if (tag === Chunk.Settings) { readSettings(c, raw); raw.name = c.str(); }
+    else if (tag === Chunk.Tracks) readTracks(c, raw);
+    else if (tag === Chunk.Patterns) {
+      if (!raw.tracks) throw new Error('patterns before tracks');
+      readPatterns(c, raw, NUM_PATTERNS);
+    } else if (tag === Chunk.Timeline) {
+      if (!raw.tracks) throw new Error('timeline before tracks');
+      readTimeline(c, raw);
+    }
+  }
+  if (!raw.tracks || raw.bpm === undefined) throw new Error('incomplete');
+  // no timeline chunk means the untouched default: sanitize() builds exactly that
   return sanitize(raw);
 }
 

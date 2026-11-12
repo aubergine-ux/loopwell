@@ -21,6 +21,9 @@ function check(name: string, ok: boolean, detail = ''): void {
 const shot = async (page: Page, name: string) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
 const cell = (page: Page, t: number, s: number) => page.locator(`.cell[data-t="${t}"][data-s="${s}"]`);
 const isOn = async (page: Page, t: number, s: number) => (await cell(page, t, s).getAttribute('class'))!.includes('on');
+const pos = async (page: Page) => (await page.locator('.lcd .info div:nth-child(2) b').textContent()) ?? '';
+// a link made by version 1.0 (Night Drive, from its README)
+const V1_LINK = 'jU7BSsNAEJ1NtulisaTSQw7WNNBDkCIIgiaGsNskoDTEJSkeeh7RgicRD17iL_g9_Qk_wU9xNoh6ETrsW3jvMe8Nq2H4jqtkbcdreRSGYwF8eZ0twWsfpQQQvaZSdcG8Fg11eVYqbXXsBDz7Sq1sr02NNeU3uqi4d7swLOS6qLO-1yZSJnDKF6ppYH6WwvH4IOiiIl4WKmfpLIb5MIzKUl5UAoAxgjWoNvcPz9P8afNy1x-NSHpFRKBxXfq2W1Iwjn9enpP6RqksjnuWFaBD2CPssxkOLR8dYBHaLCFDomAFDpgkI8Hf8E-zjbhTwYRyJlTgU4FPOYd_C9R3QUaG7I7u5uPfXDMWiACFMJc6kQYnIUgtnHPCJSHVXw';
 const toastText = (page: Page) => page.locator('.toast').textContent({ timeout: 4000 }).catch(() => '');
 
 async function download(page: Page, action: () => Promise<void>): Promise<{ name: string; bytes: Uint8Array }> {
@@ -131,7 +134,7 @@ check('32-step mode shows 32 cells per track', (await page.locator('.cell[data-t
 await shot(page, '02-32-steps');
 await page.getByRole('button', { name: '16', exact: true }).click();
 await page.keyboard.press('ArrowRight');
-check('pattern B is empty and selected', !(await isOn(page, 0, 0)) && (await page.getByTitle('Pattern B').getAttribute('aria-pressed')) === 'true');
+check('pattern B is empty and selected', !(await isOn(page, 0, 0)) && (await page.getByTitle('Pattern B', { exact: true }).getAttribute('aria-pressed')) === 'true');
 await page.keyboard.press('ArrowLeft');
 for (const theme of ['night', 'slate', 'arcade', 'cream']) {
   await page.keyboard.press('Shift+C');
@@ -169,23 +172,130 @@ await page.keyboard.press('ArrowLeft');
 // ---- demos + share link ----
 await page.getByTitle('Demo beats and new beat').click();
 await page.getByText('Dust Loop').click();
-await page.waitForSelector('.cell.ph');
-check('a demo loads and plays', (await page.locator('.lcd .num').textContent()) === '86');
+await page.waitForSelector('.tl .play', { state: 'visible' });
+check('a demo loads and plays on the timeline', (await page.locator('.lcd .num').textContent()) === '86' && (await page.locator('.clip').count()) === 16);
 await shot(page, '05-demo-playing');
-// song mode walks the chain A A A B; pattern buttons follow it
-await page.waitForFunction(() => document.querySelector('.lcd .info b')?.textContent?.startsWith('B'), null, { timeout: 12000 }).catch(() => {});
-check('song mode advances through the pattern chain', (await page.locator('.lcd .info b').first().textContent())!.startsWith('B 4/4')
-  && (await page.getByTitle('Pattern B').getAttribute('aria-pressed')) === 'true');
-// tapping a pattern while playing queues it for the bar line
-await page.getByTitle('Pattern A').click();
-const queuedNow = (await page.getByTitle('Pattern A').getAttribute('class'))!.includes('queued');
-await page.waitForFunction(() => document.querySelector('.lcd .info b')?.textContent === 'A', null, { timeout: 5000 }).catch(() => {});
-check('a pattern change waits for the bar line, then loops that pattern', queuedNow && (await page.locator('.lcd .info b').first().textContent()) === 'A');
+// the song is A A A B: by bar 4 the selected track has moved on to pattern B
+await page.waitForFunction(() => document.querySelector('.lcd .info div:nth-child(2) b')?.textContent?.startsWith('4.'), null, { timeout: 12000 }).catch(() => {});
+check('the song plays along the timeline and the display follows it', (await pos(page)).startsWith('4.') && (await page.getByTitle('Pattern B', { exact: true }).getAttribute('aria-pressed')) === 'true',
+  await pos(page));
+
+// ---- switching views while it plays ----
+await page.getByRole('button', { name: 'Pattern', exact: true }).click();
+await page.waitForSelector('.cell.ph', { timeout: 6000 }).catch(() => {});
+const meterMid = await page.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
+check('switching to the pattern view keeps the music going', (await page.locator('.cell.ph').count()) > 0 && (await page.locator('.tbtn.play.on').count()) === 1 && meterMid !== 'scaleX(0.000)', meterMid);
+// tapping a pattern while one loops queues it for the bar line
+const swap = (await page.getByTitle('Pattern A', { exact: true }).getAttribute('aria-pressed')) === 'true' ? 'B' : 'A';
+await page.getByTitle(`Pattern ${swap}`, { exact: true }).click();
+const queuedNow = (await page.getByTitle(`Pattern ${swap}`, { exact: true }).getAttribute('class'))!.includes('queued');
+await page.waitForFunction((o) => document.querySelector('.lcd .info b')?.textContent === o, swap, { timeout: 5000 }).catch(() => {});
+check('a pattern change waits for the bar line, then loops that pattern', queuedNow && (await page.locator('.lcd .info b').first().textContent()) === swap);
+await page.keyboard.press('v');
+await page.waitForSelector('.tl .play', { state: 'visible', timeout: 6000 }).catch(() => {});
+check('V switches back to the song, still playing', (await page.locator('.tl').count()) === 1 && (await page.locator('.tl .play').isVisible()));
 await page.keyboard.press('Space');
+
+// ---- arranging ----
+const lane0 = (await page.locator('.lane.clips[data-lane="0"]').boundingBox())!;
+const PX = 8; // pixels per step at the default zoom
+const at = (step: number) => lane0.x + step * PX;
+const midY = lane0.y + lane0.height / 2;
+const layout = (t: number) => page.locator(`.lane.clips[data-lane="${t}"] .clip`).evaluateAll((els) =>
+  els.map((e) => [Math.round(parseFloat((e as HTMLElement).style.left) / 8), Math.round(parseFloat((e as HTMLElement).style.width) / 8), e.querySelector('.pat')!.textContent]).sort((x, y) => +x[0]! - +y[0]!));
+const drag = async (x0: number, y0: number, x1: number, y1: number, mods: string[] = []) => {
+  await page.mouse.move(x0, y0);
+  for (const m of mods) await page.keyboard.down(m);
+  await page.mouse.down();
+  await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 4 });
+  await page.mouse.move(x1, y1, { steps: 4 });
+  await page.mouse.up();
+  for (const m of mods) await page.keyboard.up(m);
+};
+check('the old pattern chain shows up as clips', JSON.stringify(await layout(0)) === '[[0,48,"A"],[48,16,"B"]]', JSON.stringify(await layout(0)));
+await page.mouse.dblclick(at(64 + 20), midY);
+check('double-clicking a track adds a clip of the current pattern, snapped to the bar', JSON.stringify((await layout(0))[2]) === `[80,16,"${swap}"]`, JSON.stringify(await layout(0)));
+await drag(at(80 + 8), midY, at(64 + 8), midY);
+check('dragging a clip moves it', (await layout(0))[2][0] === 64, JSON.stringify(await layout(0)));
+await drag(at(80) - 3, midY, at(96) - 3, midY);
+check('dragging its edge stretches it, looping the pattern', JSON.stringify((await layout(0))[2].slice(0, 2)) === '[64,32]' && (await page.locator('.clip.on .rep').count()) === 1, JSON.stringify(await layout(0)));
+await drag(at(64 + 8), midY, at(96 + 8), midY, ['Alt']);
+check('Alt-dragging makes a copy', (await layout(0)).length === 4 && (await layout(0))[3][0] === 96, JSON.stringify(await layout(0)));
+await page.keyboard.press('Control+d');
+check('Ctrl+D duplicates the selected clip after itself', (await layout(0)).length === 5 && (await layout(0))[4][0] === 128, JSON.stringify(await layout(0)));
+await page.keyboard.press('Delete');
+check('Delete removes it', (await layout(0)).length === 4);
+// drop a clip on top of the long first one: it splits around the newcomer
+await drag(at(96 + 8), midY, at(16 + 8), midY);
+check('a clip dropped on answap one trims and splits it', JSON.stringify((await layout(0)).slice(0, 3).map((c) => c.slice(0, 2))) === '[[0,16],[16,32],[48,16]]', JSON.stringify(await layout(0)));
 await page.keyboard.press('Control+z');
+check('undo puts the arrangement back', (await layout(0))[0][1] === 48, JSON.stringify(await layout(0)));
+const lane1 = (await page.locator('.lane.clips[data-lane="1"]').boundingBox())!;
+await drag(at(96 + 8), midY, at(96 + 8), lane1.y + lane1.height / 2);
+check('a clip can be dragged to another track', (await layout(0)).length === 3 && (await layout(1)).some((c) => c[0] === 96), JSON.stringify(await layout(1)));
+await page.locator('.lane.clips[data-lane="1"] .clip').last().dblclick();
+await page.waitForSelector('.cell');
+check('double-clicking a clip opens its pattern in the pattern view',
+  (await page.getByTitle(`Pattern ${swap}`, { exact: true }).getAttribute('aria-pressed')) === 'true' && (await page.locator('.row.sel[data-row="1"]').count()) === 1);
+await page.getByRole('button', { name: 'Song', exact: true }).click();
+
+// automation
+await page.getByRole('button', { name: 'Add automation to KICK' }).click();
+const curve = page.locator('svg.curve').first();
+const cb = (await curve.boundingBox())!;
+await page.mouse.move(cb.x + 2, cb.y + cb.height - 6);
+await page.mouse.down();
+for (let i = 1; i <= 24; i++) await page.mouse.move(cb.x + 2 + i * 16, cb.y + cb.height - 6 - i * 1.7, { steps: 2 });
+await page.mouse.up();
+const points = await curve.locator('circle').count();
+check('dragging across an automation lane draws a curve', points >= 10 && /Level automation/.test((await curve.getAttribute('aria-label'))!), `${points} points`);
+const c3 = (await curve.locator('circle').nth(3).boundingBox())!;
+await drag(c3.x + 3, c3.y + 3, c3.x + 3, cb.y + 8);
+const moved = (await curve.locator('circle').nth(3).boundingBox())!;
+check('a point can be dragged', moved.y < c3.y - 5, `${c3.y.toFixed(0)} -> ${moved.y.toFixed(0)}`);
+await page.mouse.dblclick(moved.x + 3, moved.y + 3);
+check('double-clicking a point removes it', (await curve.locator('circle').count()) === points - 1);
+await page.getByRole('combobox', { name: 'Automated knob' }).selectOption('filter');
+check('a lane can be pointed at answap knob', /Filter automation/.test((await curve.getAttribute('aria-label'))!));
+await page.getByRole('combobox', { name: 'Automated knob' }).selectOption('vol');
+await page.getByRole('button', { name: 'Add master automation' }).click();
+check('the master has automation lanes too', (await page.locator('svg.curve').count()) === 2);
+await page.getByRole('button', { name: 'Remove automation lane' }).last().click();
+
+// markers, tempo, time signature
+const ruler = (await page.locator('.ruler').boundingBox())!;
+await page.mouse.click(ruler.x + 32 * PX + 2, ruler.y + 10);
+await page.getByTitle('Add a marker at the cursor').click();
+await page.getByLabel('Marker name').fill('hook');
+await page.getByTitle('Change tempo at the cursor').click();
+await page.getByLabel('Tempo from here').fill('172');
+await page.getByLabel('Tempo from here').press('Enter');
+await page.getByTitle(/^Change time signature/).click();
+await page.getByLabel('Beats per bar').selectOption('3');
+const flags = await page.locator('.flag').allTextContents();
+check('markers, tempo changes and time signatures sit on the timeline', flags.join('|') === 'hook|♩ 172|3/4', flags.join('|'));
+const barsAfter = await page.locator('.ruler b').evaluateAll((els) => els.slice(0, 5).map((e) => Math.round(parseFloat((e as HTMLElement).style.left) / 8)));
+check('bar lines follow the time signature', JSON.stringify(barsAfter) === '[0,16,32,44,56]', JSON.stringify(barsAfter));
+await page.locator('.flag.sig').click();
+await page.getByRole('button', { name: 'Delete time signature' }).click();
+check('a time signature can be removed again', (await page.locator('.flag.sig').count()) === 0);
+
+// loop a section
+await drag(ruler.x + 16 * PX, ruler.y + 10, ruler.x + 32 * PX, ruler.y + 10);
+check('dragging along the ruler sets a loop', (await page.getByRole('button', { name: 'Loop', exact: true }).getAttribute('aria-pressed')) === 'true' && (await page.locator('.loop').count()) === 1);
+await page.mouse.click(ruler.x + 16 * PX + 2, ruler.y + 10);
+await page.keyboard.press('Space');
+await page.waitForSelector('.tl .play', { state: 'visible' });
+const seen = new Set<string>();
+for (let i = 0; i < 24; i++) { seen.add((await pos(page)).split('.')[0]); await page.waitForTimeout(250); }
+check('playback starts at the cursor and stays inside the loop', seen.size === 1 && seen.has('2'), [...seen].join(','));
+await page.keyboard.press('Space');
+await page.getByRole('button', { name: 'Loop', exact: true }).click();
+await shot(page, '05b-timeline');
+
 await page.getByRole('button', { name: 'Share' }).click();
 const link = await page.locator('#share-url').inputValue();
-check('share link is compact', link.includes('#b=') && link.length < 600, `${link.length} chars`);
+check('a share link with the whole arrangement is still compact', link.includes('#b=') && link.length < 800, `${link.length} chars`);
 await shot(page, '06-share');
 sharedLink = link;
 await page.keyboard.press('Escape');
@@ -194,21 +304,32 @@ const page2 = await ctx.newPage();
 const errors2: string[] = [];
 page2.on('pageerror', (e) => errors2.push(e.message));
 await page2.goto(link);
-await page2.waitForSelector('.cell.ph', { timeout: 8000 }).catch(() => {});
-check('opening a share link loads the beat and plays it immediately',
-  (await page2.locator('.lcd .num').textContent()) === '86' && (await page2.locator('.cell.ph').count()) > 0 && errors2.length === 0);
+await page2.waitForSelector('.tl .play', { state: 'visible', timeout: 8000 }).catch(() => {});
+check('opening a share link loads the song and plays it immediately',
+  (await page2.locator('.lcd .num').textContent()) === '86' && (await page2.locator('.tl .play').isVisible()) && errors2.length === 0);
+check('the link carries the arrangement: clips, automation, marker and tempo change',
+  (await page2.locator('.clip').count()) === (await page.locator('.clip').count()) && (await page2.locator('svg.curve circle').count()) === (await page.locator('svg.curve circle').count())
+  && (await page2.locator('.flag').allTextContents()).join('|') === 'hook|♩ 172');
 check('the link is cleared from the address bar after loading', !(await page2.evaluate(() => location.hash)));
+await page2.keyboard.press('Space');
+
+// ---- a link made by version 1.0 ----
+await page2.goto('about:blank');
+await page2.goto(`${url}#b=${V1_LINK}`);
+await page2.waitForSelector('.tl .play', { state: 'visible', timeout: 8000 }).catch(() => {});
+check('a link from version 1.0 still opens and plays, its chain laid out as clips',
+  (await page2.locator('.lcd .num').textContent()) === '122' && (await page2.locator('.clip').count()) === 40 && (await page2.locator('.tl .play').isVisible()) && errors2.length === 0);
 await page2.keyboard.press('Space');
 
 // ---- bad links ----
 for (const bad of ['#b=', '#b=!!!!', '#b=AAAAAAAA', `#b=${link.split('#b=')[1].slice(0, 40)}`, `#b=${'A'.repeat(50000)}`]) {
   await page2.goto(url + bad);
-  await page2.waitForSelector('.cell');
+  await page2.waitForSelector('.device');
   const msg = await toastText(page2);
   await page2.waitForSelector('.toast', { state: 'detached', timeout: 8000 });
   if (!/damaged/.test(msg ?? '')) check(`bad link ${bad.slice(0, 16)}… is reported`, false, String(msg));
 }
-check('damaged links show an error and leave the app usable', errors2.length === 0 && (await page2.locator('.cell').count()) > 0, errors2.join('; '));
+check('damaged links show an error and leave the app usable', errors2.length === 0 && (await page2.locator('.clip').count()) === 40, errors2.join('; '));
 await page2.close();
 
 // ---- exports ----
@@ -232,6 +353,10 @@ await page.waitForSelector('.busy', { state: 'detached' });
 await page.getByTitle(/^Export WAV/).click();
 const mid = await download(page, () => page.locator('.modal').getByRole('button', { name: /^MIDI/ }).click());
 check('MIDI export is a standard MIDI file', mid.name === 'dust-loop.mid' && String.fromCharCode(...mid.bytes.subarray(0, 4)) === 'MThd' && mid.bytes.length > 500);
+
+check('MIDI export of a song carries its tempo change', [...mid.bytes].some((_, i) => mid.bytes[i] === 0xff && mid.bytes[i + 1] === 0x51 && i > 40));
+await page.keyboard.press('v');
+await page.waitForSelector('.cell');
 
 // ---- dropping a file on a track ----
 const dropped = [...encodeWav([Float32Array.from({ length: 4000 }, (_, i) => Math.sin(i / 6) * 0.6 * (1 - i / 4000))], 22050, 16)];
@@ -390,10 +515,10 @@ try {
   check('when the browser blocks autoplay, a shared beat waits behind one big play button', (await sp.locator('.gate').count()) === 1
     && (await sp.locator('.gate b').textContent()) === 'Dust Loop');
   await sp.locator('.gate').click();
-  await sp.waitForSelector('.cell.ph', { timeout: 5000 }).catch(() => {});
+  await sp.waitForSelector('.tl .play', { state: 'visible', timeout: 5000 }).catch(() => {});
   await sp.waitForTimeout(800);
   const m = await sp.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
-  check('one tap starts it, with sound, even on a slow connection', (await sp.locator('.gate').count()) === 0 && (await sp.locator('.cell.ph').count()) > 0
+  check('one tap starts it, with sound, even on a slow connection', (await sp.locator('.gate').count()) === 0 && (await sp.locator('.tl .play').isVisible())
     && !/scaleX\(0(\.0+)?\)/.test(m) && m !== '', m);
   // Chrome itself logs one warning when it refuses to start audio; anything else is ours
   const real = strict.errors.filter((e) => !e.includes('AudioContext was not allowed to start'));

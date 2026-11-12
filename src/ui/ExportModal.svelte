@@ -1,14 +1,17 @@
 <script lang="ts">
   import { exportMidiFile, exportStems, exportWav, handleFiles, saveProjectFile } from '../actions.svelte';
+  import { songEnd, stepToSeconds } from '../core/arrange';
+  import { PATTERN_NAMES } from '../core/types';
   import { app } from '../state.svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
 
   let picker: HTMLInputElement;
   const p = $derived(app.project);
+  const secs = $derived(Math.round(stepToSeconds(p, songEnd(p.arr))));
   const what = $derived(p.songMode
-    ? `the song (${p.song.map((s) => 'ABCD'[s]).join(' ')})`
-    : `pattern ${'ABCD'[app.pat]}, once through. Turn on Song mode to export the whole chain`);
+    ? `the whole song (${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')})`
+    : `pattern ${PATTERN_NAMES[app.pat]}, once through. Switch to Song view to export the whole timeline`);
 
   function run(fn: () => void | Promise<void>): void {
     app.modal = null;

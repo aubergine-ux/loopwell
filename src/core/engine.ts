@@ -2,10 +2,27 @@
 // effects. The AudioWorklet runs it in real time; export and the tests run the
 // very same code offline, so what you hear is what you render.
 
+import { barStart, curveAt, songEnd } from './arrange';
 import { StepClock, samplesPerStep } from './clock';
 import { Compressor, DjFilter, PingPongDelay, Reverb, softClip } from './dsp/fx';
 import { SampleVoice, SynthVoice, type SampleData, type SynthPatch } from './dsp/voices';
-import { DELAY_DIVS, MAX_TRACKS, emptyProject, type Project, type Track } from './types';
+import { PARAMS, paramIndex } from './params';
+import { DELAY_DIVS, MAX_TRACKS, emptyProject, type Clip, type Project, type Track } from './types';
+
+// Effective knob values live in flat arrays, so automation can move them
+// without touching the project. Indices follow PARAMS.
+const NP = PARAMS.length;
+const P_VOL = paramIndex('vol'), P_PAN = paramIndex('pan'), P_FILTER = paramIndex('filter'), P_REV = paramIndex('rev'),
+  P_DLY = paramIndex('dly'), P_TUNE = paramIndex('tune'), P_DECAY = paramIndex('decay'),
+  P_CUTOFF = paramIndex('cutoff'), P_RESO = paramIndex('reso'), P_ENV = paramIndex('env'),
+  P_MASTER = paramIndex('master'), P_MFILTER = paramIndex('mfilter'), P_MRES = paramIndex('mres'),
+  P_REVLVL = paramIndex('revlvl'), P_REVSIZE = paramIndex('revsize'), P_DLYLVL = paramIndex('dlylvl'), P_DLYFB = paramIndex('dlyfb');
+
+interface Curve {
+  slot: number; // index into the value array
+  track: number;
+  points: { t: number; v: number }[];
+}
 
 const BLOCK = 128;
 const SAMPLE_VOICES = 6;
@@ -13,9 +30,11 @@ const SAMPLE_POLY = 4;
 const SYNTH_VOICES = 6;
 
 export interface StepInfo {
+  /** Step of the pattern (pattern mode) or of the song (song mode). */
   step: number;
   pattern: number;
-  songPos: number;
+  /** Position on the timeline in steps, or -1 while a single pattern loops. */
+  song: number;
   /** Frame offset of this step inside the block being processed. */
   offset: number;
 }
@@ -48,6 +67,10 @@ export class Engine {
   queued = -1;
   songPos = 0;
   stepIdx = 0;
+  /** Next timeline step to play (song mode). */
+  songStep = 0;
+  /** True while the timeline, not a single pattern, is driving playback. */
+  inSong = false;
   /** Solo exactly one track and skip the master compressor (stem export). */
   stem = -1;
   onStep: ((info: StepInfo) => void) | null = null;
@@ -74,7 +97,16 @@ export class Engine {
   private loop = true;
   private from = 0;
   private nt = 0;
-  private info: StepInfo = { step: 0, pattern: 0, songPos: 0, offset: 0 };
+  private info: StepInfo = { step: 0, pattern: 0, song: -1, offset: 0 };
+  /** Effective knob values: [track * NP + param] and, for master params, [MAX_TRACKS * NP + param]. */
+  private val = new Float32Array((MAX_TRACKS + 1) * NP);
+  private curves: Curve[] = [];
+  private clips: Clip[][] = [];
+  private end = 0;
+  private cue = 0;
+  private automated = false;
+  private sinceStep = 0;
+  private curStep = 0;
 
   constructor(readonly sampleRate: number) {
     this.clock = new StepClock(sampleRate);
@@ -92,20 +124,64 @@ export class Engine {
 
   setProject(p: Project): void {
     this.project = p;
-    this.clock.bpm = p.bpm;
+    if (!this.inSong) this.clock.bpm = p.bpm;
     this.clock.swing = p.swing;
     const sr = this.sampleRate;
-    for (let i = 0; i < p.tracks.length && i < MAX_TRACKS; i++) {
+    const nt = Math.min(p.tracks.length, MAX_TRACKS);
+    for (let i = 0; i < nt; i++) {
       const s = p.tracks[i].synth;
       const patch = this.ch[i].patch;
       patch.wave = s.wave;
-      patch.cutoff = s.cutoff / 127;
-      patch.reso = s.reso / 127;
-      patch.envAmt = s.env / 127;
       patch.attack = 0.001 * Math.pow(2000, s.attack / 127);
       patch.decayCoef = Math.exp(-1 / ((0.02 * Math.pow(200, s.decay / 127) * sr) / 3));
       patch.sustain = s.sustain / 127;
       patch.releaseCoef = Math.exp(-1 / ((0.02 * Math.pow(200, s.release / 127) * sr) / 3));
+    }
+    // timeline lookups, built here so that playing a step allocates nothing
+    const a = p.arr;
+    this.clips = [];
+    for (let t = 0; t < nt; t++) this.clips.push(a.clips.filter((c) => c.track === t).sort((x, y) => x.start - y.start));
+    this.end = songEnd(a);
+    this.curves = [];
+    for (const l of a.lanes) {
+      const pi = paramIndex(l.param);
+      if (!l.on || !l.points.length || pi < 0 || l.track >= nt) continue;
+      this.curves.push({ slot: (l.track < 0 ? MAX_TRACKS : l.track) * NP + pi, track: l.track, points: l.points });
+    }
+    this.loadValues();
+    if (this.automated) this.automate();
+  }
+
+  /** Copy every knob from the project into the value array (undoing any automation). */
+  private loadValues(): void {
+    const p = this.project, v = this.val;
+    const nt = Math.min(p.tracks.length, MAX_TRACKS);
+    for (let i = 0; i < NP; i++) {
+      const d = PARAMS[i];
+      if (d.scope === 'master') v[MAX_TRACKS * NP + i] = d.get(p);
+      else for (let t = 0; t < nt; t++) v[t * NP + i] = d.get(p.tracks[t]);
+    }
+    for (let t = 0; t < nt; t++) this.patch(t);
+  }
+
+  private patch(t: number): void {
+    const v = this.val, o = t * NP, patch = this.ch[t].patch;
+    patch.cutoff = v[o + P_CUTOFF] / 127;
+    patch.reso = v[o + P_RESO] / 127;
+    patch.envAmt = v[o + P_ENV] / 127;
+  }
+
+  /** Move the automated knobs to where their curves are at the current song position. */
+  private automate(): void {
+    const cs = this.curves;
+    if (!cs.length) return;
+    const sps = samplesPerStep(this.clock.bpm, this.sampleRate);
+    const frac = this.sinceStep / sps;
+    const pos = this.curStep + (frac < 1 ? frac : 1);
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      this.val[c.slot] = curveAt(c.points, pos);
+      if (c.track >= 0) this.patch(c.track);
     }
   }
 
@@ -117,7 +193,7 @@ export class Engine {
    * Start from the top. With `chain`, plays those patterns in order (and stops
    * at the end unless `loop`); otherwise follows the project's song/pattern mode.
    */
-  play(opts: { chain?: number[]; loop?: boolean; pattern?: number } = {}): void {
+  play(opts: { chain?: number[]; loop?: boolean; pattern?: number; from?: number } = {}): void {
     this.clock.reset();
     this.stepIdx = 0;
     this.songPos = 0;
@@ -127,13 +203,27 @@ export class Engine {
     this.chain = opts.chain ?? null;
     this.loop = opts.loop ?? true;
     if (opts.pattern !== undefined) this.pattern = opts.pattern;
-    const chain = this.activeChain();
-    if (chain) this.pattern = chain[0];
+    if (opts.from !== undefined) this.cue = opts.from;
+    if (this.chain) this.pattern = this.chain[0];
+    this.inSong = !this.chain && this.project.songMode;
+    this.songStep = this.cue;
+    this.curStep = this.cue;
+    this.sinceStep = 0;
+    if (!this.inSong) this.clock.bpm = this.project.bpm;
     this.playing = true;
+  }
+
+  /** Jump to a timeline step: right away while the song plays, or as the place the next play() starts from. */
+  seek(step: number): void {
+    this.cue = step;
+    if (this.playing && this.inSong) this.songStep = step;
   }
 
   stop(): void {
     this.playing = false;
+    this.inSong = false;
+    this.clock.bpm = this.project.bpm;
+    if (this.automated) { this.automated = false; this.loadValues(); }
     this.queued = -1;
     for (const c of this.ch) for (const v of c.synths) if (v.active && !v.held) v.release();
   }
@@ -148,8 +238,8 @@ export class Engine {
 
   /** Switch pattern: immediately when stopped, on the next bar line when playing. */
   setPattern(i: number): void {
-    if (!this.playing) this.pattern = i;
-    else this.queued = i === this.pattern && !this.activeChain() ? -1 : i;
+    if (!this.playing || this.inSong) this.pattern = i;
+    else this.queued = i === this.pattern && !this.chain ? -1 : i;
   }
 
   /** Play a drum hit or a one-shot synth note right away (pads, MIDI, previews). */
@@ -199,23 +289,89 @@ export class Engine {
     if (live >= SAMPLE_POLY && oldest) oldest.kill();
     const v = free ?? quiet;
     const g = vel / 127;
-    const decay = t.decay >= 127 ? 1 : Math.exp(-1 / (0.012 * Math.pow(330, t.decay / 127) * this.sampleRate));
-    v.start(data, Math.pow(2, t.tune / 12), g * g, decay, this.age++);
+    const dk = this.val[track * NP + P_DECAY];
+    const decay = dk >= 126.5 ? 1 : Math.exp(-1 / (0.012 * Math.pow(330, dk / 127) * this.sampleRate));
+    v.start(data, Math.pow(2, this.val[track * NP + P_TUNE] / 12), g * g, decay, this.age++);
   }
 
-  private activeChain(): number[] | null {
-    if (this.chain) return this.chain;
-    const p = this.project;
-    return p.songMode && p.song.length ? p.song : null;
+  /** One step of the timeline: every track plays whatever clip it is inside. */
+  private songFire(offset: number): boolean {
+    const p = this.project, a = p.arr;
+    let s = this.songStep;
+    const end = this.end || p.steps;
+    const looped = a.loopOn && a.loopEnd > a.loopStart && a.loopStart < end;
+    if (s >= end) {
+      if (!this.loop) { this.playing = false; this.ended = true; return false; }
+      s = looped ? a.loopStart : 0;
+    }
+    // work out the step after this one now, so swing knows whether it is an off-beat
+    let next = s + 1;
+    if (this.loop) {
+      if (looped && next === a.loopEnd) next = a.loopStart;
+      else if (next >= end) next = looped ? a.loopStart : 0;
+    }
+    this.songStep = next;
+    this.curStep = s;
+    this.sinceStep = -offset;
+    let bpm = p.bpm;
+    const tempo = a.tempo;
+    for (let i = 0; i < tempo.length && tempo[i].at <= s; i++) bpm = tempo[i].bpm;
+    this.clock.bpm = bpm;
+    const sps = samplesPerStep(bpm, this.sampleRate);
+    for (let t = 0; t < this.clips.length; t++) {
+      const cl = this.clips[t];
+      let c: Clip | null = null;
+      for (let i = 0; i < cl.length; i++) {
+        if (cl[i].start > s) break;
+        if (s < cl[i].start + cl[i].len) { c = cl[i]; break; }
+      }
+      if (!c) continue;
+      const pat = p.patterns[c.pattern];
+      if (!pat) continue;
+      const local = (s - c.start + c.offset) % p.steps;
+      const tr = p.tracks[t];
+      if (tr.kind === 'drum') {
+        const vel = pat.steps[t]?.[local];
+        if (vel) this.hit(t, tr, vel);
+      } else {
+        const notes = pat.notes[t];
+        const left = c.start + c.len - s; // notes are cut where their clip ends
+        if (notes) for (let n = 0; n < notes.length; n++) {
+          const nt = notes[n];
+          if (nt.s === local) this.noteOn(t, nt.p, nt.v, Math.max(1, Math.round((nt.l < left ? nt.l : left) * sps * 0.96)));
+        }
+      }
+    }
+    if (this.onStep) {
+      const info = this.info;
+      info.step = s; info.pattern = this.pattern; info.song = s; info.offset = offset;
+      this.onStep(info);
+    }
+    return true;
   }
 
   private fire = (_globalStep: number, offset: number): void => {
     if (offset > this.from) { this.voices(this.from, offset, this.nt); this.from = offset; }
     if (!this.playing) return;
     const p = this.project;
+    // Moving between pattern and song playback waits for a bar line, so the switch never stumbles.
+    const wantSong = !this.chain && p.songMode;
+    if (this.inSong && !wantSong) {
+      if (this.songStep === barStart(p, this.songStep)) { this.inSong = false; this.stepIdx = 0; this.started = false; this.clock.bpm = p.bpm; this.clock.phase = 1; }
+    } else if (!this.inSong && wantSong && (this.stepIdx >= p.steps || this.stepIdx === 0)) {
+      this.inSong = true;
+      this.songStep = this.cue;
+    }
+    if (this.inSong) {
+      this.automated = this.curves.length > 0;
+      // swing follows the position inside the bar, which matters when a bar has an odd number of steps
+      if (this.songFire(offset)) this.clock.phase = (this.songStep - barStart(p, this.songStep)) & 1;
+      return;
+    }
+    if (this.automated) { this.automated = false; this.loadValues(); }
     if (this.stepIdx >= p.steps) this.stepIdx = 0;
     if (this.stepIdx === 0 && this.started) {
-      const chain = this.activeChain();
+      const chain = this.chain;
       if (chain) {
         this.songPos++;
         if (this.songPos >= chain.length) {
@@ -250,7 +406,7 @@ export class Engine {
     }
     if (this.onStep) {
       const info = this.info; // reused: nothing on the audio path allocates
-      info.step = step; info.pattern = this.pattern; info.songPos = this.songPos; info.offset = offset;
+      info.step = step; info.pattern = this.pattern; info.song = -1; info.offset = offset;
       this.onStep(info);
     }
   };
@@ -276,6 +432,8 @@ export class Engine {
     this.nt = nt;
     if (this.playing) this.clock.advance(n, this.fire);
     this.voices(this.from, n, nt);
+    if (this.automated) { this.sinceStep += n; this.automate(); }
+    const val = this.val, mo = MAX_TRACKS * NP;
 
     const { mixL, mixR, revIn, dlyIn } = this;
     mixL.fill(0, 0, n); mixR.fill(0, 0, n); revIn.fill(0, 0, n); dlyIn.fill(0, 0, n);
@@ -283,15 +441,15 @@ export class Engine {
     for (let t = 0; t < nt; t++) if (p.tracks[t].solo) anySolo = true;
 
     for (let t = 0; t < nt; t++) {
-      const tr = p.tracks[t], c = this.ch[t];
-      c.filter.process(c.l, c.r, n, tr.filter / 64, 0.25);
+      const tr = p.tracks[t], c = this.ch[t], o = t * NP;
+      c.filter.process(c.l, c.r, n, val[o + P_FILTER] / 64, 0.25);
       const on = this.stem >= 0 ? this.stem === t : anySolo ? tr.solo : !tr.mute;
-      const g = on ? volGain(tr.vol) : 0;
-      const a = ((tr.pan / 64 + 1) * Math.PI) / 4;
+      const g = on ? volGain(val[o + P_VOL]) : 0;
+      const a = ((val[o + P_PAN] / 64 + 1) * Math.PI) / 4;
       const tl = g * Math.cos(a) * Math.SQRT2, trr = g * Math.sin(a) * Math.SQRT2;
       if (c.gl < 0) { c.gl = tl; c.gr = trr; } // first block: no fade-in
       const dl = (tl - c.gl) / n, dr = (trr - c.gr) / n;
-      const rs = send(tr.rev), ds = send(tr.dly);
+      const rs = send(val[o + P_REV]), ds = send(val[o + P_DLY]);
       let gl = c.gl, gr = c.gr, peak = 0;
       const L = c.l, R = c.r;
       for (let i = 0; i < n; i++) {
@@ -309,16 +467,16 @@ export class Engine {
     }
 
     const fx = p.fx;
-    const sps = samplesPerStep(p.bpm, this.sampleRate);
-    this.delay.process(dlyIn, mixL, mixR, n, DELAY_DIVS[fx.dlyTime] * sps, (fx.dlyFb / 127) * 0.85, send(fx.dlyLevel) * 1.2);
-    this.reverb.process(revIn, mixL, mixR, n, fx.revSize / 127, fx.revDamp / 127, send(fx.revLevel) * 1.6);
-    this.masterFilter.process(mixL, mixR, n, fx.filter / 64, fx.filterRes / 127);
+    const sps = samplesPerStep(this.clock.bpm, this.sampleRate);
+    this.delay.process(dlyIn, mixL, mixR, n, DELAY_DIVS[fx.dlyTime] * sps, (val[mo + P_DLYFB] / 127) * 0.85, send(val[mo + P_DLYLVL]) * 1.2);
+    this.reverb.process(revIn, mixL, mixR, n, val[mo + P_REVSIZE] / 127, fx.revDamp / 127, send(val[mo + P_REVLVL]) * 1.6);
+    this.masterFilter.process(mixL, mixR, n, val[mo + P_MFILTER] / 64, val[mo + P_MRES] / 127);
     if (fx.compOn && this.stem < 0) {
       this.comp.process(mixL, mixR, n, -(fx.compThresh / 127) * 36, 1 + (fx.compRatio / 127) * 11, (fx.compMakeup / 127) * 18);
     } else {
       this.comp.reduction = 0;
     }
-    const mg = volGain(p.master), dm = (mg - this.masterGain) / n;
+    const mg = volGain(val[mo + P_MASTER]), dm = (mg - this.masterGain) / n;
     let g = this.masterGain, pl = 0, pr = 0;
     for (let i = 0; i < n; i++) {
       g += dm;

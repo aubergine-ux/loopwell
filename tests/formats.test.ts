@@ -58,7 +58,7 @@ describe('MIDI export', () => {
   it('exports every demo without error', () => {
     for (const d of DEMOS) {
       const p = d.make();
-      const m = readMidi(exportMidi(p, p.song));
+      const m = readMidi(exportMidi(p));
       expect(m.ntracks).toBeGreaterThan(4);
     }
   });
@@ -90,19 +90,19 @@ describe('sanitize', () => {
     for (const junk of [null, 42, 'x', {}, { tracks: 'no' }, { tracks: [{}], patterns: [{ steps: [[999, -5, 'a']] }], bpm: 1e9, song: [77] }]) {
       const p = sanitize(junk);
       expect(p.tracks.length).toBeGreaterThan(0);
-      expect(p.patterns.length).toBe(4);
+      expect(p.patterns.length).toBe(8);
       expect(p.bpm).toBeGreaterThanOrEqual(40);
       expect(p.bpm).toBeLessThanOrEqual(240);
       for (const pat of p.patterns) for (const s of pat.steps) {
         expect(s.length).toBe(32);
         for (const v of s) expect(v >= 0 && v <= 127).toBe(true);
       }
-      for (const s of p.song) expect(s >= 0 && s < 4).toBe(true);
+      for (const c of p.arr.clips) expect(c.pattern >= 0 && c.pattern < 8 && c.track < p.tracks.length && c.len > 0).toBe(true);
     }
   });
 
   it('is idempotent', () => {
-    for (const d of DEMOS) expect(sanitize(d.make())).toEqual(d.make());
+    for (const d of DEMOS) { const p = d.make(); expect(sanitize(p)).toEqual(p); }
   });
 });
 

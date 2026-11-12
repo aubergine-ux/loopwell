@@ -27,7 +27,10 @@ export const app = $state({
   playing: false,
   rec: false,
   queued: -1, // pattern waiting for the bar line
-  songPos: 0,
+  /** Where the song starts playing from, in steps (the timeline cursor). */
+  cursor: 0,
+  /** Selected clip on the timeline. */
+  clip: null as string | null,
   theme: 'cream',
   modal: null as ModalName | null,
   toast: null as { msg: string; kind: 'info' | 'error'; id: number } | null,

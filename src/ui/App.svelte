@@ -18,6 +18,7 @@
   import ShareModal from './ShareModal.svelte';
   import SongPanel from './SongPanel.svelte';
   import SoundPanel from './SoundPanel.svelte';
+  import Timeline from './Timeline.svelte';
   import Transport from './Transport.svelte';
 
   boot();
@@ -68,7 +69,7 @@
 <div class="stage">
   <main class="device">
     <Transport />
-    <Grid />
+    {#if app.project.songMode}<Timeline />{:else}<Grid />{/if}
     <section class="lower">
       <div class="padwrap">
         <span class="label">Pads</span>

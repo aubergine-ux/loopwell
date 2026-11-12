@@ -1,10 +1,19 @@
 // The project model. Every knob value is a small integer (mostly 0..127, like
 // MIDI CCs) so beats round-trip exactly through the share-link codec.
 
+import { PARAMS } from './params';
+
 export const MAX_TRACKS = 8;
-export const NUM_PATTERNS = 4;
+export const NUM_PATTERNS = 8;
+export const PATTERN_NAMES = 'ABCDEFGH';
 export const MAX_STEPS = 32;
 export const DEFAULT_VEL = 100;
+/** Longest song, in 16th-note steps (about 17 minutes at 120 bpm). */
+export const MAX_SONG_STEPS = 8192;
+export const MAX_CLIPS = 512;
+export const MAX_LANES = 32;
+export const MAX_POINTS = 512;
+export const MAX_EVENTS = 64;
 
 export type TrackKind = 'drum' | 'synth';
 
@@ -64,15 +73,55 @@ export interface Fx {
   compMakeup: number;
 }
 
+/** A pattern placed on a track of the timeline. All times are in 16th-note steps. */
+export interface Clip {
+  id: string;
+  track: number;
+  pattern: number;
+  start: number;
+  len: number; // longer than the pattern = the pattern loops inside the clip
+  offset: number; // step of the pattern the clip starts on
+}
+
+export interface AutoPoint {
+  t: number; // step
+  v: number; // in the parameter's own range
+}
+
+/** A drawn curve that moves one knob while the song plays. */
+export interface AutoLane {
+  id: string;
+  track: number; // -1 = master
+  param: string; // id from PARAMS
+  on: boolean;
+  points: AutoPoint[]; // sorted by t, joined by straight lines
+}
+
+export interface TempoEvent { at: number; bpm: number }
+export interface SigEvent { at: number; num: number; den: number }
+export interface Marker { at: number; name: string; color: number }
+
+export interface Arrangement {
+  clips: Clip[];
+  lanes: AutoLane[];
+  tempo: TempoEvent[]; // changes after the start; the song begins at project.bpm
+  sigs: SigEvent[]; // the song begins in 4/4 unless there is an event at 0
+  markers: Marker[];
+  loopOn: boolean;
+  loopStart: number;
+  loopEnd: number;
+}
+
 export interface Project {
-  v: 1;
+  v: 2;
   name: string;
   bpm: number; // 40..240
   swing: number; // 0..100
   steps: 16 | 32;
   tracks: Track[];
   patterns: Pattern[];
-  song: number[]; // pattern indices
+  arr: Arrangement;
+  /** false: loop the current pattern. true: play the timeline. */
   songMode: boolean;
   scaleRoot: number; // 0..11
   scaleType: number; // index into SCALES
@@ -143,13 +192,35 @@ export function defaultTracks(kit = 'boom'): Track[] {
   return t;
 }
 
+let idSeq = 0;
+/** Short id for clips and lanes. Only has to be unique inside one project. */
+export function newId(): string {
+  return (idSeq++).toString(36) + Math.floor(Math.random() * 46656).toString(36).padStart(3, '0');
+}
+
+/** One clip per track for each entry of a pattern chain; runs of the same pattern become one looping clip. */
+export function chainToClips(chain: number[], tracks: number, steps: number): Clip[] {
+  const clips: Clip[] = [];
+  for (let i = 0; i < chain.length;) {
+    let j = i + 1;
+    while (j < chain.length && chain[j] === chain[i]) j++;
+    for (let t = 0; t < tracks; t++) clips.push({ id: newId(), track: t, pattern: chain[i], start: i * steps, len: (j - i) * steps, offset: 0 });
+    i = j;
+  }
+  return clips;
+}
+
+export function emptyArrangement(tracks: number, steps: number): Arrangement {
+  return { clips: chainToClips([0], tracks, steps), lanes: [], tempo: [], sigs: [], markers: [], loopOn: false, loopStart: 0, loopEnd: 0 };
+}
+
 export function emptyProject(): Project {
   const tracks = defaultTracks();
   return {
-    v: 1, name: 'untitled', bpm: 120, swing: 0, steps: 16,
+    v: 2, name: 'untitled', bpm: 120, swing: 0, steps: 16,
     tracks,
     patterns: Array.from({ length: NUM_PATTERNS }, () => newPattern(tracks.length)),
-    song: [0], songMode: false,
+    arr: emptyArrangement(tracks.length, 16), songMode: false,
     scaleRoot: 0, scaleType: 1, scaleLock: true,
     fx: defaultFx(), master: 100,
   };
@@ -207,15 +278,15 @@ export function sanitize(raw: any): Project {
   }
   const f = raw.fx ?? {};
   const df = base.fx;
-  const song = (Array.isArray(raw.song) ? raw.song : [0]).slice(0, 64).map((x: unknown) => int(x, 0, NUM_PATTERNS - 1, 0));
+  const steps = raw.steps === 32 ? 32 : 16;
   return {
-    v: 1,
+    v: 2,
     name: typeof raw.name === 'string' ? raw.name.slice(0, 40) : base.name,
     bpm: int(raw.bpm, 40, 240, 120),
     swing: int(raw.swing, 0, 100, 0),
-    steps: raw.steps === 32 ? 32 : 16,
+    steps,
     tracks, patterns,
-    song: song.length ? song : [0],
+    arr: sanitizeArrangement(raw, n, steps),
     songMode: !!raw.songMode,
     scaleRoot: int(raw.scaleRoot, 0, 11, 0),
     scaleType: int(raw.scaleType, 0, 15, 1),
@@ -232,4 +303,94 @@ export function sanitize(raw: any): Project {
     },
     master: int(raw.master, 0, 127, 100),
   };
+}
+
+const str = (v: unknown, max: number, d: string) => (typeof v === 'string' ? v.slice(0, max) : d);
+
+/** Drop or trim clips so that no two on the same track overlap; later clips win. */
+export function resolveOverlaps(clips: Clip[], steps: number): Clip[] {
+  const out: Clip[] = [];
+  for (const c of clips) {
+    const end = c.start + c.len;
+    for (let i = out.length - 1; i >= 0; i--) {
+      const o = out[i];
+      if (o.track !== c.track || o.start >= end || o.start + o.len <= c.start) continue;
+      const oEnd = o.start + o.len;
+      if (o.start < c.start && oEnd > end) {
+        // the new clip lands in the middle: keep both sides
+        out.push({ ...o, id: newId(), start: end, len: oEnd - end, offset: (o.offset + end - o.start) % steps });
+        o.len = c.start - o.start;
+      } else if (o.start < c.start) o.len = c.start - o.start;
+      else if (oEnd > end) { o.offset = (o.offset + end - o.start) % steps; o.len = oEnd - end; o.start = end; }
+      else out.splice(i, 1);
+    }
+    out.push(c);
+  }
+  return out;
+}
+
+function sanitizeArrangement(raw: any, tracks: number, steps: number): Arrangement {
+  const a = raw.arr;
+  if (!a || typeof a !== 'object') {
+    // version 1 projects had a chain of patterns instead of a timeline
+    const chain = (Array.isArray(raw.song) ? raw.song : [0]).slice(0, 64).map((x: unknown) => int(x, 0, NUM_PATTERNS - 1, 0));
+    return emptyArrangementFrom(chain.length ? chain : [0], tracks, steps);
+  }
+  const ids = new Set<string>();
+  const id = (v: unknown) => {
+    let s = typeof v === 'string' && v && v.length <= 16 && !ids.has(v) ? v : newId();
+    while (ids.has(s)) s = newId();
+    ids.add(s);
+    return s;
+  };
+  const clips: Clip[] = [];
+  for (const c of Array.isArray(a.clips) ? a.clips.slice(0, MAX_CLIPS) : []) {
+    const track = int(c?.track, 0, MAX_TRACKS - 1, -1);
+    const start = int(c?.start, 0, MAX_SONG_STEPS - 1, -1);
+    if (track < 0 || track >= tracks || start < 0) continue;
+    clips.push({
+      id: id(c?.id), track, start,
+      pattern: int(c?.pattern, 0, NUM_PATTERNS - 1, 0),
+      len: int(c?.len, 1, MAX_SONG_STEPS - start, steps),
+      offset: int(c?.offset, 0, MAX_STEPS - 1, 0) % steps,
+    });
+  }
+  const lanes: AutoLane[] = [];
+  for (const l of Array.isArray(a.lanes) ? a.lanes.slice(0, MAX_LANES) : []) {
+    const def = PARAMS.find((d) => d.id === l?.param);
+    const track = int(l?.track, -1, MAX_TRACKS - 1, -2);
+    if (!def || track < -1 || track >= tracks || (def.scope === 'master') !== (track === -1)) continue;
+    if (lanes.some((x) => x.track === track && x.param === def.id)) continue;
+    const points: AutoPoint[] = [];
+    for (const pt of Array.isArray(l.points) ? l.points.slice(0, MAX_POINTS) : []) {
+      const t = int(pt?.t, 0, MAX_SONG_STEPS, -1);
+      if (t >= 0) points.push({ t, v: int(pt?.v, def.min, def.max, def.def) });
+    }
+    points.sort((x, y) => x.t - y.t);
+    lanes.push({ id: id(l.id), track, param: def.id, on: l.on !== false, points: points.filter((pt, i) => !i || pt.t !== points[i - 1].t) });
+  }
+  const events = <T extends { at: number }>(list: unknown, make: (e: any, at: number) => T | null): T[] => {
+    const out: T[] = [];
+    for (const e of Array.isArray(list) ? list.slice(0, MAX_EVENTS) : []) {
+      const at = int(e?.at, 0, MAX_SONG_STEPS - 1, -1);
+      const made = at >= 0 ? make(e, at) : null;
+      if (made && !out.some((o) => o.at === at)) out.push(made);
+    }
+    return out.sort((x, y) => x.at - y.at);
+  };
+  const loopStart = int(a.loopStart, 0, MAX_SONG_STEPS, 0);
+  const loopEnd = int(a.loopEnd, 0, MAX_SONG_STEPS, 0);
+  return {
+    clips: resolveOverlaps(clips, steps),
+    lanes,
+    tempo: events<TempoEvent>(a.tempo, (e, at) => (at > 0 ? { at, bpm: int(e.bpm, 40, 240, 120) } : null)),
+    sigs: events<SigEvent>(a.sigs, (e, at) => ({ at, num: int(e.num, 1, 16, 4), den: [2, 4, 8, 16].includes(e.den) ? e.den : 4 })),
+    markers: events<Marker>(a.markers, (e, at) => ({ at, name: str(e.name, 24, 'marker'), color: int(e.color, 0, 7, 0) })),
+    loopOn: !!a.loopOn && loopEnd > loopStart,
+    loopStart, loopEnd: Math.max(loopStart, loopEnd),
+  };
+}
+
+function emptyArrangementFrom(chain: number[], tracks: number, steps: number): Arrangement {
+  return { ...emptyArrangement(tracks, steps), clips: chainToClips(chain, tracks, steps) };
 }

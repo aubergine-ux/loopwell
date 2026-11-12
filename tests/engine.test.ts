@@ -11,7 +11,7 @@ function clickProject(bpm = 120): Project {
   const p = emptyProject();
   p.bpm = bpm;
   p.tracks = [newTrack('drum', 0, 'CLICK', 'test/click')];
-  p.patterns = [0, 1, 2, 3].map(() => newPattern(1));
+  p.patterns = p.patterns.map(() => newPattern(1));
   p.fx.compOn = false;
   p.fx.revLevel = 0;
   p.fx.dlyLevel = 0;
@@ -100,7 +100,7 @@ describe('Engine timing', () => {
 describe('Engine sequencing', () => {
   const steps = (eng: Engine, frames: number) => {
     const log: string[] = [];
-    eng.onStep = (i) => log.push(`${'ABCD'[i.pattern]}${i.step}`);
+    eng.onStep = (i) => log.push(`${'ABCDEFGH'[i.pattern]}${i.step}`);
     renderLive(eng, frames);
     return log;
   };
@@ -116,13 +116,11 @@ describe('Engine sequencing', () => {
     expect(steps(eng, 6000 * 34).slice(30, 34)).toEqual(['A30', 'A31', 'A0', 'A1']);
   });
 
-  it('follows the song chain and wraps', () => {
+  it('follows an explicit chain and wraps', () => {
     const p = clickProject();
-    p.songMode = true;
-    p.song = [0, 2, 1];
     const eng = new Engine(SR);
     eng.setProject(p);
-    eng.play();
+    eng.play({ chain: [0, 2, 1] });
     const log = steps(eng, 6000 * 16 * 4);
     expect([log[0], log[16], log[32], log[48]]).toEqual(['A0', 'C0', 'B0', 'A0']);
   });

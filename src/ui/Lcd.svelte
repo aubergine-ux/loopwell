@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { tapTempo } from '../actions.svelte';
   import { audio } from '../audio/host';
-  import { clamp } from '../core/types';
+  import { posLabel } from '../core/arrange';
+  import { PATTERN_NAMES, clamp } from '../core/types';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
 
@@ -75,7 +76,7 @@
 
     const off = onFrame((head) => {
       // position readout: bar.beat.sixteenth
-      const text = head ? `${head.songPos + 1}.${(head.step >> 2) + 1}.${(head.step & 3) + 1}` : '-.-.-';
+      const text = !head ? '-.-.-' : head.song >= 0 ? posLabel(p, head.song) : `1.${(head.step >> 2) + 1}.${(head.step & 3) + 1}`;
       if (posEl.textContent !== text) posEl.textContent = text;
 
       // master meters fall back smoothly
@@ -121,7 +122,7 @@
     <button class="tap" onclick={tapTempo} title="Tap tempo (T)">BPM · TAP</button>
   </div>
   <div class="info">
-    <div><span>PAT</span><b>{'ABCD'[app.pat]}{app.project.songMode ? ` ${app.songPos + 1}/${app.project.song.length}` : ''}</b></div>
+    <div><span>{p.songMode ? 'SONG' : 'PAT'}</span><b>{PATTERN_NAMES[app.pat]}</b></div>
     <div><span>POS</span><b bind:this={posEl}>-.-.-</b></div>
     <div><span>DSP</span><b bind:this={loadEl}>0%</b></div>
   </div>

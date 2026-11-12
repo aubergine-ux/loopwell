@@ -1,5 +1,6 @@
 // Offline bounce: runs the same Engine as the worklet, faster than real time.
 
+import { songEnd, stepToSeconds } from './arrange';
 import { samplesPerStep } from './clock';
 import { Engine } from './engine';
 import type { Project } from './types';
@@ -10,7 +11,8 @@ export interface SampleBank {
 
 export interface RenderOptions {
   sampleRate: number;
-  chain: number[];
+  /** Patterns to play in order. Leave out to render the timeline. */
+  chain?: number[];
   /** Render only this track, without the master compressor. */
   stem?: number;
   /** Longest reverb/delay tail to keep after the last step, seconds. */
@@ -32,8 +34,9 @@ export async function renderProject(project: Project, bank: SampleBank, opts: Re
   eng.setProject(project);
   eng.stem = opts.stem ?? -1;
 
-  const sps = samplesPerStep(project.bpm, sr);
-  const body = Math.ceil(opts.chain.length * project.steps * sps);
+  const body = opts.chain
+    ? Math.ceil(opts.chain.length * project.steps * samplesPerStep(project.bpm, sr))
+    : Math.ceil(stepToSeconds(project, songEnd(project.arr) || project.steps) * sr);
   const maxTail = Math.round((opts.maxTail ?? 8) * sr);
   const total = body + maxTail;
   const l = new Float32Array(total), r = new Float32Array(total);
@@ -41,7 +44,11 @@ export async function renderProject(project: Project, bank: SampleBank, opts: Re
   const CHUNK = 128 * 64;
   const quietFrames = Math.round(sr * 0.25);
   let pos = 0, quiet = 0, sinceYield = 0;
-  eng.play({ chain: opts.chain, loop: false });
+  if (opts.chain) eng.play({ chain: opts.chain, loop: false });
+  else {
+    eng.setProject({ ...project, songMode: true });
+    eng.play({ loop: false, from: 0 });
+  }
   while (pos < total) {
     const n = Math.min(CHUNK, total - pos);
     eng.process(l, r, n, pos);
