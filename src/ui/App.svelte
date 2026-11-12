@@ -6,6 +6,7 @@
   import type { Project } from '../core/types';
   import { onKeyDown, onKeyUp, releaseAll } from '../keys';
   import { app, TABS } from '../state.svelte';
+  import CommunityModal from './CommunityModal.svelte';
   import DemosModal from './DemosModal.svelte';
   import ExportModal from './ExportModal.svelte';
   import FxPanel from './FxPanel.svelte';
@@ -106,6 +107,7 @@
 {:else if app.modal === 'export'}<ExportModal />
 {:else if app.modal === 'demos'}<DemosModal />
 {:else if app.modal === 'presets'}<PresetsModal />
+{:else if app.modal === 'community'}<CommunityModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}

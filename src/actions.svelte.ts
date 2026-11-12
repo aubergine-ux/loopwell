@@ -17,6 +17,7 @@ import { encodeWav } from './core/wav';
 import { app, THEMES } from './state.svelte';
 import { getSamples, loadSaved, loadTheme, putSample, saveProject, saveTheme } from './storage';
 import { flash, startVisuals } from './visual';
+import { initCommunity } from './community/store.svelte';
 
 // --- small helpers ---------------------------------------------------------
 
@@ -105,8 +106,12 @@ function fixSelection(): void {
   if (app.clip && !app.project.arr.clips.some((c) => c.id === app.clip)) app.clip = null;
 }
 
+/** Called whenever a different beat is loaded, so things tied to the old one can let go. */
+export const loadHooks: (() => void)[] = [];
+
 /** Replace the whole beat. The old one stays reachable with undo. */
 export function loadProject(p: Project): void {
+  for (const hook of loadHooks) hook();
   commit();
   stop();
   app.project = p;
@@ -443,19 +448,31 @@ export function sampleName(id: string): string {
 export const sampleMissing = (id: string) => isUser(id) && !(id in app.userSamples);
 
 export async function openProjectFile(file: File): Promise<void> {
+  if (file.size > 200 * 1024 * 1024) { toast('That file is too big to be a Loopwell project.', 'error'); return; }
+  await openProjectBytes(new Uint8Array(await file.arrayBuffer()));
+}
+
+/** Open the contents of a .loopwell file. Returns false (after saying why) if it isn't one. */
+export async function openProjectBytes(bytes: Uint8Array, quiet = false): Promise<boolean> {
   try {
-    if (file.size > 200 * 1024 * 1024) throw new Error('That file is too big to be a Loopwell project.');
-    const { project, samples } = unpackProjectFile(new Uint8Array(await file.arrayBuffer()));
+    const { project, samples } = unpackProjectFile(bytes);
     for (const s of samples) await registerSample(s, true);
     loadProject(project);
-    toast(`Opened “${project.name}”`);
+    if (!quiet) toast(`Opened “${project.name}”`);
+    return true;
   } catch (e) {
     toast(e instanceof Error ? e.message : 'Could not open that file.', 'error');
+    return false;
   }
 }
 
+/** The beat on screen as a .loopwell file, custom samples included. */
+export function projectFileBytes(): Uint8Array<ArrayBuffer> {
+  return packProjectFile(snapshot(), [...userBytes.values()]);
+}
+
 export function saveProjectFile(): void {
-  download(packProjectFile(snapshot(), [...userBytes.values()]), `${slug()}.loopwell`, 'application/zip');
+  download(projectFileBytes(), `${slug()}.loopwell`, 'application/zip');
   toast('Project file saved');
 }
 
@@ -567,4 +584,5 @@ export function boot(): void {
   void getSamples().then(async (all) => { for (const s of all) await registerSample(s, false); });
   checkHash();
   addEventListener('hashchange', checkHash);
+  void initCommunity();
 }

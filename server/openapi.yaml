@@ -1,0 +1,1350 @@
+openapi: 3.1.0
+info:
+  title: Loopwell API
+  version: 1.0.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    The optional backend for Loopwell: accounts, cloud saves with version history, a public
+    gallery of published beats, sample packs and moderation.
+
+    Authentication. Sign-in happens through GitHub or Discord. The app sends the browser to
+    /api/auth/{provider}/start, the server sends it back to the app with a one-time code in the
+    URL fragment (#auth=...), and the app swaps that code for a token at /api/auth/exchange.
+    Send the token as "Authorization: Bearer <token>". Routes marked optional work signed out
+    and return a little more when signed in (for example likedByMe).
+
+    Files. Project files, published beats and samples are uploaded as the raw request body with
+    "Content-Type: application/octet-stream". Their metadata travels in the query string.
+
+    Errors. Every error is JSON of the form {"error": {"code": "...", "message": "..."}} with a
+    fitting HTTP status. Codes are stable; messages are written for people.
+
+    Lists. Paged lists return {"items": [...], "nextCursor": "..." | null}. Pass nextCursor back
+    as ?cursor= to get the next page. A cursor belongs to the sort and filters it came from.
+servers:
+  - url: /
+    description: This server
+tags:
+  - name: Service
+    description: Health, configuration and this documentation.
+  - name: Auth
+    description: Sign-in, sessions and the signed-in account.
+  - name: Projects
+    description: Private cloud saves. Every save adds a version; old versions can be downloaded and restored.
+  - name: Beats
+    description: The public gallery.
+  - name: Packs
+    description: Licensed sample packs. Every uploaded sample is checked to be real audio within the server's limits.
+  - name: Moderation
+    description: Reports from users, and the admin tools that act on them.
+
+paths:
+  /api/health:
+    get:
+      tags: [Service]
+      summary: Liveness and database check
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: The server is up and can reach its database.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /api/config:
+    get:
+      tags: [Service]
+      summary: What this server offers
+      description: Lets the app decide which sign-in buttons to show and check files against the limits before uploading.
+      operationId: getConfig
+      security: []
+      responses:
+        '200':
+          description: Enabled sign-in providers and upload limits.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerConfig' }
+
+  /api/openapi.json:
+    get:
+      tags: [Service]
+      summary: This document as JSON
+      operationId: openapi
+      security: []
+      responses:
+        '200':
+          description: The OpenAPI 3.1 description of the API.
+          content:
+            application/json:
+              schema: { type: object }
+
+  /api/docs:
+    get:
+      tags: [Service]
+      summary: Human-readable API reference
+      operationId: docs
+      security: []
+      responses:
+        '200':
+          description: A self-contained HTML page rendering this document.
+          content:
+            text/html:
+              schema: { type: string }
+
+  /api/auth/{provider}/start:
+    parameters:
+      - $ref: '#/components/parameters/Provider'
+    get:
+      tags: [Auth]
+      summary: Begin sign-in
+      description: |
+        Navigate the browser here (it is not a fetch call). Redirects to the provider's consent
+        page. The redirect target must be on one of the origins in APP_ORIGINS.
+      operationId: authStart
+      security: []
+      parameters:
+        - name: redirect
+          in: query
+          description: Absolute URL of the app page to return to. Defaults to the root of the first allowed origin.
+          schema: { type: string, format: uri }
+      responses:
+        '302':
+          description: Redirect to the provider.
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/auth/{provider}/callback:
+    parameters:
+      - $ref: '#/components/parameters/Provider'
+    get:
+      tags: [Auth]
+      summary: Provider returns here
+      description: |
+        Called by the provider, never by the app. Finishes the exchange, creates the account on
+        first sign-in and redirects to the app with "#auth=<one-time code>" (valid for 60 seconds,
+        single use). On failure the fragment is "#auth_error=<reason>": access_denied,
+        provider_error or banned.
+      operationId: authCallback
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '302':
+          description: Redirect back to the app.
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/auth/exchange:
+    post:
+      tags: [Auth]
+      summary: Swap the one-time code for a token
+      operationId: authExchange
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: The value of "auth" from the URL fragment. }
+      responses:
+        '200':
+          description: A new session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/auth/dev-login:
+    post:
+      tags: [Auth]
+      summary: Sign in without OAuth (development only)
+      description: |
+        Only exists when the server runs with DEV_LOGIN=1 and NODE_ENV is not "production";
+        otherwise this path is a 404. Signs in as the given handle, creating the account if needed.
+      operationId: devLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [handle]
+              properties:
+                handle: { type: string, maxLength: 28 }
+                displayName: { type: string, maxLength: 60 }
+      responses:
+        '200':
+          description: A new session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: End this session
+      description: Invalidates the token used for the request. Other sessions of the same account stay signed in.
+      operationId: logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Signed out. }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/me:
+    get:
+      tags: [Auth]
+      summary: The signed-in account
+      operationId: getMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The account, with storage use.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Auth]
+      summary: Edit the profile
+      operationId: updateMe
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 60 }
+                bio: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: The updated account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Auth]
+      summary: Delete the account
+      description: Permanently deletes the account with all its projects, published beats, packs, likes and reports. Remixes other people made of its beats stay, without the credit link.
+      operationId: deleteMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/users/{handle}:
+    parameters:
+      - $ref: '#/components/parameters/Handle'
+    get:
+      tags: [Beats]
+      summary: Public profile
+      operationId: getUser
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200':
+          description: The profile with totals over the user's visible beats.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: List my projects
+      description: Most recently saved first. Not paged.
+      operationId: listProjects
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The caller's projects.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Project' } }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Projects]
+      summary: Save a new project
+      description: The body is a .loopwell file. The server checks only that it is a zip within the size limit.
+      operationId: createProject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: name, in: query, description: Defaults to "Untitled"., schema: { type: string, maxLength: 100 } }
+      requestBody: { $ref: '#/components/requestBodies/ProjectFile' }
+      responses:
+        '201':
+          description: Created, as version 1.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/projects/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Projects]
+      summary: Project details
+      operationId: getProject
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The project.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [Projects]
+      summary: Save a new version
+      description: Adds a version and makes it current. Versions beyond the newest N (see /api/config) are deleted.
+      operationId: saveProject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: name, in: query, description: Renames the project when given., schema: { type: string, maxLength: 100 } }
+      requestBody: { $ref: '#/components/requestBodies/ProjectFile' }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Projects]
+      summary: Delete a project and its history
+      operationId: deleteProject
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/projects/{id}/data:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Projects]
+      summary: Download the current version
+      operationId: getProjectData
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/File' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/projects/{id}/versions:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Projects]
+      summary: Version history
+      description: Newest first.
+      operationId: listProjectVersions
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The versions still kept.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ProjectVersion' } }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/projects/{id}/versions/{n}/data:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/VersionNumber'
+    get:
+      tags: [Projects]
+      summary: Download one version
+      operationId: getProjectVersionData
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/File' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/projects/{id}/versions/{n}/restore:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/VersionNumber'
+    post:
+      tags: [Projects]
+      summary: Restore a version
+      description: Copies the old version forward as a new current version, so the history stays intact.
+      operationId: restoreProjectVersion
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Restored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/beats:
+    get:
+      tags: [Beats]
+      summary: Browse the gallery
+      description: All filters combine with AND. Hidden beats appear only to their author and to admins.
+      operationId: listBeats
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: sort, in: query, description: 'new: newest first. top: most liked. plays: most played.', schema: { type: string, enum: [new, top, plays], default: new } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: genre, in: query, schema: { type: string } }
+        - { name: key, in: query, description: 'For example "A minor".', schema: { type: string } }
+        - { name: bpmMin, in: query, schema: { type: integer, minimum: 0, maximum: 1000 } }
+        - { name: bpmMax, in: query, schema: { type: integer, minimum: 0, maximum: 1000 } }
+        - { name: q, in: query, description: Matches text in the title or description, or a tag exactly., schema: { type: string, maxLength: 100 } }
+        - { name: user, in: query, description: Only beats by this handle., schema: { type: string } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of beats.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BeatPage' }
+        '400': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Beats]
+      summary: Publish a beat
+      description: |
+        The body is the .loopwell file; the metadata is in the query string. Counts against the
+        publisher's storage quota. Pass remixOf to credit the beat this one was made from; the
+        server also records the original at the root of the remix chain.
+      operationId: publishBeat
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: title, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: description, in: query, schema: { type: string, maxLength: 2000 } }
+        - { name: tags, in: query, description: 'Comma-separated, at most 8. Normalised to lowercase with dashes.', schema: { type: string } }
+        - { name: genre, in: query, description: Normalised like a tag., schema: { type: string } }
+        - { name: bpm, in: query, schema: { type: integer, minimum: 20, maximum: 400 } }
+        - { name: key, in: query, description: 'A note name and an optional scale, for example "F# minor".', schema: { type: string } }
+        - { name: remixOf, in: query, description: Id of the beat this is a remix of., schema: { type: string } }
+      requestBody: { $ref: '#/components/requestBodies/ProjectFile' }
+      responses:
+        '201':
+          description: Published.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Beat' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/tags:
+    get:
+      tags: [Beats]
+      summary: Popular tags
+      description: Tags on visible beats, most used first.
+      operationId: listTags
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200':
+          description: Tags with how many beats carry each.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [tag, count]
+                      properties:
+                        tag: { type: string }
+                        count: { type: integer }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /api/beats/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Beats]
+      summary: Beat details
+      operationId: getBeat
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200':
+          description: The beat.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Beat' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Beats]
+      summary: Edit a beat's metadata
+      description: Author or admin. Only the fields sent are changed; null clears genre, bpm or key.
+      operationId: updateBeat
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, minLength: 1, maxLength: 100 }
+                description: { type: string, maxLength: 2000 }
+                tags: { type: array, maxItems: 8, items: { type: string } }
+                genre: { type: [string, 'null'] }
+                bpm: { type: [integer, 'null'], minimum: 20, maximum: 400 }
+                key: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: The updated beat.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Beat' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Beats]
+      summary: Delete a beat
+      description: Author or admin. Remixes of it stay, without the link to it.
+      operationId: deleteBeat
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/beats/{id}/data:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Beats]
+      summary: Download the beat's project file
+      operationId: getBeatData
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/File' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/beats/{id}/remixes:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Beats]
+      summary: Remixes of a beat
+      description: Beats published with remixOf set to this one. Takes the same sort, cursor and limit as the gallery.
+      operationId: listRemixes
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: sort, in: query, schema: { type: string, enum: [new, top, plays], default: new } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of beats.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BeatPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/beats/{id}/play:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Beats]
+      summary: Count a play
+      description: |
+        Call when playback starts. Counts at most once per beat per client per hour. The client is
+        recognised by a keyed hash of its address; the address itself is never stored.
+      operationId: playBeat
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200':
+          description: The play count, and whether this call raised it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plays, counted]
+                properties:
+                  plays: { type: integer }
+                  counted: { type: boolean }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/beats/{id}/like:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Beats]
+      summary: Like a beat
+      description: Idempotent.
+      operationId: likeBeat
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The like count.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Beats]
+      summary: Remove a like
+      description: Idempotent.
+      operationId: unlikeBeat
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The like count.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/packs:
+    get:
+      tags: [Packs]
+      summary: Browse published packs
+      description: Newest first. With mine=1 it lists the caller's own packs instead, drafts included.
+      operationId: listPacks
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, description: Matches text in the name or description., schema: { type: string, maxLength: 100 } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: user, in: query, description: Only packs by this handle., schema: { type: string } }
+        - { name: mine, in: query, description: Set to 1 to list your own packs. Needs a token., schema: { type: string, enum: ['1', 'true'] } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of packs, without their sample lists.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Pack' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Packs]
+      summary: Create a pack
+      description: Creates an empty draft that only its owner can see. Add samples, then publish.
+      operationId: createPack
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, license]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                description: { type: string, maxLength: 2000 }
+                license: { $ref: '#/components/schemas/License' }
+                licenseUrl: { type: string, format: uri, description: Required when license is "custom". Ignored otherwise. }
+                attribution: { type: string, maxLength: 200, description: Who to credit. Defaults to your display name. }
+                tags: { type: array, maxItems: 8, items: { type: string } }
+      responses:
+        '201':
+          description: The new draft.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackDetail' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/packs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Packs]
+      summary: Pack details with its samples
+      operationId: getPack
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200':
+          description: The pack.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackDetail' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Packs]
+      summary: Delete a pack and its samples
+      description: Owner or admin.
+      operationId: deletePack
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/packs/{id}/samples:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Packs]
+      summary: Add a sample
+      description: |
+        Owner only. The body is the audio file. It must be WAV, AIFF, MP3, OGG, FLAC or M4A as
+        judged by its first bytes, not its name. WAV, AIFF and FLAC headers are read and the
+        sample refused when it is longer than the limit, has more than 8 channels or a sample
+        rate outside 4000 to 192000 Hz. Error codes: unsupported_audio (415), invalid_audio and
+        audio_too_long (422), payload_too_large, pack_too_large and quota_exceeded (413),
+        pack_full (409).
+      operationId: addSample
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: name, in: query, required: true, description: File name to show., schema: { type: string, minLength: 1, maxLength: 80 } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sample' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/packs/{id}/samples/{sid}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/SampleId'
+    delete:
+      tags: [Packs]
+      summary: Remove a sample
+      description: Owner only.
+      operationId: deleteSample
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/packs/{id}/samples/{sid}/data:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/SampleId'
+    get:
+      tags: [Packs]
+      summary: Download a sample
+      operationId: getSampleData
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200':
+          description: The audio file, with the Content-Type of its format.
+          content:
+            audio/*:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/packs/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Packs]
+      summary: Publish a pack
+      description: Owner only. Makes the pack public. It needs at least one sample. Publishing again changes nothing.
+      operationId: publishPack
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The published pack.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackDetail' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/reports:
+    post:
+      tags: [Moderation]
+      summary: Report a beat, pack or user
+      description: |
+        One open report per user per target; a second gets 409 already_reported. Rate limited per
+        user. You cannot report your own uploads.
+      operationId: createReport
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetType, targetId, reason]
+              properties:
+                targetType: { type: string, enum: [beat, pack, user] }
+                targetId: { type: string, description: The beat or pack id, or the user's handle. }
+                reason: { type: string, enum: [spam, abuse, copyright, explicit, other] }
+                details: { type: string, maxLength: 1000 }
+      responses:
+        '201':
+          description: Filed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, targetType, targetId, reason, details, status]
+                properties:
+                  id: { type: string }
+                  targetType: { type: string }
+                  targetId: { type: string }
+                  reason: { type: string }
+                  details: { type: string }
+                  status: { type: string, const: open }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/admin/reports:
+    get:
+      tags: [Moderation]
+      summary: List reports (admin)
+      description: Newest first.
+      operationId: listReports
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved], default: open } }
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: A page of reports.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Report' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/admin/reports/{id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Moderation]
+      summary: Resolve a report (admin)
+      description: |
+        dismiss: close the report, change nothing. hide: take the beat or pack out of public
+        view; its owner and admins still see it. remove: delete the beat or pack. ban: ban the
+        reported user, or the owner of the reported beat or pack; they are signed out, cannot
+        sign in again and their uploads leave public view. hide and remove do not apply to user
+        reports. Every other open report about the same target is resolved with the same
+        outcome, and the action is written to the audit log.
+      operationId: resolveReport
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [dismiss, hide, remove, ban] }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: The resolved report.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /api/admin/beats/{id}/unhide:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Moderation]
+      summary: Make a hidden beat public again (admin)
+      operationId: unhideBeat
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Visible again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Unhidden' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/admin/packs/{id}/unhide:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Moderation]
+      summary: Make a hidden pack public again (admin)
+      operationId: unhidePack
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Visible again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Unhidden' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/admin/users/{handle}/unban:
+    parameters:
+      - $ref: '#/components/parameters/Handle'
+    post:
+      tags: [Moderation]
+      summary: Lift a ban (admin)
+      operationId: unbanUser
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The user can sign in again and their uploads are public again.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [handle, banned]
+                properties:
+                  handle: { type: string }
+                  banned: { type: boolean, const: false }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/admin/audit:
+    get:
+      tags: [Moderation]
+      summary: Audit log of admin actions (admin)
+      description: Newest first. Covers report resolutions, unhide, unban, and edits or deletions an admin made to someone else's beat or pack.
+      operationId: listAudit
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: A page of log entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+                  nextCursor: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The token from /api/auth/exchange.
+
+  parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string, enum: [github, discord] }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    SampleId:
+      name: sid
+      in: path
+      required: true
+      schema: { type: string }
+    Handle:
+      name: handle
+      in: path
+      required: true
+      description: Case-insensitive.
+      schema: { type: string }
+    VersionNumber:
+      name: n
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Cursor:
+      name: cursor
+      in: query
+      description: nextCursor from the previous page.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 24 }
+
+  requestBodies:
+    ProjectFile:
+      required: true
+      description: A .loopwell project file (a zip), as raw bytes.
+      content:
+        application/octet-stream:
+          schema: { type: string, format: binary }
+
+  responses:
+    Error:
+      description: 'An error. See the code: invalid_input, invalid_token, unauthorized, forbidden, banned, not_found, rate_limited and others named on the routes.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooLarge:
+      description: 'The upload exceeds a size limit: payload_too_large, pack_too_large or quota_exceeded.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    File:
+      description: The project file, as an attachment.
+      content:
+        application/octet-stream:
+          schema: { type: string, format: binary }
+
+  schemas:
+    Error:
+      type: object
+      description: The shape of every error response.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, description: Stable, machine-readable. }
+            message: { type: string, description: For people. }
+
+    ServerConfig:
+      type: object
+      required: [providers, devLogin, limits]
+      properties:
+        providers: { type: array, items: { type: string, enum: [github, discord] }, description: Sign-in providers that are configured. }
+        devLogin: { type: boolean, description: Whether /api/auth/dev-login exists. }
+        limits:
+          type: object
+          required: [projectBytes, projectVersions, userQuotaBytes, sampleBytes, sampleSeconds, packFiles, packBytes]
+          properties:
+            projectBytes: { type: integer, description: Largest project file or published beat. }
+            projectVersions: { type: integer, description: Versions kept per project. }
+            userQuotaBytes: { type: integer, description: Storage per account across saves, beats and samples. }
+            sampleBytes: { type: integer, description: Largest sample file. }
+            sampleSeconds: { type: number, description: Longest sample. }
+            packFiles: { type: integer, description: Most samples in one pack. }
+            packBytes: { type: integer, description: Most bytes in one pack. }
+
+    User:
+      type: object
+      description: An account as its owner sees it.
+      required: [id, handle, displayName, bio, avatarUrl, isAdmin, createdAt]
+      properties:
+        id: { type: string }
+        handle: { type: string, description: Unique, lowercase, taken from the provider login at first sign-in. }
+        displayName: { type: string }
+        bio: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        isAdmin: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    Me:
+      description: The account plus how much storage it uses.
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          required: [storage]
+          properties:
+            storage:
+              type: object
+              required: [used, quota]
+              properties:
+                used: { type: integer, description: Bytes. }
+                quota: { type: integer, description: Bytes. }
+
+    Session:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string, description: Send as "Authorization Bearer". Shown once; the server keeps only a hash. }
+        user: { $ref: '#/components/schemas/User' }
+
+    Author:
+      type: object
+      required: [handle, displayName, avatarUrl]
+      properties:
+        handle: { type: string }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+
+    Profile:
+      type: object
+      required: [handle, displayName, bio, avatarUrl, joinedAt, beatCount, totalPlays, totalLikes]
+      properties:
+        handle: { type: string }
+        displayName: { type: string }
+        bio: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        joinedAt: { type: string, format: date-time }
+        beatCount: { type: integer }
+        totalPlays: { type: integer }
+        totalLikes: { type: integer }
+        banned: { type: boolean, description: Only present for admins. }
+
+    Project:
+      type: object
+      required: [id, name, version, size, versionCount, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer, description: Number of the current version. }
+        size: { type: integer, description: Bytes of the current version. }
+        versionCount: { type: integer, description: Versions still kept. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ProjectVersion:
+      type: object
+      required: [n, size, createdAt, current]
+      properties:
+        n: { type: integer }
+        size: { type: integer }
+        createdAt: { type: string, format: date-time }
+        current: { type: boolean }
+
+    RemixCredit:
+      type: object
+      required: [id, title, author]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        author: { $ref: '#/components/schemas/Author' }
+
+    Beat:
+      type: object
+      required: [id, title, description, tags, genre, bpm, key, size, author, plays, likes, likedByMe, remixCount, remixOf, remixRoot, hidden, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        genre: { type: [string, 'null'] }
+        bpm: { type: [integer, 'null'] }
+        key: { type: [string, 'null'] }
+        size: { type: integer, description: Bytes of the project file. }
+        author: { $ref: '#/components/schemas/Author' }
+        plays: { type: integer }
+        likes: { type: integer }
+        likedByMe: { type: boolean, description: Always false when signed out. }
+        remixCount: { type: integer, description: Visible beats published as a remix of this one. }
+        remixOf:
+          description: The beat this was remixed from. Null when it is not a remix or that beat is gone or hidden.
+          oneOf: [{ $ref: '#/components/schemas/RemixCredit' }, { type: 'null' }]
+        remixRoot:
+          description: The original at the start of the remix chain. Equal to remixOf for a first-generation remix.
+          oneOf: [{ $ref: '#/components/schemas/RemixCredit' }, { type: 'null' }]
+        hidden: { type: boolean, description: Hidden by a moderator. Only the author and admins ever receive a hidden beat. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BeatPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Beat' } }
+        nextCursor: { type: [string, 'null'] }
+
+    LikeState:
+      type: object
+      required: [likes, likedByMe]
+      properties:
+        likes: { type: integer }
+        likedByMe: { type: boolean }
+
+    License:
+      type: string
+      enum: [CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0, custom]
+
+    Sample:
+      type: object
+      required: [id, name, format, mime, size, durationMs, channels, sampleRate, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        format: { type: string, enum: [wav, aiff, mp3, ogg, flac, m4a] }
+        mime: { type: string }
+        size: { type: integer }
+        durationMs: { type: [integer, 'null'], description: Known for WAV and AIFF, and for FLAC when the file states it. }
+        channels: { type: [integer, 'null'] }
+        sampleRate: { type: [integer, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    Pack:
+      type: object
+      required: [id, name, description, license, licenseUrl, attribution, tags, author, sampleCount, size, published, publishedAt, hidden, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        license: { $ref: '#/components/schemas/License' }
+        licenseUrl: { type: string, format: uri }
+        attribution: { type: string }
+        tags: { type: array, items: { type: string } }
+        author: { $ref: '#/components/schemas/Author' }
+        sampleCount: { type: integer }
+        size: { type: integer, description: Total bytes of its samples. }
+        published: { type: boolean }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        hidden: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PackDetail:
+      description: A pack with its samples, in upload order.
+      allOf:
+        - $ref: '#/components/schemas/Pack'
+        - type: object
+          required: [samples]
+          properties:
+            samples: { type: array, items: { $ref: '#/components/schemas/Sample' } }
+
+    Report:
+      type: object
+      required: [id, reporter, targetType, targetId, target, reason, details, status, resolution, note, resolvedBy, resolvedAt, createdAt]
+      properties:
+        id: { type: string }
+        reporter: { type: string, description: Handle. }
+        targetType: { type: string, enum: [beat, pack, user] }
+        targetId: { type: string, description: Beat or pack id, or the user's handle. }
+        target:
+          type: object
+          description: What the report points at, as it is now.
+          required: [exists, label, owner]
+          properties:
+            exists: { type: boolean }
+            label: { type: [string, 'null'], description: Beat title, pack name or handle. }
+            owner: { type: [string, 'null'], description: Handle of the owner. }
+            hidden: { type: boolean, description: For beats and packs. }
+            banned: { type: boolean, description: For users. }
+        reason: { type: string, enum: [spam, abuse, copyright, explicit, other] }
+        details: { type: string }
+        status: { type: string, enum: [open, resolved] }
+        resolution: { type: [string, 'null'], enum: [dismiss, hide, remove, ban, null] }
+        note: { type: [string, 'null'] }
+        resolvedBy: { type: [string, 'null'], description: Handle of the admin. }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    Unhidden:
+      type: object
+      required: [id, hidden]
+      properties:
+        id: { type: string }
+        hidden: { type: boolean, const: false }
+
+    AuditEntry:
+      type: object
+      required: [id, admin, action, targetType, targetId, note, createdAt]
+      properties:
+        id: { type: integer }
+        admin: { type: string, description: Handle. }
+        action:
+          type: string
+          description: 'One of report.dismiss, report.hide, report.remove, report.ban, beat.unhide, pack.unhide, user.unban, beat.edit, beat.remove, pack.remove.'
+        targetType: { type: string, enum: [beat, pack, user] }
+        targetId: { type: string, description: Beat or pack id, or a handle. }
+        note: { type: string }
+        createdAt: { type: string, format: date-time }

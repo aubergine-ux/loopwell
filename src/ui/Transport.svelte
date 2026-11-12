@@ -3,6 +3,7 @@
   import { cycleTheme, redo, selectPattern, setSteps, setView, togglePlay, undo } from '../actions.svelte';
   import { PATTERN_NAMES } from '../core/types';
   import { connectMidi } from '../audio/midi-in';
+  import { community } from '../community/store.svelte';
   import { app, THEMES } from '../state.svelte';
   import { onFlash, onFrame } from '../visual';
   import Icon from './Icon.svelte';
@@ -47,6 +48,8 @@
       <button class="btn ghost sq" onclick={redo} disabled={!app.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Icon name="redo" /></button>
       <span class="sep"></span>
       <button class="btn ghost" onclick={() => (app.modal = 'demos')} title="Demo beats and new beat"><Icon name="grid" /><span>Beats</span></button>
+      <button class="btn ghost" class:live={!!community.me} onclick={() => (app.modal = 'community')}
+        title={community.server ? 'Gallery, cloud saves and sample packs' : 'Connect to a Loopwell server for a gallery, cloud saves and sample packs'}><Icon name="note" /><span>Community</span></button>
       <button class="btn ghost" onclick={() => (app.modal = 'export')} title="Export WAV, stems, MIDI or a project file"><Icon name="download" /><span>Export</span></button>
       <button class="btn ghost sq midi" class:live={app.midi.state === 'on'} onclick={midiClick} aria-label="MIDI"
         title={app.midi.state === 'on' ? `MIDI: ${app.midi.inputs.join(', ') || 'no devices connected'}` : 'Connect MIDI controllers'}>

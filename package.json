@@ -14,7 +14,8 @@
     "test:realtime": "tsx scripts/realtime-check.ts",
     "test:e2e": "vite build && tsx tests/e2e/run.ts",
     "bench": "tsx scripts/bench.ts",
-    "demos": "tsx scripts/demo-links.ts"
+    "demos": "tsx scripts/demo-links.ts",
+    "test:community": "vite build && tsx tests/e2e/community.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
