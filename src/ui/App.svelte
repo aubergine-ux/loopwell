@@ -5,6 +5,7 @@
   import { autoConnectMidi } from '../audio/midi-in';
   import type { Project } from '../core/types';
   import { onKeyDown, onKeyUp, releaseAll } from '../keys';
+  import { live } from '../live/session.svelte';
   import { app, TABS } from '../state.svelte';
   import CommunityModal from './CommunityModal.svelte';
   import DemosModal from './DemosModal.svelte';
@@ -12,6 +13,9 @@
   import FxPanel from './FxPanel.svelte';
   import Grid from './Grid.svelte';
   import HelpModal from './HelpModal.svelte';
+  import JoinModal from './JoinModal.svelte';
+  import LiveCursors from './LiveCursors.svelte';
+  import LivePanel from './LivePanel.svelte';
   import Icon from './Icon.svelte';
   import MixPanel from './MixPanel.svelte';
   import PresetsModal from './PresetsModal.svelte';
@@ -29,6 +33,7 @@
   // any change to the beat goes to the audio thread, autosave and undo history
   $effect(() => projectChanged($state.snapshot(app.project) as Project));
 
+  let device = $state<HTMLElement>();
   let dropping = $state(false);
   let dragDepth = 0;
 
@@ -70,7 +75,8 @@
 <svelte:document ondragenter={dragEnter} ondragleave={dragLeave} ondragover={(e) => { if (hasFiles(e)) e.preventDefault(); }} ondrop={drop} />
 
 <div class="stage">
-  <main class="device">
+  <main class="device" bind:this={device}>
+    {#if live.on && device}<LiveCursors host={device} />{/if}
     <Transport />
     {#if app.project.songMode}<Timeline />{:else}<Grid />{/if}
     <section class="lower">
@@ -83,6 +89,11 @@
           {#each TABS as t}
             <button role="tab" aria-selected={app.tab === t.id} class:on={app.tab === t.id} onclick={() => (app.tab = t.id)}>{t.label}</button>
           {/each}
+          {#if live.on}
+            <button role="tab" aria-selected={app.tab === 'live'} class:on={app.tab === 'live'} class="livetab" onclick={() => (app.tab = 'live')}>
+              <i class:off={!live.online}></i>Live · {live.peers.length}{#if live.unread}<b>{live.unread}</b>{/if}
+            </button>
+          {/if}
         </div>
         <div class="content" role="tabpanel">
           {#if app.tab === 'sound'}<SoundPanel />
@@ -90,6 +101,7 @@
           {:else if app.tab === 'rack'}<RackPanel />
           {:else if app.tab === 'mix'}<MixPanel />
           {:else if app.tab === 'fx'}<FxPanel />
+          {:else if app.tab === 'live' && live.on}<LivePanel />
           {:else}<SongPanel />{/if}
         </div>
       </div>
@@ -108,6 +120,7 @@
 {:else if app.modal === 'demos'}<DemosModal />
 {:else if app.modal === 'presets'}<PresetsModal />
 {:else if app.modal === 'community'}<CommunityModal />
+{:else if app.modal === 'join'}<JoinModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}
@@ -141,7 +154,7 @@
     width: 100%; max-width: 1320px;
     background: var(--panel); border-radius: 26px; border: 1px solid var(--line);
     box-shadow: var(--shadow);
-    overflow: hidden;
+    overflow: hidden; position: relative;
   }
   .lower { display: grid; grid-template-columns: 178px minmax(0, 1fr); gap: 18px; padding: 16px 18px 18px; border-top: 1px solid var(--line); }
   .padwrap { display: flex; flex-direction: column; gap: 8px; }
@@ -154,6 +167,11 @@
   }
   .tabs button:hover { color: var(--ink); }
   .tabs button.on { background: var(--ink); color: var(--panel); }
+  .livetab { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .livetab i { width: 8px; height: 8px; border-radius: 50%; background: var(--t3); box-shadow: 0 0 8px var(--t3); }
+  .livetab i.off { background: var(--rec); box-shadow: none; animation: wait 1s steps(2, jump-none) infinite; }
+  .livetab b { padding: 0 5px; border-radius: 7px; background: var(--rec); color: #fff; font-size: 9px; }
+  @keyframes wait { 50% { opacity: 0.3; } }
   .content { min-height: 252px; }
 
   footer { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; font: 600 11px var(--mono); color: var(--dim); opacity: 0.85; padding: 4px 0 8px; }

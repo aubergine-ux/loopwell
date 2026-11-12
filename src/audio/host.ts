@@ -266,11 +266,11 @@ export class AudioHost {
     return this.ctx?.sampleRate ?? 48000;
   }
 
-  play(pattern: number, from = 0): void {
+  play(pattern: number, from = 0, step = 0): void {
     this.queue = [];
     this.head = null;
     this.playing = true;
-    this.send({ t: 'play', pattern, from });
+    this.send({ t: 'play', pattern, from, step });
   }
 
   /** Move the song position (and where the next play starts). */

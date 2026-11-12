@@ -4,6 +4,7 @@
 
 import { importSample, loadHooks, openProjectBytes, play, projectFileBytes, toast } from '../actions.svelte';
 import { NOTE_NAMES, SCALES } from '../core/scales';
+import { live } from '../live/session.svelte';
 import { app } from '../state.svelte';
 import {
   ApiError, api, serverUrl, setServer, setToken, token, validServer,
@@ -50,6 +51,13 @@ export async function initCommunity(): Promise<void> {
     else toast('That server address is not valid. It has to start with https://', 'error');
   }
   community.server = serverUrl();
+  // an invite link: ask for a name, then join
+  const room = hash.get('live');
+  if (room && /^[A-Za-z0-9_-]{6,40}$/.test(room)) {
+    clean();
+    if (community.server) { live.invite = room; app.modal = 'join'; }
+    else toast('That invite link does not say which server the session is on.', 'error');
+  }
   if (!community.server) return;
   const code = hash.get('auth'), authError = hash.get('auth_error');
   if (code || authError) clean();

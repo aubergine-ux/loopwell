@@ -46,6 +46,10 @@ jobs:
         run: npm run test:community
         env:
           CHROMIUM: /usr/bin/google-chrome
+      - name: Live sessions, three browsers through the relay
+        run: npm run test:live
+        env:
+          CHROMIUM: /usr/bin/google-chrome
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:

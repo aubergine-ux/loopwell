@@ -3,6 +3,7 @@
   import { addTrack, padDown, padUp, sampleMissing, setStep, stepVel } from '../actions.svelte';
   import { audio } from '../audio/host';
   import { DEFAULT_VEL, MAX_TRACKS, clamp } from '../core/types';
+  import { isLocked } from '../live/session.svelte';
   import { app } from '../state.svelte';
   import { onFlash, onFrame } from '../visual';
   import Icon from './Icon.svelte';
@@ -126,7 +127,8 @@
             <b>{t.name}</b>
             <span class="meter"><i></i></span>
           </button>
-          {#if t.kind === 'drum' && sampleMissing(t.sample)}<span class="warn" title="This track's custom sample isn't on this device. Drop a file on it to replace.">!</span>{/if}
+          {#if isLocked(ti)}<span class="locked" title="Locked by the session's host"><Icon name="lock" size={12} /></span>{/if}
+          {#if t.kind !== 'synth' && sampleMissing(t.sample)}<span class="warn" title="This track's custom sample isn't on this device. Drop a file on it to replace.">!</span>{/if}
           <button class="ms" class:on={t.mute} onclick={() => (t.mute = !t.mute)} aria-pressed={t.mute} aria-label="Mute {t.name}" title="Mute (M)">M</button>
           <button class="ms solo" class:on={t.solo} onclick={() => (t.solo = !t.solo)} aria-pressed={t.solo} aria-label="Solo {t.name}" title="Solo (Shift+M)">S</button>
         </div>
@@ -182,6 +184,7 @@
   }
   .meter { height: 3px; border-radius: 2px; background: var(--well); overflow: hidden; }
   .meter i { display: block; height: 100%; background: var(--c); transform-origin: left; transform: scaleX(0); }
+  .locked { color: var(--dim); display: grid; place-items: center; }
   .warn {
     width: 16px; height: 16px; border-radius: 50%; background: var(--rec); color: #fff;
     font: 700 11px/16px var(--mono); text-align: center; cursor: help;

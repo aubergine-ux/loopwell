@@ -68,8 +68,22 @@ export function checkpoint(): void {
   commit();
 }
 
+/**
+ * Places where a live session plugs in. They stay empty when playing alone.
+ * `changed` sees every edit (and may veto it by returning false, after putting the project back);
+ * `transport` may take over play and stop; `tracks` hears about tracks being added and removed.
+ */
+export const hooks = {
+  changed: null as null | ((snap: Project) => boolean),
+  transport: null as null | ((playing: boolean) => boolean),
+  tracks: null as null | ((added: boolean, index: number) => void),
+  /** Undo would roll back other people's edits too, so a session switches it off. */
+  noHistory: false,
+};
+
 /** Called (via an effect) whenever anything in the project changes. */
 export function projectChanged(snap: Project): void {
+  if (hooks.changed && !hooks.changed(snap)) return;
   audio.setProject(snap);
   clearTimeout(commitTimer);
   commitTimer = window.setTimeout(commit, 350);
@@ -85,6 +99,7 @@ function restore(json: string): void {
 }
 
 export function undo(): void {
+  if (hooks.noHistory) { toast('Undo is off during a live session, so nobody loses someone else\'s changes.'); return; }
   commit();
   const prev = past.pop();
   if (prev === undefined) return;
@@ -93,6 +108,7 @@ export function undo(): void {
 }
 
 export function redo(): void {
+  if (hooks.noHistory) return;
   commit();
   const next = future.pop();
   if (next === undefined) return;
@@ -100,7 +116,7 @@ export function redo(): void {
   restore(next);
 }
 
-function fixSelection(): void {
+export function fixSelection(): void {
   app.sel = clamp(app.sel, 0, app.project.tracks.length - 1);
   app.pat = clamp(app.pat, 0, app.project.patterns.length - 1);
   if (app.clip && !app.project.arr.clips.some((c) => c.id === app.clip)) app.clip = null;
@@ -113,7 +129,7 @@ export const loadHooks: (() => void)[] = [];
 export function loadProject(p: Project): void {
   for (const hook of loadHooks) hook();
   commit();
-  stop();
+  stopPlaying();
   app.project = p;
   app.pat = 0;
   app.sel = 0;
@@ -158,11 +174,22 @@ export async function play(): Promise<void> {
     return;
   }
   app.needsTap = false;
-  audio.play(app.pat, app.cursor);
+  if (hooks.transport?.(true)) return; // in a session everyone starts together
+  startPlaying(app.pat, app.cursor);
+}
+
+/** Start the engine now. `step` starts a looping pattern part-way through (joining a session that is already playing). */
+export function startPlaying(pattern: number, from: number, step = 0): void {
+  audio.play(pattern, from, step);
   app.playing = true;
 }
 
 export function stop(): void {
+  if (hooks.transport?.(false)) return;
+  stopPlaying();
+}
+
+export function stopPlaying(): void {
   audio.stop();
   app.playing = false;
   app.queued = -1;
@@ -253,6 +280,7 @@ export function addTrack(kind: TrackKind): void {
     pat.notes.push([]);
   }
   app.sel = p.tracks.length - 1;
+  hooks.tracks?.(true, app.sel);
   // a beat that has never been arranged keeps playing all of its tracks in song view
   if (untouched) p.arr.clips.push({ id: newId(), track: app.sel, pattern: 0, start: 0, len: p.steps, offset: 0 });
 }
@@ -261,6 +289,7 @@ export function removeTrack(i: number): void {
   const p = app.project;
   if (p.tracks.length <= 1) return;
   p.tracks.splice(i, 1);
+  hooks.tracks?.(false, i);
   for (const pat of p.patterns) {
     pat.steps.splice(i, 1);
     pat.notes.splice(i, 1);

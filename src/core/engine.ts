@@ -252,9 +252,11 @@ export class Engine {
    * Start from the top. With `chain`, plays those patterns in order (and stops
    * at the end unless `loop`); otherwise follows the project's song/pattern mode.
    */
-  play(opts: { chain?: number[]; loop?: boolean; pattern?: number; from?: number } = {}): void {
+  play(opts: { chain?: number[]; loop?: boolean; pattern?: number; from?: number; step?: number } = {}): void {
     this.clock.reset();
-    this.stepIdx = 0;
+    // `step` joins a looping pattern part-way through, for a session that is already playing
+    this.stepIdx = opts.step ? opts.step % this.project.steps : 0;
+    this.clock.phase = this.stepIdx & 1;
     this.songPos = 0;
     this.started = false;
     this.ended = false;
@@ -268,6 +270,7 @@ export class Engine {
     this.songStep = this.cue;
     this.curStep = this.cue;
     this.sinceStep = 0;
+    if (this.inSong) this.clock.phase = (this.cue - barStart(this.project, this.cue)) & 1;
     if (!this.inSong) this.clock.bpm = this.project.bpm;
     this.playing = true;
   }

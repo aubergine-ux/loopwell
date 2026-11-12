@@ -2,6 +2,7 @@
 
 import { loadConfig } from './config.ts';
 import { migrate, pgDb } from './db.ts';
+import { attachRealtime } from './realtime.ts';
 import { buildServer } from './server.ts';
 import { createStorage } from './storage.ts';
 
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
   await waitFor('object storage', () => storage.ready());
 
   const app = await buildServer({ config, db, storage });
+  attachRealtime(app);
   const sweep = setInterval(() => {
     app.loopwell.sweep().catch((err) => app.log.error({ err }, 'sweep failed'));
   }, SWEEP_EVERY_MS);

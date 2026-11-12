@@ -242,3 +242,17 @@ await app.listen({ host: config.host, port: config.port });
 - Rate limits are counted in memory, per process. Run one API process, or put a shared limiter in front of several.
 - Uploads are buffered in memory before they are stored (up to `MAX_PROJECT_MB` each).
 - Deleting a row and deleting its file are not one transaction. If the object store is down at that moment the file is left behind and the failure is logged.
+
+## Live sessions
+
+`src/realtime.ts` adds a WebSocket endpoint, `GET /api/live/{room}`, that relays live sessions: several people editing one beat at once. It needs no account and stores nothing in the database; rooms live in memory and are forgotten ten minutes after the last person leaves.
+
+| Query parameter | Meaning |
+| :-- | :-- |
+| `name` | Display name, up to 24 characters |
+| `client` | A stable id for this browser, so a removed guest stays removed |
+| `create=1` and `key` | Create the room. `key` (16+ characters) is the host's secret; reconnecting with it gives the host seat back |
+
+Text frames are JSON messages with a `t` field (`welcome`, `joined`, `left`, `aw` for presence, `chat`, `log`, `transport`, `room`, `denied`, `ping`/`pong`). Binary frames start with a type byte: `1` is a [Yjs](https://yjs.dev) update to merge, `2` is the room's whole document, sent to a client whose edit was refused. The host can lock tracks, make the session view-only, remove people and end the session; the server enforces all four. Only origins listed in `APP_ORIGINS` may connect.
+
+If the API sits behind a reverse proxy, the proxy has to pass WebSocket upgrades through for `/api/live/`.
