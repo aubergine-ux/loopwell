@@ -10,7 +10,7 @@
 Make a beat in seconds. Share it with a link. No account, no install, no backend.
 
 [![Build](https://img.shields.io/github/actions/workflow/status/aubergine-ux/loopwell/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/aubergine-ux/loopwell/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/aubergine-ux/loopwell?style=flat-square&color=ff4f1a)](https://github.com/aubergine-ux/loopwell/releases)
+[![Version](https://img.shields.io/github/package-json/v/aubergine-ux/loopwell?style=flat-square&color=ff4f1a&label=version)](package.json)
 [![License](https://img.shields.io/github/license/aubergine-ux/loopwell?style=flat-square&color=35c47c)](LICENSE)
 [![TypeScript](https://img.shields.io/github/languages/top/aubergine-ux/loopwell?style=flat-square&color=3f7cff)](https://github.com/aubergine-ux/loopwell/search?l=typescript)
 [![Works offline](https://img.shields.io/badge/PWA-works%20offline-8b5cf6?style=flat-square)](#-install-it-as-an-app)
