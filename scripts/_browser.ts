@@ -4,14 +4,15 @@
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { preview } from 'vite';
 
-export async function launch(opts: { width?: number; height?: number; touch?: boolean; video?: string; scale?: number } = {}): Promise<{
+export async function launch(opts: { width?: number; height?: number; touch?: boolean; video?: string; scale?: number; autoplay?: boolean } = {}): Promise<{
   page: Page; browser: Browser; url: string; errors: string[]; close: () => Promise<void>;
 }> {
   const server = await preview({ preview: { port: 4179, strictPort: false }, logLevel: 'error' });
   const url = server.resolvedUrls!.local[0];
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM ?? '/usr/bin/chromium',
-    args: ['--autoplay-policy=no-user-gesture-required'],
+    // pass autoplay: false to get the real-world policy, where sound needs a click first
+    args: opts.autoplay === false ? ['--autoplay-policy=document-user-activation-required'] : ['--autoplay-policy=no-user-gesture-required'],
   });
   const size = { width: opts.width ?? 1440, height: opts.height ?? 900 };
   const ctx = await browser.newContext({

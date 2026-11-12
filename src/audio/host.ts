@@ -90,6 +90,7 @@ export class AudioHost {
       if (!this.playing) return;
       const latency = Math.min(0.25, ctx.outputLatency || ctx.baseLatency || 0);
       this.queue.push({ step: m.step, pattern: m.pattern, songPos: m.songPos, time: m.frame / ctx.sampleRate + latency });
+      if (this.queue.length > 256) this.queue.splice(0, 128); // tab hidden: nobody is reading these
     } else {
       this.peaks.set(m.peaks);
       this.masterL = m.l;

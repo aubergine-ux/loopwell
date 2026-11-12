@@ -53,7 +53,7 @@
 </Modal>
 
 <style>
-  p { margin: 6px 0 12px; font-size: 14px; line-height: 1.450; }
+  p { margin: 6px 0 12px; font-size: 14px; line-height: 1.45; }
   .small { font-size: 13px; color: var(--dim); }
   h3 { margin: 18px 0 0; font: 700 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
   .list { display: grid; gap: 8px; }

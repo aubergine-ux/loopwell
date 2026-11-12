@@ -1,9 +1,8 @@
 {
   "name": "loopwell",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A tactile beat maker that lives in your browser.",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -36,5 +35,15 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true
-  }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aubergine-ux/loopwell.git"
+  },
+  "homepage": "https://aubergine-ux.github.io/loopwell/",
+  "author": "Aubergine-UX",
+  "private": true
 }

@@ -92,8 +92,8 @@
     <path class="track" d={arc(-135, 135)} />
     <path class="val" d={arc(bipolar ? 0 : -135, angle)} style:stroke={color} />
     <g style:transform="rotate({angle}deg)" class="cap">
-      <circle cx="24" cy="24" r="13.500" />
-      <line x1="24" y1="12.500" x2="24" y2="18.500" />
+      <circle cx="24" cy="24" r="13.5" />
+      <line x1="24" y1="12.5" x2="24" y2="18.5" />
     </g>
   </svg>
   <span class="label">{active ? format(value) : label}</span>
@@ -106,14 +106,14 @@
     min-width: 52px;
   }
   svg { display: block; overflow: visible; }
-  path { fill: none; stroke-width: 3.500; stroke-linecap: round; }
+  path { fill: none; stroke-width: 3.5; stroke-linecap: round; }
   .track { stroke: var(--well); }
   .cap { transform-origin: 24px 24px; }
   .cap circle {
     fill: var(--raise); stroke: var(--line); stroke-width: 1;
-    filter: drop-shadow(0 2px 1.500px rgb(0 0 0 / 0.28));
+    filter: drop-shadow(0 2px 1.5px rgb(0 0 0 / 0.28));
   }
-  .cap line { stroke: var(--ink); stroke-width: 2.500; stroke-linecap: round; }
+  .cap line { stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; }
   .knob.active .label { color: var(--ink); }
   .knob:hover .cap circle { stroke: var(--dim); }
 </style>

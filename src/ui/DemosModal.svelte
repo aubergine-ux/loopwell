@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { DEMOS, loadProject, newBeat, play } from '../actions.svelte';
+  import { loadProject, newBeat, play } from '../actions.svelte';
+  import { DEMOS } from '../core/demos';
   import { app } from '../state.svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';

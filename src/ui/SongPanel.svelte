@@ -73,10 +73,10 @@
   .slot.empty { opacity: 0.5; }
   .slot small { position: absolute; top: 3px; left: 5px; font-size: 8px; opacity: 0.6; }
   .slot.now { background: var(--accent); color: var(--accent-ink); }
-  .slot:hover { filter: brightness(1.200); }
+  .slot:hover { filter: brightness(1.2); }
   .cursor { width: 3px; height: 44px; border-radius: 2px; background: var(--accent); animation: caret 1s steps(2, jump-none) infinite; }
   @keyframes caret { 50% { opacity: 0; } }
-  p { margin: 0; font-size: 12px; line-height: 1.400; color: var(--dim); }
+  p { margin: 0; font-size: 12px; line-height: 1.4; color: var(--dim); }
   .seg button:disabled { opacity: 0.35; }
   @media (max-width: 900px) { .song { grid-template-columns: 1fr; } .right { padding-left: 0; border-left: 0; } }
 </style>

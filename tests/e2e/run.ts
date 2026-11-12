@@ -11,6 +11,7 @@ import { encodeWav, decodeWav } from '../../src/core/wav';
 const shots = process.env.SHOTS;
 if (shots) mkdirSync(shots, { recursive: true });
 let failed = 0;
+let sharedLink = '';
 const results: string[] = [];
 
 function check(name: string, ok: boolean, detail = ''): void {
@@ -81,6 +82,49 @@ check('undo reverts the last edit', !(await isOn(page, 5, 3)));
 await page.keyboard.press('Control+Shift+z');
 check('redo brings it back', await isOn(page, 5, 3));
 
+// ---- keyboard ----
+await cell(page, 7, 15).click(); // leaves focus on a step; Space must still mean play
+await page.keyboard.press('Space');
+await page.waitForSelector('.cell.ph', { timeout: 3000 }).catch(() => {});
+check('space plays even when a step or button has focus', (await page.locator('.cell.ph').count()) > 0 && (await isOn(page, 7, 15)));
+await page.keyboard.press('Space');
+await cell(page, 7, 15).click();
+await page.keyboard.press('ArrowDown');
+await page.keyboard.press('ArrowDown');
+check('arrow keys move the track selection', (await page.locator('.row.sel').getAttribute('data-row')) === '7');
+await page.keyboard.press('ArrowUp');
+await page.keyboard.press('KeyM');
+check('M mutes the selected track', (await page.locator('.row[data-row="6"]').getAttribute('class'))!.includes('off'));
+await page.keyboard.press('KeyM');
+await page.keyboard.press('Equal');
+check('= nudges the tempo', (await page.locator('.lcd .num').textContent()) === '121');
+await page.keyboard.press('Minus');
+await page.keyboard.press('BracketRight');
+check('] switches panel', (await page.getByRole('tab', { name: 'Keys' }).getAttribute('aria-selected')) === 'true');
+await page.keyboard.press('BracketLeft');
+// record a synth line from the computer keyboard
+await page.keyboard.press('KeyR');
+await page.keyboard.press('Space');
+await page.waitForSelector('.cell.ph');
+for (const k of ['KeyA', 'KeyD', 'KeyG']) { await page.keyboard.down(k); await page.waitForTimeout(180); await page.keyboard.up(k); await page.waitForTimeout(120); }
+await page.keyboard.press('Digit2');
+await page.waitForTimeout(500);
+await page.keyboard.press('Space');
+await page.keyboard.press('KeyR');
+let recNotes = 0, recHits = 0;
+for (let s = 0; s < 16; s++) { if (await isOn(page, 6, s)) recNotes++; if (await isOn(page, 1, s)) recHits++; }
+check('keys played while recording land in the pattern', recNotes === 3 && recHits >= 1, `${recNotes} notes, ${recHits} snare hits`);
+await page.waitForTimeout(450);
+for (let i = 0; i < 3 && ((await isOn(page, 6, 0)) || recNotes > 0); i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(50); recNotes = 0; for (let s = 0; s < 16; s++) if (await isOn(page, 6, s)) recNotes++; }
+
+// ---- tracks ----
+await page.locator('.row[data-row="7"] .name').click();
+await page.getByRole('button', { name: 'Delete track' }).click();
+check('a track can be deleted', (await page.locator('.row[data-row]').count()) === 7 && (await page.locator('.pad.empty').count()) === 1);
+await page.locator('.row.add').getByRole('button', { name: 'Synth' }).click();
+check('and a new one added', (await page.locator('.row[data-row]').count()) === 8);
+await page.waitForTimeout(450);
+
 // ---- 32 steps, patterns, themes ----
 await page.getByRole('button', { name: '32', exact: true }).click();
 check('32-step mode shows 32 cells per track', (await page.locator('.cell[data-t="0"]').count()) === 32);
@@ -114,17 +158,36 @@ check('clicking a note removes it', (await page.locator('.note').count()) === 0)
 await page.mouse.click(laneX, laneY);
 await shot(page, '04-piano-roll');
 
+// ---- empty pattern ----
+await page.keyboard.press('ArrowRight');
+await page.getByTitle(/^Export WAV/).click();
+await page.locator('.modal').getByRole('button', { name: /^Stems/ }).click();
+await page.waitForFunction(() => /Nothing to export/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {});
+check('exporting stems of an empty pattern explains itself', /Nothing to export/.test((await toastText(page)) ?? ''));
+await page.keyboard.press('ArrowLeft');
+
 // ---- demos + share link ----
 await page.getByTitle('Demo beats and new beat').click();
 await page.getByText('Dust Loop').click();
 await page.waitForSelector('.cell.ph');
 check('a demo loads and plays', (await page.locator('.lcd .num').textContent()) === '86');
 await shot(page, '05-demo-playing');
+// song mode walks the chain A A A B; pattern buttons follow it
+await page.waitForFunction(() => document.querySelector('.lcd .info b')?.textContent?.startsWith('B'), null, { timeout: 12000 }).catch(() => {});
+check('song mode advances through the pattern chain', (await page.locator('.lcd .info b').first().textContent())!.startsWith('B 4/4')
+  && (await page.getByTitle('Pattern B').getAttribute('aria-pressed')) === 'true');
+// tapping a pattern while playing queues it for the bar line
+await page.getByTitle('Pattern A').click();
+const queuedNow = (await page.getByTitle('Pattern A').getAttribute('class'))!.includes('queued');
+await page.waitForFunction(() => document.querySelector('.lcd .info b')?.textContent === 'A', null, { timeout: 5000 }).catch(() => {});
+check('a pattern change waits for the bar line, then loops that pattern', queuedNow && (await page.locator('.lcd .info b').first().textContent()) === 'A');
 await page.keyboard.press('Space');
+await page.keyboard.press('Control+z');
 await page.getByRole('button', { name: 'Share' }).click();
 const link = await page.locator('#share-url').inputValue();
 check('share link is compact', link.includes('#b=') && link.length < 600, `${link.length} chars`);
 await shot(page, '06-share');
+sharedLink = link;
 await page.keyboard.press('Escape');
 
 const page2 = await ctx.newPage();
@@ -169,6 +232,18 @@ await page.waitForSelector('.busy', { state: 'detached' });
 await page.getByTitle(/^Export WAV/).click();
 const mid = await download(page, () => page.locator('.modal').getByRole('button', { name: /^MIDI/ }).click());
 check('MIDI export is a standard MIDI file', mid.name === 'dust-loop.mid' && String.fromCharCode(...mid.bytes.subarray(0, 4)) === 'MThd' && mid.bytes.length > 500);
+
+// ---- dropping a file on a track ----
+const dropped = [...encodeWav([Float32Array.from({ length: 4000 }, (_, i) => Math.sin(i / 6) * 0.6 * (1 - i / 4000))], 22050, 16)];
+await page.evaluate((bytes) => {
+  const dt = new DataTransfer();
+  dt.items.add(new File([new Uint8Array(bytes)], 'dropped-tom.wav', { type: 'audio/wav' }));
+  const target = document.querySelector('.row[data-row="5"] .cells')!;
+  for (const type of ['dragenter', 'dragover', 'drop']) target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+}, dropped);
+await page.waitForFunction(() => document.querySelector('.row[data-row="5"] .name b')?.textContent === 'DROPPED-TOM', null, { timeout: 5000 }).catch(() => {});
+check('dropping an audio file on a track makes it that track\'s sample', (await page.locator('.row[data-row="5"] .name b').textContent()) === 'DROPPED-TOM'
+  && (await page.locator('.drop').count()) === 0);
 
 // ---- custom samples ----
 const tone = Float32Array.from({ length: 8000 }, (_, i) => Math.sin(i * 0.2) * Math.exp(-i / 2000));
@@ -302,6 +377,31 @@ await tablet.close();
 
 check('no errors or warnings in the console', b.errors.length === 0, b.errors.slice(0, 3).join(' | '));
 await b.close();
+
+// ---- real-world autoplay policy and a slow connection ----
+const strict = await launch({ autoplay: false });
+try {
+  const sp = strict.page;
+  // samples take two seconds each to arrive
+  await sp.route('**/kits/**', async (route) => { await new Promise((r) => setTimeout(r, 2000)); await route.continue(); });
+  await sp.goto(strict.url + sharedLink.slice(sharedLink.indexOf('#'))); // same beat, on this run's server
+  // Wait on this side: anything evaluated in the page counts as a user gesture and would unblock audio.
+  await new Promise((r) => setTimeout(r, 4500));
+  check('when the browser blocks autoplay, a shared beat waits behind one big play button', (await sp.locator('.gate').count()) === 1
+    && (await sp.locator('.gate b').textContent()) === 'Dust Loop');
+  await sp.locator('.gate').click();
+  await sp.waitForSelector('.cell.ph', { timeout: 5000 }).catch(() => {});
+  await sp.waitForTimeout(800);
+  const m = await sp.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
+  check('one tap starts it, with sound, even on a slow connection', (await sp.locator('.gate').count()) === 0 && (await sp.locator('.cell.ph').count()) > 0
+    && !/scaleX\(0(\.0+)?\)/.test(m) && m !== '', m);
+  // Chrome itself logs one warning when it refuses to start audio; anything else is ours
+  const real = strict.errors.filter((e) => !e.includes('AudioContext was not allowed to start'));
+  check('no errors under the strict autoplay policy', real.length === 0, real.slice(0, 3).join(' | '));
+} catch (e) {
+  check('strict-autoplay script ran to the end', false, String(e).split('\n')[0]);
+}
+await strict.close();
 console.log(results.join('\n'));
 console.log(failed ? `\n${failed} check(s) failed` : `\nall ${results.length} checks passed`);
 process.exit(failed ? 1 : 0);

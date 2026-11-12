@@ -48,7 +48,7 @@
 </Modal>
 
 <style>
-  p { margin: 10px 0; font-size: 14px; line-height: 1.450; }
+  p { margin: 10px 0; font-size: 14px; line-height: 1.45; }
   .field { display: flex; align-items: center; gap: 10px; }
   .field input {
     flex: 1; height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--inset);
@@ -56,13 +56,13 @@
   }
   textarea {
     width: 100%; resize: none; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--inset); font: 12px/1.400 var(--mono); word-break: break-all; user-select: text; -webkit-user-select: text;
+    background: var(--inset); font: 12px/1.4 var(--mono); word-break: break-all; user-select: text; -webkit-user-select: text;
   }
   .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .big { height: 40px; padding: 0 16px; }
   .count { margin-left: auto; font: 600 11px var(--mono); color: var(--dim); }
   .note {
     margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--t1) 18%, var(--panel));
-    font-size: 13px; line-height: 1.450; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+    font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
   }
 </style>

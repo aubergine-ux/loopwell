@@ -30,7 +30,7 @@
 
   onMount(() => onFlash((t, vel) => {
     const glow = root.querySelector(`.pad[data-pad="${t}"] .glow`);
-    glow?.animate([{ opacity: 0.350 + (vel / 127) * 0.650 }, { opacity: 0 }], { duration: 320, easing: 'ease-out' });
+    glow?.animate([{ opacity: 0.35 + (vel / 127) * 0.65 }, { opacity: 0 }], { duration: 320, easing: 'ease-out' });
   }));
 </script>
 
@@ -53,7 +53,7 @@
 <style>
   .pads { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; align-content: start; }
   .pad {
-    position: relative; aspect-ratio: 1.320; min-height: 58px;
+    position: relative; aspect-ratio: 1.32; min-height: 58px;
     border: 0; border-radius: 14px; padding: 8px;
     background: color-mix(in srgb, var(--c) 82%, var(--panel));
     box-shadow: 0 5px 0 color-mix(in srgb, var(--c) 55%, #000), inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -10px 18px -10px rgb(0 0 0 / 0.25);
@@ -71,7 +71,7 @@
   .nm { font-size: 10px; letter-spacing: 0.06em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 900px) {
     .pads { grid-template-columns: repeat(4, 1fr); }
-    .pad { aspect-ratio: 1.300; min-height: 72px; }
+    .pad { aspect-ratio: 1.3; min-height: 72px; }
   }
   @media (max-width: 560px) {
     .pads { gap: 8px; }

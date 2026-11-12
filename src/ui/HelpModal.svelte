@@ -14,7 +14,7 @@
     ['↑ / ↓', 'Select track'],
     ['← / →', 'Previous / next pattern'],
     ['M / Shift+M', 'Mute / solo the selected track'],
-    ['Tab', 'Next panel'],
+    ['[ / ]', 'Previous / next panel'],
     ['Shift+Backspace', 'Clear the selected track'],
     ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
     ['Shift+C', 'Change colour theme'],
@@ -66,12 +66,12 @@
   dl.stack { grid-template-columns: 1fr; gap: 0; }
   dl.stack dt { font-weight: 600; margin-top: 6px; }
   dl.stack dd { color: var(--dim); }
-  dd { margin: 0; line-height: 1.350; }
+  dd { margin: 0; line-height: 1.35; }
   kbd {
     font: 600 11px var(--mono); padding: 2px 6px; border-radius: 6px; white-space: nowrap;
     background: var(--raise); border: 1px solid var(--line); box-shadow: 0 1px 0 var(--edge);
   }
-  p { margin: 0 0 8px; font-size: 13px; line-height: 1.450; }
+  p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; }
   .small { color: var(--dim); font-size: 12px; margin-top: 8px; }
   a { color: var(--accent); font-weight: 600; }
   @media (max-width: 640px) { .cols { grid-template-columns: 1fr; gap: 0; } }

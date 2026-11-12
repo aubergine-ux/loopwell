@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200" role="img" aria-label="Loopwell">
+  <g fill="none" stroke-linecap="round" stroke-width="15">
+    <circle cx="200" cy="74" r="38" stroke="#f2f3f7"/>
+    <path d="M200 36a38 38 0 0 1 38 38" stroke="#ff4f1a"/>
+  </g>
+  <rect x="189" y="63" width="22" height="22" rx="6" fill="#ff4f1a"/>
+  <text x="258" y="98" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="76" font-weight="700" letter-spacing="-3.5" fill="#f2f3f7">loopwell</text>
+  <g>
+    <rect x="124" y="150" width="26" height="26" rx="7" fill="#ff4f1a"/><rect x="154" y="150" width="26" height="26" rx="7" fill="#f2f3f7" opacity=".16"/>
+    <rect x="184" y="150" width="26" height="26" rx="7" fill="#35c47c"/><rect x="214" y="150" width="26" height="26" rx="7" fill="#f2f3f7" opacity=".16"/>
+    <rect x="248" y="150" width="26" height="26" rx="7" fill="#f0c22b"/><rect x="278" y="150" width="26" height="26" rx="7" fill="#f2f3f7" opacity=".16"/>
+    <rect x="308" y="150" width="26" height="26" rx="7" fill="#35c47c"/><rect x="338" y="150" width="26" height="26" rx="7" fill="#f2f3f7" opacity=".16"/>
+    <rect x="372" y="150" width="26" height="26" rx="7" fill="#ff4f1a"/><rect x="402" y="150" width="26" height="26" rx="7" fill="#3f7cff"/>
+    <rect x="432" y="150" width="26" height="26" rx="7" fill="#35c47c"/><rect x="462" y="150" width="26" height="26" rx="7" fill="#f2f3f7" opacity=".16"/>
+    <rect x="496" y="150" width="26" height="26" rx="7" fill="#f0c22b"/><rect x="526" y="150" width="26" height="26" rx="7" fill="#f2f3f7" opacity=".16"/>
+    <rect x="556" y="150" width="26" height="26" rx="7" fill="#8b5cf6"/><rect x="586" y="150" width="26" height="26" rx="7" fill="#ee5aa6"/>
+  </g>
+</svg>

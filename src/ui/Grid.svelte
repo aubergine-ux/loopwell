@@ -53,7 +53,7 @@
     const dy = drag.startY - e.clientY;
     if (drag.mode === 'tap' && Math.abs(dy) > 6) drag.mode = 'vel';
     if (drag.mode === 'vel') {
-      setStep(drag.t, drag.s, clamp(Math.round(drag.startVel + dy * 1.200), 1, 127));
+      setStep(drag.t, drag.s, clamp(Math.round(drag.startVel + dy * 1.2), 1, 127));
       return;
     }
     const c = cellOf(document.elementFromPoint(e.clientX, e.clientY));
@@ -73,7 +73,7 @@
   }
 
   function cellKey(e: KeyboardEvent, t: number, s: number): void {
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.key === 'Enter') {
       setStep(t, s, stepVel(t, s) ? 0 : DEFAULT_VEL);
       e.preventDefault();
       e.stopPropagation();
@@ -97,7 +97,7 @@
       }
       if (meters.length !== p.tracks.length) meters = [...rows.querySelectorAll<HTMLElement>('.meter i')];
       for (let t = 0; t < meters.length; t++) {
-        const next = Math.max(audio.peaks[t], levels[t] * 0.860);
+        const next = Math.max(audio.peaks[t], levels[t] * 0.86);
         if (next === levels[t]) continue;
         levels[t] = next < 0.001 ? 0 : next;
         meters[t].style.transform = `scaleX(${Math.min(1, Math.sqrt(levels[t])).toFixed(3)})`;
@@ -105,7 +105,7 @@
     });
     const offFlash = onFlash((t) => {
       rows.querySelector(`.row[data-row="${t}"] .chip`)?.animate(
-        [{ transform: 'scale(1.250)', filter: 'brightness(1.500)' }, { transform: 'scale(1)', filter: 'brightness(1)' }],
+        [{ transform: 'scale(1.25)', filter: 'brightness(1.5)' }, { transform: 'scale(1)', filter: 'brightness(1)' }],
         { duration: 220, easing: 'ease-out' },
       );
     });
@@ -134,7 +134,7 @@
           {#each { length: p.steps } as _, s}
             {@const v = stepVel(ti, s)}
             <i class="cell" class:on={v > 0} class:hold={v === 0 && held(ti, s)} class:alt={(s >> 2) & 1} class:bar={s % 4 === 0}
-              data-t={ti} data-s={s} style:--v={v ? (0.250 + (v / 127) * 0.750).toFixed(2) : null}
+              data-t={ti} data-s={s} style:--v={v ? (0.25 + (v / 127) * 0.75).toFixed(2) : null}
               role="gridcell" tabindex="-1" aria-label="{t.name} step {s + 1}{v ? `, velocity ${v}` : ''}" aria-selected={v > 0}
               onkeydown={(e) => cellKey(e, ti, s)}></i>
           {/each}
@@ -218,8 +218,8 @@
   .cell.on { background: color-mix(in srgb, var(--c) 22%, var(--well)); box-shadow: none; }
   :global(.cell.ph) { outline: 2px solid var(--ink); outline-offset: -2px; }
   :global(.cell.ph:not(.on)) { background: color-mix(in srgb, var(--ink) 16%, var(--well)); }
-  :global(.cell.on.ph) { animation: hit 0.240s cubic-bezier(.2,.8,.3,1); z-index: 1; overflow: visible; }
-  @keyframes hit { 0% { transform: scale(1.220); filter: brightness(1.600); } 100% { transform: scale(1); filter: brightness(1); } }
+  :global(.cell.on.ph) { animation: hit 0.24s cubic-bezier(.2,.8,.3,1); z-index: 1; overflow: visible; }
+  @keyframes hit { 0% { transform: scale(1.22); filter: brightness(1.6); } 100% { transform: scale(1); filter: brightness(1); } }
 
   .row.add { height: 30px; }
   .row.add .head { background: none; flex-basis: auto; padding: 0; }

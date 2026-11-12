@@ -13,7 +13,7 @@
   onMount(() => {
     let lv = 0;
     return onFrame(() => {
-      const next = Math.max(audio.reduction, lv * 0.900);
+      const next = Math.max(audio.reduction, lv * 0.9);
       if (next === lv) return;
       lv = next < 0.01 ? 0 : next;
       gr.style.transform = `scaleX(${Math.min(1, lv / 18).toFixed(3)})`;
@@ -72,7 +72,7 @@
     background: var(--inset); border-top: 3px solid var(--c); min-height: 170px;
   }
   h3 { margin: 0; font: 700 12px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
-  p { margin: 0; font-size: 11px; color: var(--dim); line-height: 1.300; }
+  p { margin: 0; font-size: 11px; color: var(--dim); line-height: 1.3; }
   p b { color: var(--ink); font-weight: 600; }
   .k { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; margin-top: auto; }
   .k.dim { opacity: 0.45; }

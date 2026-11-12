@@ -3,7 +3,6 @@
 
 import { zipSync } from 'fflate';
 import { audio } from './audio/host';
-import { DEMOS } from './core/demos';
 import { KITS, isBuiltin, isUser, slotLabel } from './core/kits';
 import { exportMidi } from './core/midi';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
@@ -521,5 +520,3 @@ export function boot(): void {
   checkHash();
   addEventListener('hashchange', checkHash);
 }
-
-export { DEMOS };

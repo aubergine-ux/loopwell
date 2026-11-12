@@ -89,14 +89,14 @@
       quiet = live ? 0 : quiet + 1;
       if (quiet > 3 || !w) return;
       ctx.clearRect(0, 0, w, h);
-      ctx.lineWidth = 1.500;
+      ctx.lineWidth = 1.5;
       ctx.lineJoin = 'round';
       ctx.strokeStyle = live ? fg : dim;
       ctx.beginPath();
       if (live && audio.scope(data)) {
         const n = 420;
         for (let i = 0; i < n; i += 2) {
-          const x = (i / (n - 2)) * w, y = h / 2 - ((data[i] - 128) / 128) * (h / 2 - 2) * 1.300;
+          const x = (i / (n - 2)) * w, y = h / 2 - ((data[i] - 128) / 128) * (h / 2 - 2) * 1.3;
           if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
         }
       } else {

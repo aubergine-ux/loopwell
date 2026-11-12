@@ -71,9 +71,9 @@ export function onKeyDown(e: KeyboardEvent): void {
     case 'Equal': p.bpm = clamp(p.bpm + (e.shiftKey ? 10 : 1), 40, 240); break;
     case 'KeyZ': app.octave = clamp(app.octave - 1, -3, 3); break;
     case 'KeyX': app.octave = clamp(app.octave + 1, -3, 3); break;
-    case 'Tab': {
+    case 'BracketLeft': case 'BracketRight': {
       const i = TABS.findIndex((t) => t.id === app.tab);
-      app.tab = TABS[(i + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length].id;
+      app.tab = TABS[(i + (e.code === 'BracketLeft' ? TABS.length - 1 : 1)) % TABS.length].id;
       break;
     }
     case 'Backspace': case 'Delete': if (e.shiftKey) clearTrack(app.sel); else return; break;
@@ -85,6 +85,8 @@ export function onKeyDown(e: KeyboardEvent): void {
 }
 
 export function onKeyUp(e: KeyboardEvent): void {
+  // a focused button would otherwise "click" when Space is released
+  if (e.code === 'Space' && !typing(e) && !app.modal) e.preventDefault();
   const release = down.get(e.code);
   if (release) {
     down.delete(e.code);

@@ -52,12 +52,11 @@
     void autoConnectMidi();
     // browsers only start audio after a gesture, so wake the engine on the first one
     const wake = () => void audio.resume();
-    addEventListener('pointerdown', wake, { capture: true });
-    addEventListener('keydown', wake, { capture: true });
+    const gestures = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+    for (const g of gestures) addEventListener(g, wake, { capture: true, passive: true });
     addEventListener('blur', releaseAll);
     return () => {
-      removeEventListener('pointerdown', wake, { capture: true });
-      removeEventListener('keydown', wake, { capture: true });
+      for (const g of gestures) removeEventListener(g, wake, { capture: true });
       removeEventListener('blur', releaseAll);
     };
   });
@@ -105,7 +104,7 @@
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}
-  <button class="tap" onclick={play}>
+  <button class="gate" onclick={play}>
     <span class="big"><Icon name="play" size={44} fill /></span>
     <b>{app.project.name}</b>
     <span>Tap to play</span>
@@ -155,16 +154,16 @@
   footer kbd { font: inherit; padding: 1px 5px; border: 1px solid currentColor; border-radius: 4px; }
   :global([data-theme='slate']) footer, :global([data-theme='arcade']) footer, :global([data-theme='night']) footer { color: #9a9fab; }
 
-  .tap {
+  .gate {
     position: fixed; inset: 0; z-index: 80; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
     background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px); color: var(--ink);
     font-size: 15px;
   }
-  .tap b { font-size: 30px; letter-spacing: -0.03em; }
-  .tap .big {
+  .gate b { font-size: 30px; letter-spacing: -0.03em; }
+  .gate .big {
     width: 112px; height: 112px; border-radius: 34px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
     box-shadow: 0 8px 0 color-mix(in srgb, var(--accent) 55%, #000), 0 30px 50px -10px rgb(0 0 0 / 0.5);
-    animation: bob 1.400s ease-in-out infinite; margin-bottom: 14px;
+    animation: bob 1.4s ease-in-out infinite; margin-bottom: 14px;
   }
   @keyframes bob { 50% { transform: translateY(-6px); } }
 
@@ -180,7 +179,7 @@
     padding: 12px 18px; border-radius: 14px; background: var(--ink); color: var(--panel);
     font-size: 14px; font-weight: 600; box-shadow: 0 16px 40px -10px rgb(0 0 0 / 0.6); max-width: min(92vw, 520px);
   }
-  .toast { animation: rise 0.220s cubic-bezier(.2,.9,.3,1.200); text-align: center; }
+  .toast { animation: rise 0.22s cubic-bezier(.2,.9,.3,1.2); text-align: center; }
   .toast.error { background: var(--rec); color: #fff; }
   .busy { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
   .bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--panel) 25%, transparent); overflow: hidden; }

@@ -17,7 +17,7 @@
       const n = p.tracks.length;
       bars.forEach((el, i) => {
         const src = i < n ? audio.peaks[i] : i === n ? audio.masterL : audio.masterR;
-        const next = Math.max(src, lv[i] * 0.880);
+        const next = Math.max(src, lv[i] * 0.88);
         if (next === lv[i]) return;
         lv[i] = next < 0.001 ? 0 : next;
         el.style.transform = `scaleY(${Math.min(1, Math.sqrt(lv[i])).toFixed(3)})`;

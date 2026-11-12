@@ -17,7 +17,7 @@
       // the logo ring kicks on every beat, harder on the downbeat
       if (head && changed && (head.step & 3) === 0) {
         ring.animate(
-          [{ transform: `scale(${head.step === 0 ? 1.350 : 1.180})` }, { transform: 'scale(1)' }],
+          [{ transform: `scale(${head.step === 0 ? 1.35 : 1.18})` }, { transform: 'scale(1)' }],
           { duration: 260, easing: 'cubic-bezier(.2,.8,.3,1)' },
         );
       }

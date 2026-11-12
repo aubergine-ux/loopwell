@@ -176,7 +176,7 @@
           {#each notes as n, ni}
             {#if n.s < p.steps}
               <i class="note" data-n={ni} style:left="{(n.s / p.steps) * 100}%" style:width="{(Math.min(n.l, p.steps - n.s) / p.steps) * 100}%"
-                style:top="{rowOf(n.p) * ROW}px" style:--a={(0.450 + (n.v / 127) * 0.550).toFixed(2)}></i>
+                style:top="{rowOf(n.p) * ROW}px" style:--a={(0.45 + (n.v / 127) * 0.55).toFixed(2)}></i>
             {/if}
           {/each}
           <i class="line" bind:this={line}></i>
