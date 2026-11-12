@@ -30,7 +30,12 @@ function press(code: string): boolean {
   const i = HOME.indexOf(code);
   if (i < 0) return false;
   const t = app.sel;
-  if (p.tracks[t]?.kind === 'synth') {
+  if (p.tracks[t]?.kind === 'slice') {
+    // home row plays the slices in order
+    if (i >= Math.max(1, p.tracks[t].slices.length)) return true;
+    noteDown(t, i);
+    down.set(code, () => noteUp(t, i));
+  } else if (p.tracks[t]?.kind === 'synth') {
     // home row walks up the scale, so every key is a right note
     const base = p.tracks[t].note + 12 * app.octave;
     const pitch = p.scaleLock ? degreeToPitch(p.scaleRoot, p.scaleType, base, i) : base + i;

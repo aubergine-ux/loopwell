@@ -3,7 +3,7 @@ import { barsUpTo, curveAt, isDefaultArrangement, placeClip, posLabel, songEnd, 
 import { Engine } from '../src/core/engine';
 import { exportMidi } from '../src/core/midi';
 import { renderProject } from '../src/core/render';
-import { chainToClips, emptyProject, newPattern, newTrack, resolveOverlaps, sanitize, type Clip, type Project } from '../src/core/types';
+import { chainToClips, emptyProject, newPattern, newTrack, resolveOverlaps, sanitize, type Clip, type Project, synth } from '../src/core/types';
 
 const SR = 48000;
 const STEP = 6000; // frames per step at 120 bpm
@@ -73,7 +73,7 @@ describe('timeline playback', () => {
   it('cuts a synth note where its clip ends', () => {
     const p = songProject();
     p.tracks[0] = newTrack('synth', 0, 'SYN');
-    p.tracks[0].synth = { wave: 0, cutoff: 127, reso: 0, env: 0, attack: 0, decay: 0, sustain: 127, release: 0 };
+    p.tracks[0].synth = synth({ wave: 0, cutoff: 127, reso: 0, env: 0, attack: 0, decay: 0, sustain: 127, release: 0 });
     p.patterns[0].notes[0] = [{ s: 0, l: 16, p: 57, v: 127 }];
     p.arr.clips = [clip(0, 0, 0, 4)];
     const eng = engine(p);
@@ -237,7 +237,7 @@ describe('automation', () => {
 
     // a filter sweep on a synth: the same note is much brighter with the cutoff automated open
     p.tracks[0] = newTrack('synth', 0, 'SYN');
-    p.tracks[0].synth = { wave: 0, cutoff: 10, reso: 0, env: 0, attack: 0, decay: 0, sustain: 127, release: 0 };
+    p.tracks[0].synth = synth({ wave: 0, cutoff: 10, reso: 0, env: 0, attack: 0, decay: 0, sustain: 127, release: 0 });
     p.patterns[0].notes[0] = [{ s: 0, l: 16, p: 45, v: 127 }];
     p.arr.lanes = [];
     const energy = (o: Float32Array) => o.slice(STEP * 8, STEP * 12).reduce((s, x) => s + x * x, 0);

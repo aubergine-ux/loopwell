@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { samplesPerStep } from '../src/core/clock';
 import { Engine } from '../src/core/engine';
 import { renderProject } from '../src/core/render';
-import { emptyProject, newPattern, newTrack, type Project } from '../src/core/types';
+import { emptyProject, newPattern, newTrack, type Project, synth } from '../src/core/types';
 
 const SR = 48000;
 
@@ -153,7 +153,7 @@ describe('Engine sequencing', () => {
   it('plays synth notes for their length', () => {
     const p = clickProject();
     p.tracks = [newTrack('synth', 0, 'SYN')];
-    p.tracks[0].synth = { wave: 0, cutoff: 127, reso: 0, env: 0, attack: 0, decay: 0, sustain: 127, release: 0 };
+    p.tracks[0].synth = synth({ wave: 0, cutoff: 127, reso: 0, env: 0, attack: 0, decay: 0, sustain: 127, release: 0 });
     p.patterns[0].notes[0] = [{ s: 4, l: 2, p: 57, v: 127 }];
     const eng = new Engine(SR);
     eng.setProject(p);

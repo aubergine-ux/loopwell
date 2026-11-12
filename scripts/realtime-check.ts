@@ -18,11 +18,11 @@ try {
   await page.waitForFunction(() => (window as any).__result, null, { timeout: 60000 });
   const r = await page.evaluate(() => (window as any).__result);
   console.log(r);
-  if (r.error || r.worstErrorFrames !== 0 || r.steps < r.expectedSteps - 2) {
-    console.error('FAIL: steps did not land on their exact frames');
+  if (r.error || r.worstErrorFrames !== 0 || r.steps < r.expectedSteps - 2 || r.underruns > 0) {
+    console.error('FAIL: steps did not land on their exact frames, or audio dropped out');
     code = 1;
   } else {
-    console.log(`OK: ${r.steps} steps, all on their exact frame, through ${r.mainThreadFreezes} main-thread freezes of up to ${r.longestFreezeMs}ms`);
+    console.log(`OK: ${r.steps} steps, all on their exact frame and no dropouts, through ${r.mainThreadFreezes} main-thread freezes of up to ${r.longestFreezeMs}ms`);
   }
 } finally {
   await browser.close();

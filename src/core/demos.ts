@@ -2,7 +2,7 @@
 // built with a tiny text notation: X accent, x hit, o ghost, - rest.
 
 import { isDefaultArrangement } from './arrange';
-import { MAX_STEPS, chainToClips, defaultTracks, emptyArrangement, emptyProject, newPattern, type Note, type Pattern, type Project } from './types';
+import { MAX_STEPS, chainToClips, defaultTracks, emptyArrangement, emptyProject, newPattern, type Note, type Pattern, type Project, synth } from './types';
 
 const VEL: Record<string, number> = { X: 122, x: 100, o: 58 };
 
@@ -66,9 +66,9 @@ const nightDrive = () => beat('Night Drive', 'boom', [
   p.tracks[3].vol = 62; p.tracks[4].vol = 66; p.tracks[4].decay = 86; p.tracks[5].vol = 60; p.tracks[5].rev = 60;
   p.tracks[2].rev = 46;
   p.tracks[6].note = 33;
-  p.tracks[6].synth = { wave: 0, cutoff: 44, reso: 52, env: 62, attack: 0, decay: 42, sustain: 20, release: 18 };
+  p.tracks[6].synth = synth({ wave: 0, cutoff: 44, reso: 52, env: 62, attack: 0, decay: 42, sustain: 20, release: 18 });
   p.tracks[7].note = 57;
-  p.tracks[7].synth = { wave: 1, cutoff: 62, reso: 36, env: 58, attack: 0, decay: 44, sustain: 14, release: 40 };
+  p.tracks[7].synth = synth({ wave: 1, cutoff: 62, reso: 36, env: 58, attack: 0, decay: 44, sustain: 14, release: 40 });
   p.tracks[7].vol = 76; p.tracks[7].dly = 78; p.tracks[7].rev = 56; p.tracks[7].pan = 12;
   p.fx.dlyTime = 3; p.fx.dlyFb = 58; p.fx.revSize = 84;
 });
@@ -92,10 +92,10 @@ const dustLoop = () => beat('Dust Loop', 'dust', [
   p.tracks[2].vol = 70; p.tracks[3].vol = 70; p.tracks[4].vol = 60; p.tracks[5].vol = 74; p.tracks[5].pan = -24;
   p.tracks[1].rev = 30;
   p.tracks[6].note = 38;
-  p.tracks[6].synth = { wave: 2, cutoff: 60, reso: 10, env: 30, attack: 0, decay: 60, sustain: 70, release: 30 };
+  p.tracks[6].synth = synth({ wave: 2, cutoff: 60, reso: 10, env: 30, attack: 0, decay: 60, sustain: 70, release: 30 });
   p.tracks[6].vol = 112;
   p.tracks[7].name = 'KEYS'; p.tracks[7].note = 62;
-  p.tracks[7].synth = { wave: 2, cutoff: 58, reso: 8, env: 36, attack: 6, decay: 70, sustain: 40, release: 62 };
+  p.tracks[7].synth = synth({ wave: 2, cutoff: 58, reso: 8, env: 36, attack: 6, decay: 70, sustain: 40, release: 62 });
   p.tracks[7].vol = 74; p.tracks[7].rev = 70; p.tracks[7].dly = 30; p.tracks[7].filter = -14;
   p.fx.revSize = 60; p.fx.revDamp = 90; p.fx.dlyTime = 2; p.fx.dlyFb = 36;
   p.fx.compThresh = 56; p.fx.compRatio = 60; p.fx.compMakeup = 34;
@@ -116,10 +116,10 @@ const glassHours = () => beat('Glass Hours', 'glass', [
   p.tracks[0].vol = 104; p.tracks[2].rev = 52; p.tracks[3].vol = 58; p.tracks[4].vol = 56;
   p.tracks[5].vol = 64; p.tracks[5].rev = 80; p.tracks[5].dly = 70; p.tracks[5].pan = 30;
   p.tracks[6].name = 'SUB'; p.tracks[6].note = 30;
-  p.tracks[6].synth = { wave: 3, cutoff: 96, reso: 0, env: 0, attack: 0, decay: 80, sustain: 110, release: 44 };
+  p.tracks[6].synth = synth({ wave: 3, cutoff: 96, reso: 0, env: 0, attack: 0, decay: 80, sustain: 110, release: 44 });
   p.tracks[6].vol = 118;
   p.tracks[7].name = 'BELL'; p.tracks[7].note = 66;
-  p.tracks[7].synth = { wave: 2, cutoff: 80, reso: 20, env: 46, attack: 0, decay: 50, sustain: 10, release: 60 };
+  p.tracks[7].synth = synth({ wave: 2, cutoff: 80, reso: 20, env: 46, attack: 0, decay: 50, sustain: 10, release: 60 });
   p.tracks[7].vol = 78; p.tracks[7].dly = 96; p.tracks[7].rev = 84; p.tracks[7].pan = -16;
   p.fx.dlyTime = 3; p.fx.dlyFb = 64; p.fx.revSize = 100; p.fx.revDamp = 40;
 });
@@ -143,10 +143,10 @@ const punchCard = () => beat('Punch Card', 'punch', [
   p.tracks[3].vol = 62; p.tracks[4].vol = 58; p.tracks[5].vol = 44; p.tracks[5].pan = 34; p.tracks[2].vol = 76;
   p.tracks[1].rev = 34;
   p.tracks[6].note = 40;
-  p.tracks[6].synth = { wave: 0, cutoff: 38, reso: 78, env: 84, attack: 0, decay: 34, sustain: 10, release: 14 };
+  p.tracks[6].synth = synth({ wave: 0, cutoff: 38, reso: 78, env: 84, attack: 0, decay: 34, sustain: 10, release: 14 });
   p.tracks[6].vol = 96;
   p.tracks[7].name = 'STAB'; p.tracks[7].note = 64;
-  p.tracks[7].synth = { wave: 0, cutoff: 70, reso: 30, env: 50, attack: 0, decay: 40, sustain: 30, release: 36 };
+  p.tracks[7].synth = synth({ wave: 0, cutoff: 70, reso: 30, env: 50, attack: 0, decay: 40, sustain: 30, release: 36 });
   p.tracks[7].vol = 70; p.tracks[7].dly = 84; p.tracks[7].rev = 50; p.tracks[7].pan = -20;
   p.fx.dlyTime = 3; p.fx.dlyFb = 52; p.fx.revSize = 56;
 });

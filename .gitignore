@@ -6,3 +6,6 @@ dev-dist
 .vite
 test-results
 renders
+.env
+server/data
+src-tauri/target

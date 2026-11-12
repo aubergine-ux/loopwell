@@ -13,6 +13,8 @@
   import HelpModal from './HelpModal.svelte';
   import Icon from './Icon.svelte';
   import MixPanel from './MixPanel.svelte';
+  import PresetsModal from './PresetsModal.svelte';
+  import RackPanel from './RackPanel.svelte';
   import Pads from './Pads.svelte';
   import RollPanel from './RollPanel.svelte';
   import ShareModal from './ShareModal.svelte';
@@ -84,6 +86,7 @@
         <div class="content" role="tabpanel">
           {#if app.tab === 'sound'}<SoundPanel />
           {:else if app.tab === 'keys'}<RollPanel />
+          {:else if app.tab === 'rack'}<RackPanel />
           {:else if app.tab === 'mix'}<MixPanel />
           {:else if app.tab === 'fx'}<FxPanel />
           {:else}<SongPanel />{/if}
@@ -102,6 +105,7 @@
 {#if app.modal === 'share'}<ShareModal />
 {:else if app.modal === 'export'}<ExportModal />
 {:else if app.modal === 'demos'}<DemosModal />
+{:else if app.modal === 'presets'}<PresetsModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}

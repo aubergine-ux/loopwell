@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DEMOS } from '../src/core/demos';
 import { beatFromHash, beatUrl, decodeBeat, encodeBeat, packProject, unpackProject } from '../src/core/share';
 import { deflateSync } from 'fflate';
+import { INSERT_TYPES } from '../src/core/dsp/inserts';
 import { PARAMS, paramsFor } from '../src/core/params';
-import { emptyProject, newId, newPattern, newTrack, resolveOverlaps, sanitize, type Project } from '../src/core/types';
+import { emptyProject, newId, newPattern, newTrack, resolveOverlaps, sanitize, type Project, synth } from '../src/core/types';
 import { plain } from './helpers';
 
 // Links made by version 1.0 (the demo links from its README). They must keep opening forever.
@@ -27,12 +28,21 @@ function randomProject(seed: number): Project {
     t.vol = r(128); t.pan = r(128) - 64;
     t.mute = !!r(2); t.solo = !!r(2); t.filter = r(128) - 64; t.rev = r(128); t.dly = r(128);
     // a link only carries the settings that apply to the track's kind
-    if (t.kind === 'drum') { t.tune = r(49) - 24; t.decay = r(128); }
+    if (t.kind === 'drum') {
+      t.tune = r(49) - 24; t.decay = r(128);
+      if (r(3) === 0) { t.kind = 'slice'; t.note = r(8); t.slices = [...new Set(Array.from({ length: 1 + r(12) }, () => r(65536)))].sort((x, y) => x - y); }
+      if (r(3) === 0) { t.reverse = !!r(2); t.stretch = r(128); }
+    }
     else {
       t.sample = newTrack('synth', 0, '').sample;
       t.note = r(128);
-      t.synth = { wave: r(4), cutoff: r(128), reso: r(128), env: r(128), attack: r(128), decay: r(128), sustain: r(128), release: r(128) };
+      t.synth = synth({ wave: r(12), cutoff: r(128), reso: r(128), env: r(128), attack: r(128), decay: r(128), sustain: r(128), release: r(128) });
+      if (r(2)) Object.assign(t.synth, {
+        pos: r(128), wave2: r(12), pos2: r(128), semi2: r(49) - 24, fine2: r(101) - 50, mix: r(128), noise: r(128), uni: 1 + r(5), detune: r(128), spread: r(128),
+        lfoShape: r(5), lfoRate: r(128), lfoSync: !!r(2), lfoAmt: r(128) - 64, lfoDest: r(11), menvAttack: r(128), menvDecay: r(128), menvAmt: r(128) - 64, menvDest: r(11),
+      });
     }
+    if (r(3) === 0) t.fx = Array.from({ length: 1 + r(5) }, () => ({ type: INSERT_TYPES[r(5)], on: !!r(2), p: [r(128), r(128), r(128), r(128)] }));
     return t;
   });
   p.patterns = [0, 1, 2, 3, 4, 5, 6, 7].map((pi) => {

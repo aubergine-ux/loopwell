@@ -169,6 +169,102 @@ await page.waitForFunction(() => /Nothing to export/.test(document.querySelector
 check('exporting stems of an empty pattern explains itself', /Nothing to export/.test((await toastText(page)) ?? ''));
 await page.keyboard.press('ArrowLeft');
 
+// ---- sampler: slices, reverse, stretch ----
+const meterNow = () => page.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
+const sounded = async () => { await page.waitForTimeout(120); return !/scaleX\(0(\.0+)?\)/.test(await meterNow()); };
+await page.locator('.row[data-row="0"] .name').click();
+await page.getByRole('tab', { name: 'Sound' }).click();
+await page.waitForSelector('.wave canvas');
+await page.getByRole('button', { name: 'Slice', exact: true }).click();
+await page.waitForSelector('.mark');
+check('turning a drum into a sliced track keeps its hits', (await isOn(page, 0, 0)) && (await isOn(page, 0, 4)) && (await page.locator('.mark').count()) >= 1);
+await page.locator('.tools .seg button', { hasText: /^8$/ }).click();
+check('a sample can be cut into equal slices, which appear on the pads', (await page.locator('.mark').count()) === 8 && (await page.locator('.pad[data-slice]').count()) === 8);
+await page.locator('.pad[data-slice="2"]').click();
+check('a slice pad plays its slice', (await sounded()) && (await page.locator('.mark.cur b').textContent()) === '3');
+const wv = (await page.locator('.wave').boundingBox())!;
+await page.mouse.dblclick(wv.x + wv.width * 0.03, wv.y + 20);
+check('double-clicking the waveform adds a slice', (await page.locator('.mark').count()) === 9);
+const m2 = (await page.locator('.mark').nth(2).boundingBox())!;
+await page.mouse.move(m2.x + 6, m2.y + 30);
+await page.mouse.down();
+await page.mouse.move(m2.x + 46, m2.y + 30, { steps: 5 });
+await page.mouse.up();
+const m2b = (await page.locator('.mark').nth(2).boundingBox())!;
+check('a slice marker can be dragged', m2b.x > m2.x + 25, `${m2.x.toFixed(0)} -> ${m2b.x.toFixed(0)}`);
+await page.locator('.mark').nth(1).dblclick();
+check('double-clicking a marker removes it', (await page.locator('.mark').count()) === 8);
+await page.getByRole('button', { name: 'Auto', exact: true }).click();
+await page.waitForTimeout(200);
+const autoCount = await page.locator('.mark').count();
+check('auto-slicing finds the hit in a one-shot', autoCount >= 1 && autoCount <= 3, `${autoCount} slices`);
+await page.locator('.tools .seg button', { hasText: /^4$/ }).click();
+await page.getByRole('tab', { name: 'Keys' }).click();
+check('the piano roll of a sliced track has one row per slice', (await page.locator('.key').count()) === 4 && (await page.locator('.note').count()) === 4);
+await page.keyboard.press('s');
+check('the home row plays slices', await sounded());
+await page.getByRole('tab', { name: 'Sound' }).click();
+await page.getByRole('button', { name: 'Reverse' }).click();
+check('reverse can be switched on', (await page.getByRole('button', { name: 'Reverse' }).getAttribute('aria-pressed')) === 'true');
+await page.getByRole('button', { name: 'Reverse' }).click();
+await page.getByRole('button', { name: 'Drum', exact: true }).click();
+check('and back to a drum track, hits intact', (await isOn(page, 0, 0)) && (await page.locator('.pad[data-pad]').count()) === 8);
+
+// ---- synth: presets, wavetables, modulation ----
+await page.locator('.row[data-row="6"] .name').click();
+await page.getByRole('button', { name: 'Presets' }).click();
+await page.locator('.modal .groups button', { hasText: 'Lead' }).click();
+await page.locator('.modal .load', { hasText: 'Super Saw' }).click();
+check('a preset loads and plays a note', (await page.locator('.modal .load.on').textContent()) === 'Super Saw' && (await sounded()));
+await page.locator('.modal .groups button', { hasText: 'Pad' }).click();
+await page.locator('.modal .load', { hasText: 'Choir' }).click();
+await page.getByLabel('Preset name').fill('my choir');
+await page.getByRole('button', { name: 'Save as preset' }).click();
+check('the current sound can be saved as a preset of your own', (await page.locator('.modal .groups button.on').textContent()) === 'Mine' && (await page.locator('.modal .load').allTextContents()).join() === 'my choir');
+await page.keyboard.press('Escape');
+check('the preset set up both oscillators, unison and the LFO', (await page.getByLabel('Oscillator 1 wave').inputValue()) === '6'
+  && (await page.locator('.synth .stepper b').nth(1).textContent()) === '4' && (await page.getByLabel('LFO target').inputValue()) === '2');
+await page.getByLabel('Oscillator 2 wave').selectOption('8');
+await page.getByLabel('Mod envelope target').selectOption('3');
+await page.keyboard.down('a');
+await page.waitForTimeout(250);
+const heldSound = await sounded();
+await page.keyboard.up('a');
+check('a two-oscillator wavetable sound plays from the keyboard', heldSound);
+
+// ---- effect rack ----
+await page.getByRole('tab', { name: 'Rack' }).click();
+for (const n of ['EQ', 'Drive', 'Sidechain']) await page.getByRole('button', { name: `Add ${n}` }).click();
+const rackOrder = () => page.locator('.fx header b').allTextContents();
+check('effects can be added to a track', (await rackOrder()).join() === 'EQ,Drive,Sidechain' && /ducks when KICK plays/.test((await page.locator('.fx small').textContent())!));
+const grip = (await page.locator('.fx').nth(2).locator('.grip').boundingBox())!;
+const firstFx = (await page.locator('.fx').nth(0).boundingBox())!;
+await page.mouse.move(grip.x + 4, grip.y + 6);
+await page.mouse.down();
+await page.mouse.move(firstFx.x + 60, firstFx.y + 40, { steps: 8 });
+await page.mouse.up();
+check('dragging an effect reorders the rack', (await rackOrder()).join() === 'Sidechain,EQ,Drive', (await rackOrder()).join());
+await page.getByRole('button', { name: 'Move Sidechain later' }).click();
+check('and so do its arrow buttons', (await rackOrder()).join() === 'EQ,Sidechain,Drive');
+await page.getByRole('button', { name: 'Drive on/off' }).click();
+await page.getByRole('button', { name: 'Remove EQ' }).click();
+check('an effect can be bypassed or removed', (await rackOrder()).join() === 'Sidechain,Drive' && (await page.locator('.fx.off').count()) === 1);
+await page.keyboard.press('7');
+check('the track still sounds through its rack', await sounded());
+
+// ---- recording from an input ----
+await page.locator('.row[data-row="5"] .name').click();
+await page.getByRole('tab', { name: 'Sound' }).click();
+await page.locator('.kits .rec').click();
+await page.waitForSelector('.rec.on', { timeout: 5000 }).catch(() => {});
+await page.waitForTimeout(1200);
+const recLabel = (await page.locator('.kits .rec').textContent()) ?? '';
+await page.locator('.kits .rec').click();
+await page.waitForFunction(() => document.querySelector('.row[data-row="5"] .name b')?.textContent === 'TAKE 1', null, { timeout: 5000 }).catch(() => {});
+check('recording from the audio input lands on the track as a sample', /Stop \d/.test(recLabel)
+  && (await page.locator('.row[data-row="5"] .name b').textContent()) === 'TAKE 1' && /take-1\.wav/.test((await page.locator('.wave .note').textContent()) ?? ''), recLabel);
+await page.waitForSelector('.toast', { state: 'detached', timeout: 8000 }).catch(() => {});
+
 // ---- demos + share link ----
 await page.getByTitle('Demo beats and new beat').click();
 await page.getByText('Dust Loop').click();
@@ -227,7 +323,7 @@ await page.keyboard.press('Delete');
 check('Delete removes it', (await layout(0)).length === 4);
 // drop a clip on top of the long first one: it splits around the newcomer
 await drag(at(96 + 8), midY, at(16 + 8), midY);
-check('a clip dropped on answap one trims and splits it', JSON.stringify((await layout(0)).slice(0, 3).map((c) => c.slice(0, 2))) === '[[0,16],[16,32],[48,16]]', JSON.stringify(await layout(0)));
+check('a clip dropped on another one trims and splits it', JSON.stringify((await layout(0)).slice(0, 3).map((c) => c.slice(0, 2))) === '[[0,16],[16,32],[48,16]]', JSON.stringify(await layout(0)));
 await page.keyboard.press('Control+z');
 check('undo puts the arrangement back', (await layout(0))[0][1] === 48, JSON.stringify(await layout(0)));
 const lane1 = (await page.locator('.lane.clips[data-lane="1"]').boundingBox())!;
@@ -256,7 +352,7 @@ check('a point can be dragged', moved.y < c3.y - 5, `${c3.y.toFixed(0)} -> ${mov
 await page.mouse.dblclick(moved.x + 3, moved.y + 3);
 check('double-clicking a point removes it', (await curve.locator('circle').count()) === points - 1);
 await page.getByRole('combobox', { name: 'Automated knob' }).selectOption('filter');
-check('a lane can be pointed at answap knob', /Filter automation/.test((await curve.getAttribute('aria-label'))!));
+check('a lane can be pointed at another knob', /Filter automation/.test((await curve.getAttribute('aria-label'))!));
 await page.getByRole('combobox', { name: 'Automated knob' }).selectOption('vol');
 await page.getByRole('button', { name: 'Add master automation' }).click();
 check('the master has automation lanes too', (await page.locator('svg.curve').count()) === 2);
@@ -376,7 +472,7 @@ await page.locator('.row[data-row="0"] .name').click();
 await page.getByRole('tab', { name: 'Sound' }).click();
 await page.locator('.source input[type=file]').setInputFiles({ name: 'My Kick.wav', mimeType: 'audio/wav', buffer: Buffer.from(encodeWav([tone], 44100, 16)) });
 await page.waitForFunction(() => document.querySelector('.row[data-row="0"] .name b')?.textContent === 'MY KICK');
-check('loading an audio file makes it the track sample', (await page.locator('.custom').textContent())!.includes('My Kick.wav'));
+check('loading an audio file makes it the track sample', (await page.locator('.wave .note').textContent())!.includes('My Kick.wav'));
 
 await page.locator('.source input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('this is not audio') });
 check('a file that is not audio is rejected with a message', /Couldn't read notes\.txt/.test((await toastText(page)) ?? ''));
@@ -385,7 +481,7 @@ await page.waitForFunction(() => /empty/.test(document.querySelector('.toast')?.
 check('an empty file is rejected with a message', /is empty/.test((await toastText(page)) ?? ''));
 
 await page.getByRole('button', { name: 'Share' }).click();
-check('share dialog warns that custom samples do not travel in links', (await page.locator('.note').textContent())!.includes('your own samples'));
+check('share dialog warns that custom samples do not travel in links', (await page.locator('.modal .note').textContent())!.includes('your own samples'));
 const customLink = await page.locator('#share-url').inputValue();
 await page.keyboard.press('Escape');
 

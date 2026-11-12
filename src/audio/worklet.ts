@@ -15,6 +15,7 @@ declare class AudioWorkletProcessor {
 export type ToWorklet =
   | { t: 'project'; project: Project }
   | { t: 'sample'; id: string; l: Float32Array; r?: Float32Array }
+  | { t: 'table'; index: number; frames: Float32Array[][] }
   | { t: 'play'; pattern: number; from: number }
   | { t: 'seek'; step: number }
   | { t: 'stop' }
@@ -40,6 +41,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
 
   constructor() {
     super();
+    this.engine.buildTables = false; // computed on the main thread and sent over, so audio never waits for one
     this.port.onmessage = (e: MessageEvent<ToWorklet>) => this.handle(e.data);
     this.engine.onStep = (i) =>
       this.post({ t: 'step', step: i.step, pattern: i.pattern, song: i.song, frame: currentFrame + i.offset });
@@ -54,6 +56,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
     switch (m.t) {
       case 'project': e.setProject(m.project); break;
       case 'sample': e.setSample(m.id, m.l, m.r); break;
+      case 'table': e.setTable(m.index, m.frames); break;
       case 'play': e.play({ pattern: m.pattern, from: m.from }); break;
       case 'seek': e.seek(m.step); break;
       case 'stop': e.stop(); break;
@@ -92,3 +95,49 @@ class LoopwellProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('loopwell', LoopwellProcessor);
+
+export type FromRecorder = { l: Float32Array; r: Float32Array | null; peak: number };
+const REC_CHUNK = 4096;
+
+/** Captures whatever is plugged into its input (a microphone or an interface) and hands it to the main thread in chunks. */
+class RecorderProcessor extends AudioWorkletProcessor {
+  private l = new Float32Array(REC_CHUNK);
+  private r = new Float32Array(REC_CHUNK);
+  private n = 0;
+  private peak = 0;
+  private stereo = false;
+  private on = true;
+
+  constructor() {
+    super();
+    this.port.onmessage = () => { this.flush(); this.on = false; };
+  }
+
+  private flush(): void {
+    if (!this.n) return;
+    const m: FromRecorder = { l: this.l.slice(0, this.n), r: this.stereo ? this.r.slice(0, this.n) : null, peak: this.peak };
+    this.port.postMessage(m, m.r ? [m.l.buffer, m.r.buffer] : [m.l.buffer]);
+    this.n = 0;
+    this.peak = 0;
+  }
+
+  process(inputs: Float32Array[][]): boolean {
+    const input = inputs[0];
+    const a = input?.[0];
+    if (!this.on) return false;
+    if (!a) return true;
+    const b = input[1];
+    if (b) this.stereo = true;
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i];
+      this.l[this.n] = x;
+      this.r[this.n] = b ? b[i] : x;
+      const v = x < 0 ? -x : x;
+      if (v > this.peak) this.peak = v;
+      if (++this.n === REC_CHUNK) this.flush();
+    }
+    return true;
+  }
+}
+
+registerProcessor('loopwell-rec', RecorderProcessor);

@@ -30,12 +30,18 @@ function onMessage(e: MIDIMessageEvent): void {
   if (type === 0x90 && d[2] > 0) {
     const p = app.project;
     const sel = p.tracks[app.sel];
-    const asPad = ch === 9 || sel?.kind !== 'synth';
+    const asPad = ch === 9 || !sel || sel.kind === 'drum';
     if (asPad) {
       const track = (((d[1] - PAD_BASE) % 8) + 8) % 8;
       if (track >= p.tracks.length) return;
       held.set(key, { track, pitch: 0, pad: true });
       padDown(track, d[2]);
+    } else if (sel.kind === 'slice') {
+      // pads and keys from C1 up play the slices in order
+      const n = Math.max(1, sel.slices.length);
+      const pitch = (((d[1] - PAD_BASE) % n) + n) % n;
+      held.set(key, { track: app.sel, pitch, pad: false });
+      noteDown(app.sel, pitch, d[2]);
     } else {
       const pitch = p.scaleLock ? snapToScale(d[1], p.scaleRoot, p.scaleType) : d[1];
       held.set(key, { track: app.sel, pitch, pad: false });

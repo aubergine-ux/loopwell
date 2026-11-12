@@ -101,8 +101,10 @@ export function exportMidi(p: Project, chain?: number[]): Uint8Array<ArrayBuffer
           for (const n of pat.notes[ti]) {
             if (n.s !== local) continue;
             const off = Math.max(on + 1, (step + Math.min(n.l, len - k)) * STEP - 1);
-            evs.push({ tick: on, order: 1, data: [0x90 | ch, n.p, n.v] });
-            evs.push({ tick: off, order: 0, data: [0x80 | ch, n.p, 0] });
+            // slices come out as notes from C1 up, one per slice
+            const key = t.kind === 'slice' ? Math.min(127, 36 + n.p) : n.p;
+            evs.push({ tick: on, order: 1, data: [0x90 | ch, key, n.v] });
+            evs.push({ tick: off, order: 0, data: [0x80 | ch, key, 0] });
           }
         }
       }

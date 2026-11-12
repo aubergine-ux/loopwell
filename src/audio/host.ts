@@ -3,9 +3,10 @@
 // the UI can read once per animation frame.
 
 import { isBuiltin, sampleUrl } from '../core/kits';
+import { wavetable } from '../core/dsp/wavetable';
 import type { SampleBank } from '../core/render';
 import type { Project } from '../core/types';
-import type { FromWorklet, ToWorklet } from './worklet';
+import type { FromRecorder, FromWorklet, ToWorklet } from './worklet';
 import workletUrl from './worklet.ts?worker&url';
 
 export interface Playhead {
@@ -43,6 +44,7 @@ export class AudioHost {
   private backlog: ToWorklet[] = [];
   private project: Project | null = null;
   private dirty = false;
+  private tables = new Set<number>();
 
   /** Create the context and worklet. Safe to call before any user gesture. */
   init(): Promise<void> {
@@ -136,13 +138,26 @@ export class AudioHost {
   /** Send the latest project to the audio thread (coalesced to once per frame). */
   setProject(p: Project): void {
     this.project = p;
-    for (const t of p.tracks) if (t.kind === 'drum') void this.ensure(t.sample);
+    for (const t of p.tracks) {
+      if (t.kind !== 'synth') void this.ensure(t.sample);
+      else {
+        if (t.synth.wave >= 4) this.ensureTable(t.synth.wave - 4);
+        if (t.synth.wave2 >= 4) this.ensureTable(t.synth.wave2 - 4);
+      }
+    }
     if (this.dirty) return;
     this.dirty = true;
     queueMicrotask(() => {
       this.dirty = false;
       if (this.project) this.send({ t: 'project', project: this.project });
     });
+  }
+
+  /** Compute a wavetable here, off the audio thread, and send it across. */
+  private ensureTable(index: number): void {
+    if (this.tables.has(index)) return;
+    this.tables.add(index);
+    setTimeout(() => this.send({ t: 'table', index, frames: wavetable(index).frames }));
   }
 
   /** Make sure a built-in sample is fetched, decoded and on the audio thread. */
@@ -180,6 +195,71 @@ export class AudioHost {
     this.bank[id] = { l, r };
     this.send({ t: 'sample', id, l, r });
     return true;
+  }
+
+  // --- recording from a microphone or audio interface ---
+
+  private rec: { stream: MediaStream; source: MediaStreamAudioSourceNode; node: AudioWorkletNode; sink: GainNode; l: Float32Array[]; r: Float32Array[]; stereo: boolean; frames: number } | null = null;
+  /** Input level of the take in progress (0..1), for a meter. */
+  recLevel = 0;
+
+  get recording(): boolean {
+    return !!this.rec;
+  }
+
+  /** Seconds captured so far. */
+  get recSeconds(): number {
+    return this.rec ? this.rec.frames / this.sampleRate : 0;
+  }
+
+  /** Ask for an input and start capturing it. Throws if the browser or the person says no. */
+  async startRecording(deviceId?: string): Promise<void> {
+    if (this.rec) return;
+    await this.init();
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser can\'t record audio.');
+    // the processing browsers apply for calls ruins music, so ask for the raw input
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+    const ctx = this.ctx!;
+    await ctx.resume();
+    const source = ctx.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(ctx, 'loopwell-rec', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    // the recorder has to be part of a path to the output to be run, but it must not be heard
+    const sink = ctx.createGain();
+    sink.gain.value = 0;
+    source.connect(node).connect(sink).connect(ctx.destination);
+    const rec = { stream, source, node, sink, l: [] as Float32Array[], r: [] as Float32Array[], stereo: false, frames: 0 };
+    node.port.onmessage = (e: MessageEvent<FromRecorder>) => {
+      rec.l.push(e.data.l);
+      if (e.data.r) { rec.r.push(e.data.r); rec.stereo = true; } else rec.r.push(e.data.l);
+      rec.frames += e.data.l.length;
+      this.recLevel = e.data.peak;
+    };
+    this.rec = rec;
+    this.recLevel = 0;
+  }
+
+  /** Stop capturing and return the take, or null if nothing was recorded. */
+  async stopRecording(): Promise<{ l: Float32Array; r?: Float32Array; sampleRate: number } | null> {
+    const rec = this.rec;
+    if (!rec) return null;
+    this.rec = null;
+    this.recLevel = 0;
+    rec.node.port.postMessage('stop');
+    await new Promise((r) => setTimeout(r, 60)); // let the last chunk arrive
+    rec.source.disconnect();
+    rec.node.disconnect();
+    rec.sink.disconnect();
+    for (const t of rec.stream.getTracks()) t.stop();
+    if (!rec.frames) return null;
+    const join = (parts: Float32Array[]) => {
+      const out = new Float32Array(rec.frames);
+      let o = 0;
+      for (const p of parts) { out.set(p, o); o += p.length; }
+      return out;
+    };
+    return { l: join(rec.l), r: rec.stereo ? join(rec.r) : undefined, sampleRate: this.sampleRate };
   }
 
   get sampleRate(): number {

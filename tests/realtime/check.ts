@@ -3,6 +3,7 @@
 // frozen, then checks that every step still fired on its exact audio frame.
 
 import { audio } from '../../src/audio/host';
+import { stepToSeconds, tempoAt } from '../../src/core/arrange';
 import { samplesPerStep, swingOffset } from '../../src/core/clock';
 import { stressProject } from './stress';
 
@@ -14,7 +15,7 @@ let load = 0, loadMax = 0, loadN = 0;
 
 const done = (async () => {
   await audio.init();
-  await Promise.all(p.tracks.filter((t) => t.kind === 'drum').map((t) => audio.ensure(t.sample)));
+  await Promise.all(p.tracks.filter((t) => t.kind !== 'synth').map((t) => audio.ensure(t.sample)));
   audio.setProject(p);
   await audio.resume();
   audio.onStepFired = (_s, frame) => { frames.push(frame); arrivals.push(performance.now()); };
@@ -37,12 +38,14 @@ const done = (async () => {
   audio.stop();
   await new Promise((r) => setTimeout(r, 200));
 
-  const sps = samplesPerStep(p.bpm, ctx.sampleRate);
-  let worst = 0;
+  // where each step of the song belongs, following its tempo changes
+  let worst = 0, expected = 0;
   for (let i = 0; i < frames.length; i++) {
-    const want = frames[0] + Math.round(i * sps + swingOffset(i, p.swing, sps));
+    const sps = samplesPerStep(tempoAt(p, Math.max(0, i - 1)), ctx.sampleRate);
+    const want = frames[0] + Math.round(stepToSeconds(p, i) * ctx.sampleRate + swingOffset(i, p.swing, sps));
     worst = Math.max(worst, Math.abs(frames[i] - want));
   }
+  while (stepToSeconds(p, expected) < SECONDS) expected++;
   // how late the main thread heard about steps: this is what would have been the
   // timing error if the sequencer had been scheduled from the main thread
   let lateMax = 0;
@@ -52,7 +55,7 @@ const done = (async () => {
   return {
     sampleRate: ctx.sampleRate,
     steps: frames.length,
-    expectedSteps: Math.floor((SECONDS * ctx.sampleRate) / sps),
+    expectedSteps: expected,
     worstErrorFrames: worst,
     mainThreadFreezes: freezes,
     longestFreezeMs: Math.round(longest),

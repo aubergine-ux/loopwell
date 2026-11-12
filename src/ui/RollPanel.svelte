@@ -3,6 +3,7 @@
   import { auditionNote } from '../actions.svelte';
   import { NOTE_NAMES, SCALES, inScale, noteName, scalePitches } from '../core/scales';
   import { DEFAULT_VEL, clamp, type Note } from '../core/types';
+  import { setKind } from '../sound.svelte';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
   import Icon from './Icon.svelte';
@@ -17,12 +18,15 @@
 
   const p = $derived(app.project);
   const t = $derived(p.tracks[app.sel]);
-  const isSynth = $derived(t.kind === 'synth');
+  const isSynth = $derived(t.kind !== 'drum'); // anything played by notes
+  const sliced = $derived(t.kind === 'slice');
   const notes = $derived(p.patterns[app.pat].notes[app.sel]);
 
   // With scale lock on, only in-key rows exist, so a wrong note can't be drawn.
   // Notes that are already out of key keep their rows so they stay visible.
   const rows = $derived.by(() => {
+    // a sliced sample has one row per slice instead of a keyboard
+    if (sliced) return Array.from({ length: Math.max(1, t.slices.length) }, (_, i) => i).reverse();
     const set = new Set(p.scaleLock ? scalePitches(p.scaleRoot, p.scaleType, LO, HI) : Array.from({ length: HI - LO + 1 }, (_, i) => LO + i));
     for (const n of notes) set.add(n.p);
     return [...set].sort((a, b) => b - a);
@@ -146,12 +150,12 @@
   {#if !isSynth}
     <div class="hint">
       <b>{t.name}</b> is a drum track, so it has no notes to draw.
-      <span>Pick a synth track, or turn this one into a synth.</span>
+      <span>Pick a synth or sliced track, or turn this one into a synth.</span>
       <div class="hintbtns">
         {#each p.tracks as tr, i}
-          {#if tr.kind === 'synth'}<button class="btn" onclick={() => (app.sel = i)}>{tr.name}</button>{/if}
+          {#if tr.kind !== 'drum'}<button class="btn" onclick={() => (app.sel = i)}>{tr.name}</button>{/if}
         {/each}
-        <button class="btn ghost" onclick={() => (t.kind = 'synth')}>Make {t.name} a synth</button>
+        <button class="btn ghost" onclick={() => setKind(app.sel, 'synth')}>Make {t.name} a synth</button>
       </div>
     </div>
   {:else}
@@ -160,21 +164,25 @@
         <div class="keys">
           {#each rows as pitch}
             {@const pc = pitch % 12}
-            <button class="key" class:black={BLACK.includes(pc)} class:root={pc === p.scaleRoot} tabindex="-1"
-              onpointerdown={() => auditionNote(app.sel, pitch)} aria-label={noteName(pitch)}>
-              {pc === p.scaleRoot || pc === 0 ? noteName(pitch) : ''}
-            </button>
+            {#if sliced}
+              <button class="key" tabindex="-1" onpointerdown={() => auditionNote(app.sel, pitch)} aria-label="Slice {pitch + 1}">{pitch + 1}</button>
+            {:else}
+              <button class="key" class:black={BLACK.includes(pc)} class:root={pc === p.scaleRoot} tabindex="-1"
+                onpointerdown={() => auditionNote(app.sel, pitch)} aria-label={noteName(pitch)}>
+                {pc === p.scaleRoot || pc === 0 ? noteName(pitch) : ''}
+              </button>
+            {/if}
           {/each}
         </div>
         <div class="lane" bind:this={lane} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}
           role="application" aria-label="Piano roll for {t.name}">
           {#each rows as pitch, i}
-            {#if pitch % 12 === p.scaleRoot || !inScale(pitch, p.scaleRoot, p.scaleType)}
-              <i class="band" class:out={!inScale(pitch, p.scaleRoot, p.scaleType)} style:top="{i * ROW}px"></i>
+            {#if sliced ? pitch % 2 === 1 : pitch % 12 === p.scaleRoot || !inScale(pitch, p.scaleRoot, p.scaleType)}
+              <i class="band" class:out={!sliced && !inScale(pitch, p.scaleRoot, p.scaleType)} style:top="{i * ROW}px"></i>
             {/if}
           {/each}
           {#each notes as n, ni}
-            {#if n.s < p.steps}
+            {#if n.s < p.steps && rowOf(n.p) >= 0}
               <i class="note" data-n={ni} style:left="{(n.s / p.steps) * 100}%" style:width="{(Math.min(n.l, p.steps - n.s) / p.steps) * 100}%"
                 style:top="{rowOf(n.p) * ROW}px" style:--a={(0.45 + (n.v / 127) * 0.55).toFixed(2)}></i>
             {/if}

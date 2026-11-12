@@ -14,11 +14,12 @@ import { deflateSync, inflateSync } from 'fflate';
 import { KITS, SLOTS, isBuiltin } from './kits';
 import { isDefaultArrangement } from './arrange';
 import { PARAMS } from './params';
-import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, sanitize, type Clip, type Project } from './types';
+import { INSERT_TYPES } from './dsp/inserts';
+import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, sanitize, synthExtras, usesNotes, type Clip, type Project, type Track } from './types';
 
 const VERSION = 2;
 const V1_PATTERNS = 4;
-const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4 }
+const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5 }
 const ALL_TRACKS = 255;
 export const HASH_KEY = 'b';
 
@@ -129,12 +130,13 @@ function writeTracks(w: Writer, p: Project): void {
   for (const t of p.tracks) {
     const builtin = isBuiltin(t.sample);
     const synth = t.kind === 'synth';
-    w.u8((synth ? 1 : 0) | (t.mute ? 2 : 0) | (t.solo ? 4 : 0) | ((t.color & 7) << 3) | (!synth && !builtin ? 64 : 0));
+    w.u8((synth ? 1 : 0) | (t.mute ? 2 : 0) | (t.solo ? 4 : 0) | ((t.color & 7) << 3) | (!synth && !builtin ? 64 : 0) | (t.kind === 'slice' ? 128 : 0));
     w.str(t.name);
     if (synth) {
       const s = t.synth;
       for (const v of [s.wave, s.cutoff, s.reso, s.env, s.attack, s.decay, s.sustain, s.release, t.note]) w.u8(v);
     } else {
+      if (t.kind === 'slice') w.u8(t.note);
       if (builtin) {
         const [kit, slot] = t.sample.split('/');
         w.u8((KITS.findIndex((k) => k.id === kit) << 4) | (SLOTS as readonly string[]).indexOf(slot));
@@ -154,12 +156,13 @@ function readTracks(r: Reader, raw: any): void {
   raw.tracks = [];
   for (let i = 0; i < nt; i++) {
     const tf = r.u8();
-    const t: any = { kind: tf & 1 ? 'synth' : 'drum', mute: !!(tf & 2), solo: !!(tf & 4), color: (tf >> 3) & 7 };
+    const t: any = { kind: tf & 1 ? 'synth' : tf & 128 ? 'slice' : 'drum', mute: !!(tf & 2), solo: !!(tf & 4), color: (tf >> 3) & 7 };
     t.name = r.str();
     if (tf & 1) {
       t.synth = { wave: r.u8(), cutoff: r.u8(), reso: r.u8(), env: r.u8(), attack: r.u8(), decay: r.u8(), sustain: r.u8(), release: r.u8() };
       t.note = r.u8();
     } else {
+      if (tf & 128) t.note = r.u8();
       if (tf & 64) t.sample = r.str();
       else {
         const b = r.u8();
@@ -177,12 +180,12 @@ function readTracks(r: Reader, raw: any): void {
 
 function writePatterns(w: Writer, p: Project): void {
   const used = p.patterns.map((pat, i) =>
-    p.tracks.some((t, ti) => (t.kind === 'synth' ? pat.notes[ti].length > 0 : pat.steps[ti].some((v) => v > 0))) ? 1 << i : 0);
+    p.tracks.some((t, ti) => (usesNotes(t.kind) ? pat.notes[ti].length > 0 : pat.steps[ti].some((v) => v > 0))) ? 1 << i : 0);
   w.u8(used.reduce((a, b) => a | b, 0));
   p.patterns.forEach((pat, i) => {
     if (!used[i]) return;
     p.tracks.forEach((t, ti) => {
-      if (t.kind === 'synth') {
+      if (usesNotes(t.kind)) {
         const notes = pat.notes[ti].slice(0, 255);
         w.u8(notes.length);
         for (const n of notes) { w.u8(n.s); w.u8(n.l); w.u8(n.p); w.u8(n.v); }
@@ -211,7 +214,7 @@ function readPatterns(r: Reader, raw: any, count: number): void {
       const steps = new Array(MAX_STEPS).fill(0);
       const notes: any[] = [];
       if (used & (1 << i)) {
-        if (raw.tracks[ti].kind === 'synth') {
+        if (raw.tracks[ti].kind !== 'drum') {
           const n = r.u8();
           for (let k = 0; k < n; k++) notes.push({ s: r.u8(), l: r.u8(), p: r.u8(), v: r.u8() });
         } else {
@@ -226,6 +229,74 @@ function readPatterns(r: Reader, raw: any, count: number): void {
       pat.notes.push(notes);
     }
     raw.patterns.push(pat);
+  }
+}
+
+// The Sound chunk holds everything added to tracks after the first release:
+// the bigger synth, sampler settings and effect racks. One record per track,
+// starting with a byte saying which parts follow, so a plain track costs one byte.
+const enum Part { Synth = 1, Sampler = 2, Rack = 4 }
+
+function soundParts(t: Track): number {
+  const s = t.synth;
+  const plain = synthExtras(s.wave) as Record<string, number | boolean>;
+  const synth = t.kind === 'synth' && Object.keys(plain).some((k) => (s as unknown as Record<string, number | boolean>)[k] !== plain[k]);
+  const sampler = t.kind !== 'synth' && (t.reverse || t.stretch !== 64 || t.slices.length > 0);
+  return (synth ? Part.Synth : 0) | (sampler ? Part.Sampler : 0) | (t.fx.length ? Part.Rack : 0);
+}
+
+function writeSound(w: Writer, p: Project): void {
+  for (const t of p.tracks) {
+    const parts = soundParts(t);
+    w.u8(parts);
+    if (parts & Part.Synth) {
+      const s = t.synth;
+      for (const v of [s.pos, s.wave2, s.pos2, s.semi2 + 24, s.fine2 + 50, s.mix, s.noise, s.uni, s.detune, s.spread,
+        s.lfoShape | (s.lfoSync ? 128 : 0), s.lfoRate, s.lfoAmt + 64, s.lfoDest, s.menvAttack, s.menvDecay, s.menvAmt + 64, s.menvDest]) w.u8(v);
+    }
+    if (parts & Part.Sampler) {
+      w.u8(t.reverse ? 1 : 0);
+      w.u8(t.stretch);
+      w.u8(t.slices.length);
+      for (const x of t.slices) { w.u8(x); w.u8(x >> 8); }
+    }
+    if (parts & Part.Rack) {
+      w.u8(t.fx.length);
+      for (const fx of t.fx) {
+        w.u8(INSERT_TYPES.indexOf(fx.type) | (fx.on ? 128 : 0));
+        for (let k = 0; k < 4; k++) w.u8(fx.p[k]);
+      }
+    }
+  }
+}
+
+function readSound(r: Reader, raw: any): void {
+  for (const t of raw.tracks) {
+    if (!r.more) return;
+    const parts = r.u8();
+    if (parts & Part.Synth) {
+      const s = (t.synth ??= {});
+      s.pos = r.u8(); s.wave2 = r.u8(); s.pos2 = r.u8(); s.semi2 = r.u8() - 24; s.fine2 = r.u8() - 50;
+      s.mix = r.u8(); s.noise = r.u8(); s.uni = r.u8(); s.detune = r.u8(); s.spread = r.u8();
+      const shape = r.u8();
+      s.lfoShape = shape & 127; s.lfoSync = !!(shape & 128);
+      s.lfoRate = r.u8(); s.lfoAmt = r.u8() - 64; s.lfoDest = r.u8();
+      s.menvAttack = r.u8(); s.menvDecay = r.u8(); s.menvAmt = r.u8() - 64; s.menvDest = r.u8();
+    }
+    if (parts & Part.Sampler) {
+      t.reverse = !!(r.u8() & 1);
+      t.stretch = r.u8();
+      t.slices = [];
+      for (let n = r.u8(); n > 0; n--) t.slices.push(r.u8() | (r.u8() << 8));
+    }
+    if (parts & Part.Rack) {
+      t.fx = [];
+      for (let n = r.u8(); n > 0; n--) {
+        const b = r.u8();
+        const fx = { type: INSERT_TYPES[b & 127], on: !!(b & 128), p: [r.u8(), r.u8(), r.u8(), r.u8()] };
+        if (fx.type) t.fx.push(fx); // an effect this version doesn't know is left out
+      }
+    }
   }
 }
 
@@ -305,6 +376,7 @@ export function packProject(p: Project): Uint8Array {
   part(Chunk.Tracks, writeTracks);
   part(Chunk.Patterns, writePatterns);
   if (!isDefaultArrangement(p)) part(Chunk.Timeline, writeTimeline);
+  if (p.tracks.some((t) => soundParts(t))) part(Chunk.Sound, writeSound);
   return w.bytes();
 }
 
@@ -338,6 +410,9 @@ export function unpackProject(bytes: Uint8Array): Project {
     } else if (tag === Chunk.Timeline) {
       if (!raw.tracks) throw new Error('timeline before tracks');
       readTimeline(c, raw);
+    } else if (tag === Chunk.Sound) {
+      if (!raw.tracks) throw new Error('sound before tracks');
+      readSound(c, raw);
     }
   }
   if (!raw.tracks || raw.bpm === undefined) throw new Error('incomplete');

@@ -320,7 +320,7 @@ export function padDown(t: number, vel = 110): void {
   const tr = app.project.tracks[t];
   if (!tr) return;
   void audio.resume();
-  if (tr.kind === 'synth') return noteDown(t, tr.note, vel);
+  if (tr.kind !== 'drum') return noteDown(t, tr.note, vel);
   audio.trigger(t, vel);
   flash(t, vel);
   if (!app.rec || !app.playing) return;
@@ -335,12 +335,12 @@ export function padDown(t: number, vel = 110): void {
 
 export function padUp(t: number): void {
   const tr = app.project.tracks[t];
-  if (tr?.kind === 'synth') noteUp(t, tr.note);
+  if (tr && tr.kind !== 'drum') noteUp(t, tr.note);
 }
 
 export function noteDown(t: number, pitch: number, vel = 100): void {
   const tr = app.project.tracks[t];
-  if (!tr || tr.kind !== 'synth') return;
+  if (!tr || tr.kind === 'drum') return;
   void audio.resume();
   pitch = clamp(pitch, 0, 127);
   audio.noteOn(t, pitch, vel);
@@ -380,13 +380,13 @@ export function auditionNote(t: number, pitch: number, vel = 100): void {
 
 const userBytes = new Map<string, UserSample>();
 
-function hashId(b: Uint8Array): string {
+export function hashId(b: Uint8Array): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < b.length; i++) h = Math.imul(h ^ b[i], 0x01000193);
   return `user/${(h >>> 0).toString(16).padStart(8, '0')}${(b.length & 0xffff).toString(16)}`;
 }
 
-async function registerSample(s: UserSample, persist: boolean): Promise<boolean> {
+export async function registerSample(s: UserSample, persist: boolean): Promise<boolean> {
   const ok = await audio.addSample(s.id, s.bytes.buffer.slice(s.bytes.byteOffset, s.bytes.byteOffset + s.bytes.byteLength) as ArrayBuffer);
   if (!ok) return false;
   userBytes.set(s.id, s);
@@ -408,7 +408,8 @@ export async function importSample(file: File, t: number): Promise<boolean> {
   }
   const tr = app.project.tracks[t];
   if (!tr) return false;
-  tr.kind = 'drum';
+  if (tr.kind === 'synth') tr.kind = 'drum';
+  tr.slices = [];
   tr.sample = id;
   tr.name = file.name.replace(/\.[^.]+$/, '').slice(0, 12).toUpperCase() || 'SAMPLE';
   audio.trigger(t, 110);
@@ -466,7 +467,7 @@ export function shareUrl(): string {
 
 /** How many tracks use samples that can't travel in a link. */
 export function customSampleCount(): number {
-  return app.project.tracks.filter((t) => t.kind === 'drum' && isUser(t.sample)).length;
+  return app.project.tracks.filter((t) => t.kind !== 'synth' && isUser(t.sample)).length;
 }
 
 /** Song view exports the timeline; pattern view exports the pattern on screen, once through. */
@@ -493,7 +494,7 @@ async function withBusy(label: string, job: (progress: (p: number) => Promise<vo
 
 async function loadAllSamples(p: Project): Promise<void> {
   await audio.init();
-  await Promise.all(p.tracks.filter((t) => t.kind === 'drum').map((t) => audio.ensure(t.sample)));
+  await Promise.all(p.tracks.filter((t) => t.kind !== 'synth').map((t) => audio.ensure(t.sample)));
 }
 
 export function exportWav(): Promise<void> {

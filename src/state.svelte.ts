@@ -1,7 +1,7 @@
 import { emptyProject, type Project } from './core/types';
 
-export type Tab = 'sound' | 'keys' | 'mix' | 'fx' | 'song';
-export type ModalName = 'share' | 'export' | 'help' | 'demos';
+export type Tab = 'sound' | 'keys' | 'rack' | 'mix' | 'fx' | 'song';
+export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets';
 
 export const THEMES = [
   { id: 'cream', name: 'Cream' },
@@ -13,6 +13,7 @@ export const THEMES = [
 export const TABS: { id: Tab; label: string }[] = [
   { id: 'sound', label: 'Sound' },
   { id: 'keys', label: 'Keys' },
+  { id: 'rack', label: 'Rack' },
   { id: 'mix', label: 'Mix' },
   { id: 'fx', label: 'FX' },
   { id: 'song', label: 'Song' },
@@ -39,6 +40,8 @@ export const app = $state({
   midi: { state: 'off' as 'off' | 'on' | 'denied' | 'unsupported', inputs: [] as string[] },
   /** Names of custom samples that are loaded, by id. */
   userSamples: {} as Record<string, string>,
+  /** A take being recorded from the microphone, and the track it will land on. */
+  recording: null as { track: number; seconds: number } | null,
   busy: null as { label: string; progress: number } | null,
   octave: 0, // computer-keyboard octave shift
   canUndo: false,

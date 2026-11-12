@@ -19,7 +19,7 @@ interface Manifest {
 }
 
 export function packProjectFile(project: Project, samples: UserSample[]): Uint8Array<ArrayBuffer> {
-  const used = new Set(project.tracks.filter((t) => t.kind === 'drum').map((t) => t.sample));
+  const used = new Set(project.tracks.filter((t) => t.kind !== 'synth').map((t) => t.sample));
   const files: Record<string, Uint8Array> = {};
   const manifest: Manifest = { format: 'loopwell', version: 2, project, samples: [] };
   samples.filter((s) => used.has(s.id)).forEach((s, i) => {

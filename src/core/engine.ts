@@ -5,9 +5,12 @@
 import { barStart, curveAt, songEnd } from './arrange';
 import { StepClock, samplesPerStep } from './clock';
 import { Compressor, DjFilter, PingPongDelay, Reverb, softClip } from './dsp/fx';
-import { SampleVoice, SynthVoice, type SampleData, type SynthPatch } from './dsp/voices';
+import { createInsert, type Insert } from './dsp/inserts';
+import { SampleVoice, SynthVoice, emptyPatch, type SampleData, type SynthPatch } from './dsp/voices';
+import { wavetable, type Wavetable } from './dsp/wavetable';
 import { PARAMS, paramIndex } from './params';
-import { DELAY_DIVS, MAX_TRACKS, emptyProject, type Clip, type Project, type Track } from './types';
+import { toFrame } from './slicer';
+import { DELAY_DIVS, LFO_DIVS, MAX_INSERTS, MAX_TRACKS, emptyProject, type Clip, type InsertFx, type Project, type Track } from './types';
 
 // Effective knob values live in flat arrays, so automation can move them
 // without touching the project. Indices follow PARAMS.
@@ -16,7 +19,10 @@ const P_VOL = paramIndex('vol'), P_PAN = paramIndex('pan'), P_FILTER = paramInde
   P_DLY = paramIndex('dly'), P_TUNE = paramIndex('tune'), P_DECAY = paramIndex('decay'),
   P_CUTOFF = paramIndex('cutoff'), P_RESO = paramIndex('reso'), P_ENV = paramIndex('env'),
   P_MASTER = paramIndex('master'), P_MFILTER = paramIndex('mfilter'), P_MRES = paramIndex('mres'),
-  P_REVLVL = paramIndex('revlvl'), P_REVSIZE = paramIndex('revsize'), P_DLYLVL = paramIndex('dlylvl'), P_DLYFB = paramIndex('dlyfb');
+  P_REVLVL = paramIndex('revlvl'), P_REVSIZE = paramIndex('revsize'), P_DLYLVL = paramIndex('dlylvl'), P_DLYFB = paramIndex('dlyfb'),
+  P_POS = paramIndex('pos'), P_POS2 = paramIndex('pos2'), P_MIX = paramIndex('mix'), P_NOISE = paramIndex('noise'),
+  P_DETUNE = paramIndex('detune'), P_SPREAD = paramIndex('spread'), P_LFORATE = paramIndex('lforate'), P_LFOAMT = paramIndex('lfoamt'),
+  P_MENVAMT = paramIndex('menvamt'), P_STRETCH = paramIndex('stretch');
 
 interface Curve {
   slot: number; // index into the value array
@@ -46,7 +52,11 @@ class Channel {
   synths: SynthVoice[] = [];
   filter: DjFilter;
   gl = -1; gr = 0; // current (smoothed) output gains; -1 = not set yet
-  patch: SynthPatch = { wave: 0, cutoff: 0.5, reso: 0, envAmt: 0, attack: 0.001, decayCoef: 0.999, sustain: 0.5, releaseCoef: 0.999 };
+  patch: SynthPatch = emptyPatch();
+  /** The effect rack: one slot per insert, in playing order. */
+  inserts: (Insert | null)[] = [];
+  kinds: string[] = [];
+  rack: InsertFx[] = [];
   constructor(sr: number) {
     for (let i = 0; i < SAMPLE_VOICES; i++) this.samples.push(new SampleVoice());
     for (let i = 0; i < SYNTH_VOICES; i++) this.synths.push(new SynthVoice(sr));
@@ -74,6 +84,12 @@ export class Engine {
   /** Solo exactly one track and skip the master compressor (stem export). */
   stem = -1;
   onStep: ((info: StepInfo) => void) | null = null;
+  /**
+   * Wavetables take tens of milliseconds to compute. Offline that is fine and they are
+   * built when first needed; the audio thread turns this off and is handed them ready-made.
+   */
+  buildTables = true;
+  private tables = new Map<number, Wavetable>();
 
   /** Per-track post-fader peaks since the last readMeters(). */
   readonly peaks = new Float32Array(MAX_TRACKS);
@@ -130,8 +146,27 @@ export class Engine {
     const nt = Math.min(p.tracks.length, MAX_TRACKS);
     for (let i = 0; i < nt; i++) {
       const s = p.tracks[i].synth;
-      const patch = this.ch[i].patch;
-      patch.wave = s.wave;
+      const c = this.ch[i];
+      const patch = c.patch;
+      patch.wave = s.wave < 4 ? s.wave : 4;
+      patch.table = s.wave < 4 ? null : this.table(s.wave - 4);
+      patch.wave2 = s.wave2 < 4 ? s.wave2 : 4;
+      patch.table2 = s.wave2 < 4 ? null : this.table(s.wave2 - 4);
+      patch.ratio2 = Math.pow(2, (s.semi2 + s.fine2 / 100) / 12);
+      patch.uni = s.uni;
+      patch.lfoShape = s.lfoShape;
+      patch.lfoDest = s.lfoDest;
+      patch.menvDest = s.menvDest;
+      patch.menvAttack = 0.001 * Math.pow(2000, s.menvAttack / 127);
+      patch.menvDecay = 0.02 * Math.pow(200, s.menvDecay / 127);
+      // keep each effect's state while its slot holds the same kind of effect
+      const rack = p.tracks[i].fx;
+      c.rack = rack;
+      for (let k = 0; k < MAX_INSERTS; k++) {
+        const type = rack[k]?.type;
+        if (!type) { c.inserts[k] = null; c.kinds[k] = ''; }
+        else if (c.kinds[k] !== type) { c.inserts[k] = createInsert(type, sr); c.kinds[k] = type; }
+      }
       patch.attack = 0.001 * Math.pow(2000, s.attack / 127);
       patch.decayCoef = Math.exp(-1 / ((0.02 * Math.pow(200, s.decay / 127) * sr) / 3));
       patch.sustain = s.sustain / 127;
@@ -169,6 +204,18 @@ export class Engine {
     patch.cutoff = v[o + P_CUTOFF] / 127;
     patch.reso = v[o + P_RESO] / 127;
     patch.envAmt = v[o + P_ENV] / 127;
+    patch.pos = v[o + P_POS] / 127;
+    patch.pos2 = v[o + P_POS2] / 127;
+    patch.mix = v[o + P_MIX] / 127;
+    patch.noise = v[o + P_NOISE] / 127;
+    patch.detune = (v[o + P_DETUNE] / 127) * 100;
+    patch.spread = v[o + P_SPREAD] / 127;
+    patch.lfoAmt = v[o + P_LFOAMT] / 64;
+    patch.menvAmt = v[o + P_MENVAMT] / 64;
+    const rate = v[o + P_LFORATE];
+    patch.lfoHz = this.project.tracks[t].synth.lfoSync
+      ? this.clock.bpm / (15 * LFO_DIVS[Math.round((rate / 127) * (LFO_DIVS.length - 1))])
+      : 0.05 * Math.pow(600, rate / 127);
   }
 
   /** Move the automated knobs to where their curves are at the current song position. */
@@ -183,6 +230,18 @@ export class Engine {
       this.val[c.slot] = curveAt(c.points, pos);
       if (c.track >= 0) this.patch(c.track);
     }
+  }
+
+  /** Hand over a ready-made wavetable. Until it arrives, an oscillator that wants it plays a sine. */
+  setTable(index: number, frames: Float32Array[][]): void {
+    this.tables.set(index, { frames });
+    this.setProject(this.project);
+  }
+
+  private table(index: number): Wavetable | null {
+    let t = this.tables.get(index);
+    if (!t && this.buildTables) { t = wavetable(index); this.tables.set(index, t); }
+    return t ?? null;
   }
 
   setSample(id: string, l: Float32Array, r?: Float32Array): void {
@@ -247,12 +306,19 @@ export class Engine {
     const t = this.project.tracks[track];
     if (!t) return;
     if (t.kind === 'drum') this.hit(track, t, vel);
+    else if (t.kind === 'slice') this.hit(track, t, vel, pitch ?? t.note);
     else this.noteOn(track, pitch ?? t.note, vel, this.sampleRate * 0.2);
   }
 
   noteOn(track: number, pitch: number, vel: number, gateFrames = Infinity): void {
     const c = this.ch[track];
-    if (!c || !this.project.tracks[track]) return;
+    const tr = this.project.tracks[track];
+    if (!c || !tr) return;
+    if (tr.kind !== 'synth') {
+      // on a sliced sample the "pitch" is the slice number, and it plays for as long as the note
+      if (tr.kind === 'slice') this.hit(track, tr, vel, pitch, gateFrames);
+      return;
+    }
     // re-use the voice already playing this pitch, else a free one, else the quietest
     const vs = c.synths;
     let same: SynthVoice | null = null, free: SynthVoice | null = null, quiet = vs[0];
@@ -271,10 +337,19 @@ export class Engine {
     for (const v of c.synths) if (v.active && v.held && v.pitch === pitch) v.release();
   }
 
-  private hit(track: number, t: Track, vel: number): void {
+  /** Start a sample voice. With `slice`, only that slice plays, and it cuts off whatever was sounding (like chopping on pads). */
+  private hit(track: number, t: Track, vel: number, slice = -1, gate = Infinity): void {
     const data = this.samples.get(t.sample);
     if (!data) return;
     const c = this.ch[track];
+    const len = data.l.length;
+    let from = 0, to = len;
+    if (slice >= 0 && t.slices.length) {
+      const i = slice % t.slices.length;
+      from = toFrame(t.slices[i], len);
+      to = i + 1 < t.slices.length ? toFrame(t.slices[i + 1], len) : len;
+      for (let k = 0; k < c.samples.length; k++) if (c.samples[k].active) c.samples[k].kill();
+    }
     let live = 0;
     let oldest: SampleVoice | null = null;
     let free: SampleVoice | null = null;
@@ -291,7 +366,9 @@ export class Engine {
     const g = vel / 127;
     const dk = this.val[track * NP + P_DECAY];
     const decay = dk >= 126.5 ? 1 : Math.exp(-1 / (0.012 * Math.pow(330, dk / 127) * this.sampleRate));
-    v.start(data, Math.pow(2, this.val[track * NP + P_TUNE] / 12), g * g, decay, this.age++);
+    const st = this.val[track * NP + P_STRETCH];
+    const stretch = st > 63.5 && st < 64.5 ? 1 : Math.pow(2, (st - 64) / 32);
+    v.start(data, Math.pow(2, this.val[track * NP + P_TUNE] / 12), g * g, decay, this.age++, from, to, t.reverse, stretch, gate);
   }
 
   /** One step of the timeline: every track plays whatever clip it is inside. */
@@ -442,6 +519,16 @@ export class Engine {
 
     for (let t = 0; t < nt; t++) {
       const tr = p.tracks[t], c = this.ch[t], o = t * NP;
+      const rack = c.rack;
+      for (let k = 0; k < rack.length; k++) {
+        const fx = rack[k], ins = c.inserts[k];
+        if (!ins || !fx.on) continue;
+        if (fx.type === 'duck') {
+          // knob 1 picks whose level does the ducking: 0 = this track, 1..8 = that track
+          const src = fx.p[0] > 0 && fx.p[0] <= nt ? this.ch[fx.p[0] - 1] : c;
+          ins.process(c.l, c.r, n, fx.p, src.l, src.r);
+        } else ins.process(c.l, c.r, n, fx.p);
+      }
       c.filter.process(c.l, c.r, n, val[o + P_FILTER] / 64, 0.25);
       const on = this.stem >= 0 ? this.stem === t : anySolo ? tr.solo : !tr.mute;
       const g = on ? volGain(val[o + P_VOL]) : 0;

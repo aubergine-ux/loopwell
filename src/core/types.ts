@@ -1,7 +1,11 @@
 // The project model. Every knob value is a small integer (mostly 0..127, like
 // MIDI CCs) so beats round-trip exactly through the share-link codec.
 
+import { INSERTS, INSERT_TYPES, type InsertType } from './dsp/inserts';
+import { MAX_UNISON, MOD_DESTS } from './dsp/voices';
+import { WAVETABLES } from './dsp/wavetable';
 import { PARAMS } from './params';
+import { MAX_SLICES } from './slicer';
 
 export const MAX_TRACKS = 8;
 export const NUM_PATTERNS = 8;
@@ -15,10 +19,35 @@ export const MAX_LANES = 32;
 export const MAX_POINTS = 512;
 export const MAX_EVENTS = 64;
 
-export type TrackKind = 'drum' | 'synth';
+/** drum: a one-shot sample on steps. synth: notes. slice: a chopped sample, played by notes whose pitch is the slice number. */
+export type TrackKind = 'drum' | 'synth' | 'slice';
+export const MAX_INSERTS = 5;
+/** Classic shapes, then one entry per wavetable. */
+export const NUM_WAVES = 4 + WAVETABLES.length;
+/** Tempo-synced LFO lengths, in 16th-note steps. */
+export const LFO_DIVS = [64, 32, 16, 8, 4, 2, 4 / 3, 1, 2 / 3, 0.5];
+export const LFO_DIV_LABELS = ['4 bars', '2 bars', '1 bar', '1/2', '1/4', '1/8', '1/8T', '1/16', '1/16T', '1/32'];
+export const LFO_SHAPES = ['Sine', 'Triangle', 'Saw', 'Square', 'Random'];
+
+/** An effect in a track's rack. `p` holds its four knobs. */
+export interface InsertFx {
+  type: InsertType;
+  on: boolean;
+  p: number[];
+}
 
 export interface SynthParams {
-  wave: number; // 0 saw, 1 square, 2 triangle, 3 sine
+  wave: number; // 0 saw, 1 square, 2 triangle, 3 sine, 4+ = a wavetable
+  pos: number; // where along the wavetable
+  wave2: number; // second oscillator
+  pos2: number;
+  semi2: number; // -24..24 semitones
+  fine2: number; // -50..50 cents
+  mix: number; // 0 = oscillator 1 only, 127 = oscillator 2 only
+  noise: number;
+  uni: number; // 1..5 stacked voices
+  detune: number; // spread of the stack, 127 = a semitone
+  spread: number; // stereo width of the stack
   cutoff: number;
   reso: number;
   env: number; // filter envelope amount
@@ -26,6 +55,15 @@ export interface SynthParams {
   decay: number;
   sustain: number;
   release: number;
+  lfoShape: number;
+  lfoRate: number; // free: 0.05..30 Hz. synced: an index into LFO_DIVS spread over 0..127
+  lfoSync: boolean;
+  lfoAmt: number; // -64..63
+  lfoDest: number; // index into MOD_DESTS
+  menvAttack: number;
+  menvDecay: number;
+  menvAmt: number; // -64..63
+  menvDest: number;
 }
 
 export interface Track {
@@ -35,6 +73,10 @@ export interface Track {
   sample: string; // "kit/slot" for built-ins, "user/<id>" for dropped files
   tune: number; // semitones, -24..24
   decay: number; // 127 = play the whole sample
+  reverse: boolean;
+  stretch: number; // 64 = off; otherwise the sample is made longer or shorter (0.25x..4x) without changing pitch
+  slices: number[]; // slice starts as 0..65535 fractions of the sample; used by slice tracks
+  fx: InsertFx[];
   synth: SynthParams;
   note: number; // MIDI pitch used when a synth track is toggled from the step grid / pads
   vol: number; // 100 = unity
@@ -139,14 +181,40 @@ export const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > h
 const int = (v: unknown, lo: number, hi: number, d: number) =>
   typeof v === 'number' && Number.isFinite(v) ? clamp(Math.round(v), lo, hi) : d;
 
-export function defaultSynth(): SynthParams {
-  return { wave: 0, cutoff: 70, reso: 30, env: 60, attack: 0, decay: 50, sustain: 40, release: 30 };
+/** The newer synth settings, at values that leave a sound exactly as the first synth made it. */
+export function synthExtras(wave: number) {
+  return {
+    pos: 0, wave2: 0, pos2: 0, semi2: 0, fine2: 0, mix: 0, noise: 0,
+    // saw and square always were two slightly detuned oscillators
+    uni: wave < 2 ? 2 : 1, detune: 9, spread: 0,
+    lfoShape: 0, lfoRate: 64, lfoSync: false, lfoAmt: 0, lfoDest: 0,
+    menvAttack: 0, menvDecay: 50, menvAmt: 0, menvDest: 0,
+  };
 }
+
+/** Fill in a synth from a few settings; everything else gets its neutral value. */
+export function synth(part: Partial<SynthParams> = {}): SynthParams {
+  const wave = part.wave ?? 0;
+  return { wave, cutoff: 70, reso: 30, env: 60, attack: 0, decay: 50, sustain: 40, release: 30, ...synthExtras(wave), ...part };
+}
+
+export function defaultSynth(): SynthParams {
+  return synth();
+}
+
+export function newInsert(type: InsertType): InsertFx {
+  return { type, on: true, p: INSERTS[type].knobs.map((k) => k.def) };
+}
+
+/** Does this kind of track keep its part as notes (rather than a row of steps)? */
+export const usesNotes = (kind: TrackKind) => kind !== 'drum';
+/** Does this kind of track play a sample? */
+export const usesSample = (kind: TrackKind) => kind !== 'synth';
 
 export function newTrack(kind: TrackKind, color: number, name: string, sample = 'boom/kick'): Track {
   return {
     name, kind, color, sample,
-    tune: 0, decay: 127,
+    tune: 0, decay: 127, reverse: false, stretch: 64, slices: [], fx: [],
     synth: defaultSynth(), note: 48,
     vol: 100, pan: 0, mute: false, solo: false,
     filter: 0, rev: 0, dly: 0,
@@ -183,9 +251,9 @@ export function defaultTracks(kit = 'boom'): Track[] {
   t[3].vol = 80;
   t[4].vol = 75;
   t[6].note = 36;
-  t[6].synth = { wave: 0, cutoff: 46, reso: 40, env: 70, attack: 0, decay: 46, sustain: 30, release: 20 };
+  t[6].synth = synth({ wave: 0, cutoff: 46, reso: 40, env: 70, attack: 0, decay: 46, sustain: 30, release: 20 });
   t[7].note = 60;
-  t[7].synth = { wave: 1, cutoff: 78, reso: 24, env: 40, attack: 2, decay: 60, sustain: 50, release: 50 };
+  t[7].synth = synth({ wave: 1, cutoff: 78, reso: 24, env: 40, attack: 2, decay: 60, sustain: 50, release: 50 });
   t[7].vol = 80;
   t[7].dly = 50;
   t[7].rev = 40;
@@ -232,9 +300,23 @@ export function sanitize(raw: any): Project {
   if (!raw || typeof raw !== 'object') return base;
   const rt: any[] = Array.isArray(raw.tracks) ? raw.tracks.slice(0, MAX_TRACKS) : [];
   const tracks: Track[] = rt.map((t, i) => {
-    const d = newTrack(t?.kind === 'synth' ? 'synth' : 'drum', i, `TRACK ${i + 1}`);
+    const d = newTrack(t?.kind === 'synth' || t?.kind === 'slice' ? t.kind : 'drum', i, `TRACK ${i + 1}`);
     const s = t?.synth ?? {};
     const ds = d.synth;
+    const wave = int(s.wave, 0, NUM_WAVES - 1, ds.wave);
+    const dx = synthExtras(wave); // what a synth saved before these settings existed should get
+    const slices: number[] = [];
+    for (const x of Array.isArray(t?.slices) ? t.slices.slice(0, MAX_SLICES) : []) {
+      const v = int(x, 0, 65535, -1);
+      if (v >= 0 && !slices.includes(v)) slices.push(v);
+    }
+    slices.sort((a, b) => a - b);
+    const fx: InsertFx[] = [];
+    for (const x of Array.isArray(t?.fx) ? t.fx.slice(0, MAX_INSERTS) : []) {
+      if (!INSERT_TYPES.includes(x?.type)) continue;
+      const knobs = INSERTS[x.type as InsertType].knobs;
+      fx.push({ type: x.type, on: x.on !== false, p: knobs.map((k, j) => int(x.p?.[j], 0, 127, k.def)) });
+    }
     return {
       name: typeof t?.name === 'string' ? t.name.slice(0, 16) : d.name,
       kind: d.kind,
@@ -242,8 +324,20 @@ export function sanitize(raw: any): Project {
       sample: typeof t?.sample === 'string' ? t.sample.slice(0, 80) : d.sample,
       tune: int(t?.tune, -24, 24, 0),
       decay: int(t?.decay, 0, 127, 127),
+      reverse: !!t?.reverse,
+      stretch: int(t?.stretch, 0, 127, 64),
+      slices, fx,
       synth: {
-        wave: int(s.wave, 0, 3, ds.wave), cutoff: int(s.cutoff, 0, 127, ds.cutoff),
+        wave, pos: int(s.pos, 0, 127, 0),
+        wave2: int(s.wave2, 0, NUM_WAVES - 1, 0), pos2: int(s.pos2, 0, 127, 0),
+        semi2: int(s.semi2, -24, 24, 0), fine2: int(s.fine2, -50, 50, 0),
+        mix: int(s.mix, 0, 127, 0), noise: int(s.noise, 0, 127, 0),
+        uni: int(s.uni, 1, MAX_UNISON, dx.uni), detune: int(s.detune, 0, 127, dx.detune), spread: int(s.spread, 0, 127, 0),
+        lfoShape: int(s.lfoShape, 0, LFO_SHAPES.length - 1, 0), lfoRate: int(s.lfoRate, 0, 127, 64), lfoSync: !!s.lfoSync,
+        lfoAmt: int(s.lfoAmt, -64, 63, 0), lfoDest: int(s.lfoDest, 0, MOD_DESTS.length - 1, 0),
+        menvAttack: int(s.menvAttack, 0, 127, 0), menvDecay: int(s.menvDecay, 0, 127, 50),
+        menvAmt: int(s.menvAmt, -64, 63, 0), menvDest: int(s.menvDest, 0, MOD_DESTS.length - 1, 0),
+        cutoff: int(s.cutoff, 0, 127, ds.cutoff),
         reso: int(s.reso, 0, 127, ds.reso), env: int(s.env, 0, 127, ds.env),
         attack: int(s.attack, 0, 127, ds.attack), decay: int(s.decay, 0, 127, ds.decay),
         sustain: int(s.sustain, 0, 127, ds.sustain), release: int(s.release, 0, 127, ds.release),

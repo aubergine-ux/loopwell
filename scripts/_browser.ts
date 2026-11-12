@@ -12,7 +12,9 @@ export async function launch(opts: { width?: number; height?: number; touch?: bo
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM ?? '/usr/bin/chromium',
     // pass autoplay: false to get the real-world policy, where sound needs a click first
-    args: opts.autoplay === false ? ['--autoplay-policy=document-user-activation-required'] : ['--autoplay-policy=no-user-gesture-required'],
+    // a made-up microphone, so recording can be tested without hardware or a permission prompt
+    args: [opts.autoplay === false ? '--autoplay-policy=document-user-activation-required' : '--autoplay-policy=no-user-gesture-required',
+      '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
   });
   const size = { width: opts.width ?? 1440, height: opts.height ?? 900 };
   const ctx = await browser.newContext({

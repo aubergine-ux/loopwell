@@ -21,8 +21,9 @@ const track = (id: string, label: string, min: number, max: number, def: number,
   get: (t: Track) => t[key] as number,
   set: (t: Track, v) => { (t[key] as number) = v; },
 });
-const synth = (id: string, label: string, def: number, key: keyof Track['synth']): ParamDef => ({
-  id, label, min: 0, max: 127, def, scope: 'track', kind: 'synth',
+type SynthKnob = { [K in keyof Track['synth']]: Track['synth'][K] extends number ? K : never }[keyof Track['synth']];
+const synth = (id: string, label: string, def: number, key: SynthKnob, min = 0, max = 127): ParamDef => ({
+  id, label, min, max, def, scope: 'track', kind: 'synth',
   get: (t: Track) => t.synth[key],
   set: (t: Track, v) => { t.synth[key] = v; },
 });
@@ -53,6 +54,16 @@ export const PARAMS: ParamDef[] = [
   fx('revsize', 'Reverb size', 0, 127, 70, 'revSize'),
   fx('dlylvl', 'Delay level', 0, 127, 90, 'dlyLevel'),
   fx('dlyfb', 'Delay feedback', 0, 127, 50, 'dlyFb'),
+  synth('pos', 'Osc 1 shape', 0, 'pos'),
+  synth('pos2', 'Osc 2 shape', 0, 'pos2'),
+  synth('mix', 'Osc mix', 0, 'mix'),
+  synth('noise', 'Noise', 0, 'noise'),
+  synth('detune', 'Detune', 9, 'detune'),
+  synth('spread', 'Width', 0, 'spread'),
+  synth('lforate', 'LFO rate', 64, 'lfoRate'),
+  synth('lfoamt', 'LFO amount', 0, 'lfoAmt', -64, 63),
+  synth('menvamt', 'Mod env amount', 0, 'menvAmt', -64, 63),
+  track('stretch', 'Stretch', 0, 127, 64, 'stretch', 'slice'),
 ];
 
 export const paramIndex = (id: string) => PARAMS.findIndex((d) => d.id === id);
@@ -62,5 +73,6 @@ export const paramDef = (id: string) => PARAMS.find((d) => d.id === id);
 export function paramsFor(p: Project, trackIdx: number): ParamDef[] {
   if (trackIdx < 0) return PARAMS.filter((d) => d.scope === 'master');
   const kind = p.tracks[trackIdx]?.kind;
-  return PARAMS.filter((d) => d.scope === 'track' && (!d.kind || d.kind === kind));
+  // a sliced sample has the drum knobs too
+  return PARAMS.filter((d) => d.scope === 'track' && (!d.kind || d.kind === kind || (d.kind === 'drum' && kind === 'slice')));
 }
