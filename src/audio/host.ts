@@ -35,6 +35,8 @@ export class AudioHost {
   private starting: Promise<void> | null = null;
   private queue: QueuedStep[] = [];
   private head: Playhead | null = null;
+  private headTime = 0;
+  private analyser: AnalyserNode | null = null;
   private pending = new Map<string, Promise<boolean>>();
   private backlog: ToWorklet[] = [];
   private project: Project | null = null;
@@ -50,7 +52,11 @@ export class AudioHost {
     await ctx.audioWorklet.addModule(workletUrl);
     const node = new AudioWorkletNode(ctx, 'loopwell', { numberOfInputs: 0, outputChannelCount: [2] });
     node.port.onmessage = (e: MessageEvent<FromWorklet>) => this.receive(e.data);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    node.connect(analyser);
     node.connect(ctx.destination);
+    this.analyser = analyser;
     this.ctx = ctx;
     this.node = node;
     for (const m of this.backlog) node.port.postMessage(m);
@@ -65,7 +71,9 @@ export class AudioHost {
   async resume(): Promise<boolean> {
     await this.init();
     if (this.ctx!.state !== 'running') {
-      try { await this.ctx!.resume(); } catch { /* still locked */ }
+      // Without a gesture the promise from resume() never settles, so don't wait on it forever.
+      const resumed = this.ctx!.resume().catch(() => {});
+      await Promise.race([resumed, new Promise((r) => setTimeout(r, 300))]);
     }
     return this.running;
   }
@@ -95,8 +103,30 @@ export class AudioHost {
   playhead(): Playhead | null {
     if (!this.ctx) return null;
     const t = this.ctx.currentTime;
-    while (this.queue.length && this.queue[0].time <= t) this.head = this.queue.shift()!;
+    while (this.queue.length && this.queue[0].time <= t) {
+      this.head = this.queue.shift()!;
+      this.headTime = this.head.time;
+    }
     return this.playing ? this.head : null;
+  }
+
+  /**
+   * The step closest to "now" as the listener hears it, for live recording.
+   * `wait` is how long until that step sounds (0 if it already has).
+   */
+  nearest(stepSeconds: number): { step: number; pattern: number; wait: number } | null {
+    const head = this.playhead();
+    if (!head || !this.ctx) return null;
+    const since = this.ctx.currentTime - this.headTime;
+    const ahead = Math.max(0, Math.round(since / stepSeconds));
+    return { step: head.step + ahead, pattern: head.pattern, wait: Math.max(0, ahead * stepSeconds - since) };
+  }
+
+  /** Waveform of the master output, for the scope. Returns false while nothing is connected. */
+  scope(into: Uint8Array<ArrayBuffer>): boolean {
+    if (!this.analyser) return false;
+    this.analyser.getByteTimeDomainData(into);
+    return true;
   }
 
   /** Send the latest project to the audio thread (coalesced to once per frame). */

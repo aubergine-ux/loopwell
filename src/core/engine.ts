@@ -152,8 +152,8 @@ export class Engine {
 
   /** Switch pattern: immediately when stopped, on the next bar line when playing. */
   setPattern(i: number): void {
-    if (this.playing && !this.activeChain()) this.queued = i === this.pattern ? -1 : i;
-    else if (!this.playing) this.pattern = i;
+    if (!this.playing) this.pattern = i;
+    else this.queued = i === this.pattern && !this.activeChain() ? -1 : i;
   }
 
   /** Play a drum hit or a one-shot synth note right away (pads, MIDI, previews). */
@@ -227,6 +227,7 @@ export class Engine {
           this.songPos = 0;
         }
         this.pattern = chain[this.songPos];
+        this.queued = -1;
       } else if (this.queued >= 0) {
         this.pattern = this.queued;
         this.queued = -1;

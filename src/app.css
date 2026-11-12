@@ -1,0 +1,141 @@
+/* Themes: every colour in the app comes from these variables. */
+:root {
+  --font: 'Space Grotesk Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --t0: #ff4f1a; --t1: #ff9a1f; --t2: #f0c22b; --t3: #35c47c;
+  --t4: #1fb7c6; --t5: #3f7cff; --t6: #8b5cf6; --t7: #ee5aa6;
+  --rec: #ff3b3b;
+}
+
+:root[data-theme='cream'] {
+  color-scheme: light;
+  --bg: #d8d2c6; --bg2: #c9c2b4;
+  --panel: #f0ebe1; --inset: #e3ddcf; --raise: #faf7f0;
+  --ink: #1d1b18; --dim: #8a8272; --line: #cdc6b6; --edge: #b9b1a0; --hi: #ffffff;
+  --well: #dbd4c4; --well-alt: #cfc7b5;
+  --accent: #ff4f1a; --accent-ink: #fff;
+  --lcd-bg: #1f2a22; --lcd-fg: #b9f7c8; --lcd-dim: #4d6a56;
+  --shadow: 0 30px 60px -20px rgb(60 45 20 / 0.45), 0 2px 0 #fff inset;
+}
+
+:root[data-theme='night'] {
+  color-scheme: dark;
+  --bg: #08090c; --bg2: #101218;
+  --panel: #17191f; --inset: #101216; --raise: #23262f;
+  --ink: #f2f3f7; --dim: #7c8294; --line: #2b2f3a; --edge: #07080a; --hi: #343946;
+  --well: #242832; --well-alt: #1c1f27;
+  --accent: #7dff6a; --accent-ink: #06210a;
+  --lcd-bg: #070b08; --lcd-fg: #7dff6a; --lcd-dim: #2c5a2c;
+  --t0: #ff5b2e; --t1: #ffa92e; --t2: #ffe14a; --t3: #4dff9d;
+  --t4: #36e6ff; --t5: #5b8dff; --t6: #a47bff; --t7: #ff6fc1;
+  --shadow: 0 30px 80px -20px #000, 0 1px 0 #2f3440 inset;
+}
+
+:root[data-theme='slate'] {
+  color-scheme: light;
+  --bg: #33363c; --bg2: #24262b;
+  --panel: #c9ccd2; --inset: #b9bdc4; --raise: #dfe1e6;
+  --ink: #17191d; --dim: #666b75; --line: #a5a9b2; --edge: #8a8f99; --hi: #f3f4f7;
+  --well: #a9adb6; --well-alt: #9a9fa9;
+  --accent: #e5352f; --accent-ink: #fff;
+  --lcd-bg: #0c2030; --lcd-fg: #8fdcff; --lcd-dim: #2d5873;
+  --t0: #e5352f; --t1: #f08a1c; --t2: #e3b81f; --t3: #23a868;
+  --t4: #1a9fb0; --t5: #2f66e0; --t6: #7446e0; --t7: #d9408f;
+  --shadow: 0 30px 70px -20px #000, 0 2px 0 #eef0f3 inset;
+}
+
+:root[data-theme='arcade'] {
+  color-scheme: dark;
+  --bg: #12061f; --bg2: #220b3a;
+  --panel: #2a1447; --inset: #1d0d33; --raise: #3a1d60;
+  --ink: #fdf0ff; --dim: #a586c9; --line: #47287a; --edge: #130723; --hi: #55318c;
+  --well: #3b2063; --well-alt: #311a54;
+  --accent: #ff3ea5; --accent-ink: #fff;
+  --lcd-bg: #0d0518; --lcd-fg: #5cf2ff; --lcd-dim: #2a5f7a;
+  --t0: #ff5470; --t1: #ff9e3d; --t2: #ffe45e; --t3: #5dffa0;
+  --t4: #5cf2ff; --t5: #6f8cff; --t6: #b57bff; --t7: #ff3ea5;
+  --shadow: 0 30px 80px -20px #000, 0 1px 0 #55318c inset;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--bg);
+  background-image: radial-gradient(120% 90% at 50% 0%, var(--bg) 30%, var(--bg2) 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Tiny engraved label used all over the panel. */
+.label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* Raised hardware button. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--raise);
+  box-shadow: 0 2px 0 var(--edge), inset 0 1px 0 var(--hi);
+  font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  transition: transform 60ms, box-shadow 60ms, background 120ms, color 120ms;
+  touch-action: manipulation;
+}
+.btn:active, .btn.down { transform: translateY(2px); box-shadow: 0 0 0 var(--edge), inset 0 1px 0 var(--hi); }
+.btn.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.sq { width: 32px; padding: 0; }
+.btn.ghost { background: transparent; box-shadow: none; border-color: transparent; color: var(--dim); }
+.btn.ghost:hover { color: var(--ink); background: var(--inset); }
+.btn.ghost:active { transform: none; }
+
+/* Segmented switch. */
+.seg {
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: var(--inset); border-radius: 10px;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
+}
+.seg button {
+  border: 0; background: transparent; border-radius: 7px;
+  height: 26px; min-width: 34px; padding: 0 9px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--dim);
+  transition: background 120ms, color 120ms;
+  touch-action: manipulation;
+}
+.seg button.on { background: var(--raise); color: var(--ink); box-shadow: 0 1px 0 var(--edge), inset 0 1px 0 var(--hi); }
+
+select.pick {
+  height: 30px; padding: 0 26px 0 10px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--raise);
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 13px, calc(100% - 9px) 13px;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
