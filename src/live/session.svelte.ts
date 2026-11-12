@@ -210,12 +210,19 @@ function onTransport(m: { playing: boolean; startAt: number; pattern: number; fr
     const late = serverNow() - m.startAt;
     if (late <= 30) { startPlaying(m.pattern, m.from); return; }
     // already under way: come in on the next step, at the place everyone else has reached
-    const done = stepsAfter(p, m.from, late, m.song) + 1;
-    const at = m.song ? (stepToSeconds(p, m.from + done) - stepToSeconds(p, m.from)) * 1000 : done * (15000 / p.bpm);
-    startTimer = window.setTimeout(() => {
-      if (m.song) startPlaying(m.pattern, m.from + done);
-      else startPlaying(m.pattern, 0, (m.from + done) % p.steps);
-    }, Math.max(0, at - late));
+    const join = (tries: number) => {
+      const behind = serverNow() - m.startAt;
+      const done = stepsAfter(p, m.from, behind, m.song) + 1;
+      const at = m.song ? (stepToSeconds(p, m.from + done) - stepToSeconds(p, m.from)) * 1000 : done * (15000 / p.bpm);
+      startTimer = window.setTimeout(() => {
+        if (!live.on) return;
+        // a busy page can wake up late; if that step has gone by, aim for the next one instead
+        if (serverNow() - m.startAt - at > 25 && tries > 0) { join(tries - 1); return; }
+        if (m.song) startPlaying(m.pattern, m.from + done);
+        else startPlaying(m.pattern, 0, (m.from + done) % p.steps);
+      }, Math.max(0, at - behind));
+    };
+    join(4);
   };
   const wait = m.startAt - serverNow();
   if (wait > 0) startTimer = window.setTimeout(begin, wait); else begin();
