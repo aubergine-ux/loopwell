@@ -8,6 +8,7 @@
     CATEGORIES, addTag, analyze, analyzeLoaded, entries, forgetEntry, foundTags, isFav, library, matches, removeTag, toggleFav, type Entry,
   } from '../library.svelte';
   import { app } from '../state.svelte';
+  import { dragSound, dragSoundEnd } from './dragsound';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
 
@@ -138,10 +139,11 @@
       </div>
       <div class="list" bind:this={list} role="listbox" aria-label="Sounds" tabindex="0">
         {#each shown as e (e.id)}
-          <div class="row" class:on={current === e.id} role="option" aria-selected={current === e.id}>
+          <div class="row" class:on={current === e.id} role="option" tabindex="-1" aria-selected={current === e.id} draggable="true"
+            ondragstart={(ev) => dragSound(ev, e.id)} ondragend={dragSoundEnd}>
             <button class="star" class:on={isFav(e.id)} onclick={() => toggleFav(e.id)} aria-pressed={isFav(e.id)}
               aria-label="{isFav(e.id) ? 'Remove' : 'Add'} {e.name} {isFav(e.id) ? 'from' : 'to'} favourites">★</button>
-            <button class="pick" onclick={() => select(e)} ondblclick={use} title="Click to hear it, double-click to use it">
+            <button class="pick" onclick={() => select(e)} ondblclick={use} title="Click to hear it, double-click to use it, or drag it onto a track">
               <b>{e.name}</b>
               <span class="src">{e.source}</span>
               <span class="tags">{[...foundTags(e.id), ...(library.tags[e.id] ?? [])].join(' · ')}</span>
@@ -158,6 +160,7 @@
       <div class="foot">
         <span>{shown.length} of {all.length} sounds</span>
         <label><input type="checkbox" bind:checked={autoplay} /> Play when selected</label>
+        <button class="btn" onclick={() => (app.modal = 'stems')} title="Split a song or loop into drums, bass, vocals and the rest"><Icon name="wave" size={13} />Stems…</button>
         <button class="btn" onclick={() => picker?.click()}><Icon name="open" size={13} />Import…</button>
         <input bind:this={picker} type="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.aiff,.aif,.m4a" multiple hidden onchange={pick} />
       </div>

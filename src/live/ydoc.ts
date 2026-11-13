@@ -100,11 +100,13 @@ export function toY(doc: Y.Doc, p: Project, trackIds: string[], origin: unknown 
     const root = doc.getMap<unknown>('p');
     for (const k of SETTINGS) if (root.get(k) !== p[k]) root.set(k, p[k]);
     syncMap(child(root, 'fx', () => new Y.Map()), p.fx as unknown as Json);
+    if (root.has('mastering') || p.mastering.on) syncMap(child(root, 'mastering', () => new Y.Map()), p.mastering as unknown as Json);
     const a = p.arr;
     syncMap(child(root, 'loop', () => new Y.Map()), { on: a.loopOn, start: a.loopStart, end: a.loopEnd });
     for (const k of ['tempo', 'sigs', 'markers'] as const) if (!same(root.get(k), a[k])) root.set(k, JSON.parse(JSON.stringify(a[k])));
     // groups are few and small, so the list is replaced whole; left out until a beat has one
     if ((root.has('buses') || p.buses.length) && !same(root.get('buses'), p.buses)) root.set('buses', JSON.parse(JSON.stringify(p.buses)));
+    if ((root.has('lyrics') || p.lyrics.length) && !same(root.get('lyrics'), p.lyrics)) root.set('lyrics', JSON.parse(JSON.stringify(p.lyrics)));
     const mlanes: Json = {};
     for (const l of a.lanes) if (l.track < 0) mlanes[l.param] = laneValue(l);
     syncMap(child(root, 'mlanes', () => new Y.Map()), mlanes);
@@ -131,6 +133,8 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
   for (const k of SETTINGS) project[k] = root.get(k);
   project.fx = (root.get('fx') as Y.Map<unknown> | undefined)?.toJSON() ?? {};
   project.buses = root.get('buses') ?? [];
+  project.lyrics = root.get('lyrics') ?? [];
+  project.mastering = (root.get('mastering') as Y.Map<unknown> | undefined)?.toJSON();
   const loop = ((root.get('loop') as Y.Map<unknown> | undefined)?.toJSON() ?? {}) as Json;
   const clips: Partial<Clip>[] = [], lanes: Json[] = [];
   const points = (v: any) => (Array.isArray(v?.pts) ? v.pts.map((pt: number[]) => ({ t: pt[0], v: pt[1] })) : []);
@@ -220,6 +224,8 @@ export function describeChange(before: Project, after: Project): string {
   if (before.scaleRoot !== after.scaleRoot || before.scaleType !== after.scaleType || before.scaleLock !== after.scaleLock) say('the key');
   if (!same(before.fx, after.fx)) say('master effects');
   if (!same(before.buses, after.buses)) say('groups');
+  if (!same(before.lyrics, after.lyrics)) say('lyrics');
+  if (!same(before.mastering, after.mastering)) say('mastering');
   if (after.tracks.length > before.tracks.length) say(`added ${after.tracks[after.tracks.length - 1].name}`);
   if (after.tracks.length < before.tracks.length) say('removed a track');
   const n = Math.min(before.tracks.length, after.tracks.length);

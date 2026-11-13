@@ -254,3 +254,183 @@ describe('groups and returns', () => {
     expect(p.tracks[0].bus).toBe(4);
   });
 });
+
+describe('mastering chain', () => {
+  const flat = { low: 64, mid: 64, high: 64, glue: 0, width: 64, gain: 64 };
+  const tone = (f: number, amp: number, n = SR) => Float32Array.from({ length: n }, (_, i) => Math.sin((2 * Math.PI * f * i) / SR) * amp);
+  const rms = (x: Float32Array, from = 0, to = x.length) => { let s = 0; for (let i = from; i < to; i++) s += x[i] * x[i]; return Math.sqrt(s / (to - from)); };
+  const peak = (x: Float32Array) => x.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  async function run(settings: object, l: Float32Array, r = l, compare = false, block = 128): Promise<[Float32Array, Float32Array, import('../src/core/dsp/master').MasterChain]> {
+    const { MasterChain } = await import('../src/core/dsp/master');
+    const m = new MasterChain(SR);
+    const a = l.slice(), b = r.slice();
+    for (let pos = 0; pos < a.length; pos += block) {
+      const n = Math.min(block, a.length - pos);
+      m.process(a.subarray(pos, pos + n), b.subarray(pos, pos + n), n, { ...flat, ...settings } as never, compare);
+    }
+    return [a, b, m];
+  }
+
+  it('with everything flat, a quiet mix comes through at the same level, a few ms late', async () => {
+    for (const f of [60, 400, 2500, 9000]) {
+      const x = tone(f, 0.2);
+      const [y] = await run({}, x);
+      expect(rms(y, 20000, 40000) / rms(x, 20000, 40000), `${f} Hz`).toBeCloseTo(1, 1);
+    }
+  });
+
+  it('the EQ lifts and cuts the lows, mids and highs by what the knobs say', async () => {
+    const db = (y: Float32Array, x: Float32Array) => 20 * Math.log10(rms(y, 20000, 40000) / rms(x, 20000, 40000));
+    const low = tone(50, 0.1), mid = tone(1400, 0.1), high = tone(12000, 0.1);
+    expect(db((await run({ low: 96 }, low))[0], low)).toBeCloseTo(6, 0);
+    expect(Math.abs(db((await run({ low: 96 }, high))[0], high))).toBeLessThan(0.5);
+    expect(db((await run({ mid: 32 }, mid))[0], mid)).toBeCloseTo(-6, 0);
+    // a shelf is still climbing an octave above its corner, so it is most of the 12 dB rather than all of it
+    const top = db((await run({ high: 127 }, high))[0], high);
+    expect(top).toBeGreaterThan(9.5);
+    expect(top).toBeLessThan(12.2);
+  });
+
+  it('the limiter never lets a sample past -1 dB, however hard it is driven', async () => {
+    let s = 3;
+    const noise = Float32Array.from({ length: SR }, () => { s = (s * 1103515245 + 12345) | 0; return (s / 2147483648) * 0.9; });
+    for (const gain of [64, 100, 127]) {
+      const kick = Float32Array.from({ length: SR }, (_, i) => Math.sin(i * 0.02) * Math.exp(-(i % 12000) / 2500) * 1.4 + noise[i] * 0.3);
+      const [l, r] = await run({ gain, glue: 60 }, kick, noise);
+      expect(peak(l), `gain ${gain}`).toBeLessThanOrEqual(Math.pow(10, -1 / 20) + 1e-6);
+      expect(peak(r)).toBeLessThanOrEqual(Math.pow(10, -1 / 20) + 1e-6);
+      expect(l.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  it('more gain means louder, up to what the limiter allows', async () => {
+    const x = tone(200, 0.15);
+    const a = integratedLoudness((await run({ gain: 64 }, x))[0], undefined, SR);
+    const b = integratedLoudness((await run({ gain: 96 }, x))[0], undefined, SR); // +12 dB
+    const c = integratedLoudness((await run({ gain: 127 }, x))[0], undefined, SR); // +24 dB asked, but it hits the ceiling
+    expect(b - a).toBeCloseTo(12, 0);
+    expect(c - a).toBeGreaterThan(12.5);
+    expect(c - a).toBeLessThan(20);
+  });
+
+  it('glue turns loud passages down and reports how much, band by band', async () => {
+    const loud = tone(80, 0.7), [y, , m] = await run({ glue: 127 }, loud);
+    expect(rms(y, 30000, 46000)).toBeLessThan(rms(loud, 30000, 46000) * 0.75);
+    expect(m.reduction[0]).toBeGreaterThan(3);
+    expect(m.reduction[2]).toBeLessThan(0.5); // nothing up top to compress
+    const quiet = tone(80, 0.01);
+    expect(rms((await run({ glue: 127 }, quiet))[0], 30000, 46000) / rms(quiet, 30000, 46000)).toBeCloseTo(Math.pow(10, 4 / 20), 1);
+  });
+
+  it('width: zero is mono, the middle is as mixed, the top is wider', async () => {
+    const l = tone(300, 0.2), r = tone(470, 0.2);
+    const diff = (a: Float32Array, b: Float32Array) => { let s = 0; for (let i = 20000; i < 40000; i++) s += (a[i] - b[i]) ** 2; return Math.sqrt(s / 20000); };
+    const [ml, mr] = await run({ width: 0 }, l, r);
+    expect(diff(ml, mr)).toBeLessThan(1e-6);
+    const [sl, sr] = await run({ width: 64 }, l, r);
+    const [wl, wr] = await run({ width: 127 }, l, r);
+    expect(diff(wl, wr) / diff(sl, sr)).toBeCloseTo(2, 1);
+  });
+
+  it('compare gives back the mix as it was, as loud as the mastered one', async () => {
+    const x = tone(300, 0.1, SR * 5);
+    const [mastered] = await run({ gain: 100, high: 100 }, x);
+    const [dry] = await run({ gain: 100, high: 100 }, x, x, true);
+    const from = SR * 4, to = SR * 5 - 1000;
+    // same loudness
+    expect(20 * Math.log10(rms(dry, from, to) / rms(mastered, from, to))).toBeCloseTo(0, 0);
+    // and the same waveform it went in as, only scaled
+    const g = rms(dry, from, to) / rms(x, from, to);
+    let err = 0;
+    for (let i = from; i < to; i++) err = Math.max(err, Math.abs(dry[i] - x[i] * g));
+    expect(err).toBeLessThan(0.01);
+  });
+
+  it('is the same whatever the block size', async () => {
+    const x = tone(120, 0.6), y = tone(3100, 0.5);
+    const [a] = await run({ gain: 90, glue: 80, width: 100, low: 80 }, x, y, false, 128);
+    for (const block of [1, 61, 2048]) {
+      const [b] = await run({ gain: 90, glue: 80, width: 100, low: 80 }, x, y, false, block);
+      let d = 0;
+      for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+      expect(d, `block ${block}`).toBeLessThan(1e-6);
+    }
+  });
+});
+
+describe('mastering in a project', () => {
+  const beat = () => {
+    const p = emptyProject();
+    for (let s = 0; s < 16; s += 4) p.patterns[0].steps[0][s] = 110;
+    for (let s = 2; s < 16; s += 4) p.patterns[0].steps[3][s] = 90;
+    p.patterns[0].notes[6] = [{ s: 0, l: 8, p: 36, v: 100 }, { s: 8, l: 8, p: 39, v: 100 }];
+    return p;
+  };
+  const bank = () => {
+    const hit = Float32Array.from({ length: 6000 }, (_, i) => Math.sin(i * 0.03) * Math.exp(-i / 1500));
+    const out: Record<string, { l: Float32Array }> = {};
+    for (const t of emptyProject().tracks) out[t.sample] = { l: hit };
+    return out;
+  };
+
+  it('finds the gain that puts a song on its loudness target, with nothing over the ceiling', async () => {
+    const { findMasterGain } = await import('../src/core/mastering');
+    const { renderProject } = await import('../src/core/render');
+    for (const target of [14, 9]) {
+      const p = beat();
+      p.mastering = { ...p.mastering, on: true, target };
+      const rep = await findMasterGain(p, bank(), SR, [0, 0]);
+      expect(Math.abs(rep.after + target), `target -${target}: got ${rep.after.toFixed(2)}`).toBeLessThan(0.6);
+      expect(rep.short).toBe(false);
+      expect(rep.peak).toBeLessThanOrEqual(Math.pow(10, -1 / 20) + 1e-6);
+      // and a render with that gain really is that loud
+      p.mastering.gain = rep.gain;
+      const r = await renderProject(p, bank(), { sampleRate: SR, chain: [0, 0], maxTail: 2 });
+      expect(Math.abs(integratedLoudness(r.l, r.r, SR) + target)).toBeLessThan(0.6);
+    }
+  });
+
+  it('says so when a song can\'t be made as loud as asked, and copes with silence', async () => {
+    const { findMasterGain } = await import('../src/core/mastering');
+    const p = beat();
+    p.master = 4; // a very quiet mix, and the loudest target
+    p.mastering = { ...p.mastering, on: true, target: 8 };
+    const rep = await findMasterGain(p, bank(), SR, [0]);
+    expect(rep.gain).toBe(127);
+    expect(rep.short).toBe(true);
+    const empty = emptyProject();
+    empty.mastering.on = true;
+    const none = await findMasterGain(empty, bank(), SR, [0]);
+    expect(none.after).toBe(-70);
+    expect(Number.isFinite(none.gain)).toBe(true);
+  });
+
+  it('is off unless switched on, travels in a link, and older files get it switched off', async () => {
+    const { renderProject } = await import('../src/core/render');
+    const { defaultMastering } = await import('../src/core/types');
+    const p = beat();
+    const off = await renderProject(p, bank(), { sampleRate: SR, chain: [0], maxTail: 1 });
+    p.mastering.gain = 120; // settings of a chain that is off change nothing
+    const still = await renderProject(p, bank(), { sampleRate: SR, chain: [0], maxTail: 1 });
+    expect(still.l).toEqual(off.l);
+    const bare = encodeBeat(emptyProject()).length;
+    p.mastering = { on: true, low: 1, mid: 127, high: 3, glue: 99, width: 0, gain: 100, target: 9 };
+    expect(plain(decodeBeat(encodeBeat(p))!)).toEqual(plain(p));
+    expect(encodeBeat(emptyProject()).length).toBe(bare);
+    const old: any = JSON.parse(JSON.stringify(emptyProject()));
+    delete old.mastering;
+    expect(sanitize(old).mastering).toEqual(defaultMastering());
+    const junk: any = JSON.parse(JSON.stringify(emptyProject()));
+    junk.mastering = { on: 'yes', low: 999, target: -5, gain: 'x' };
+    expect(sanitize(junk).mastering).toEqual({ ...defaultMastering(), on: true, low: 127, target: 0 });
+  });
+
+  it('every preset is in range and names a target that is offered', async () => {
+    const { MASTER_PRESETS, MASTER_TARGETS } = await import('../src/core/mastering');
+    expect(MASTER_PRESETS.map((x) => x.id)).toEqual(['streaming', 'trap', 'house', 'boombap', 'lofi', 'drill']);
+    for (const pr of MASTER_PRESETS) {
+      for (const v of [pr.set.low, pr.set.mid, pr.set.high, pr.set.glue, pr.set.width]) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(127); }
+      expect(MASTER_TARGETS.some((t) => t.lufs === pr.set.target), pr.name).toBe(true);
+    }
+  });
+});

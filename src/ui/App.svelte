@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { boot, handleFiles, play, projectChanged } from '../actions.svelte';
+  import { boot, handleFiles, play, projectChanged, useSample } from '../actions.svelte';
   import { audio } from '../audio/host';
   import { autoConnectMidi } from '../audio/midi-in';
   import type { Project } from '../core/types';
@@ -9,6 +9,7 @@
   import { app, TABS } from '../state.svelte';
   import CommunityModal from './CommunityModal.svelte';
   import DemosModal from './DemosModal.svelte';
+  import { SOUND_TYPE } from './dragsound';
   import ExportModal from './ExportModal.svelte';
   import { initLibrary } from '../projects.svelte';
   import FxPanel from './FxPanel.svelte';
@@ -19,6 +20,8 @@
   import JoinModal from './JoinModal.svelte';
   import LiveCursors from './LiveCursors.svelte';
   import LivePanel from './LivePanel.svelte';
+  import LyricsPanel from './LyricsPanel.svelte';
+  import MasterPanel from './MasterPanel.svelte';
   import Icon from './Icon.svelte';
   import MixPanel from './MixPanel.svelte';
   import PerformView from './PerformView.svelte';
@@ -55,11 +58,12 @@
   let dropping = $state(false);
   let dragDepth = 0;
 
-  const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files') || !!e.dataTransfer?.types.includes(SOUND_TYPE);
   function dragEnter(e: DragEvent): void {
     if (!hasFiles(e)) return;
     dragDepth++;
-    dropping = true;
+    // the "drop a file" screen is for files from outside; a sound dragged within Loopwell just lands on a track
+    dropping = !!e.dataTransfer?.types.includes('Files');
   }
   function dragLeave(): void {
     if (dragDepth > 0 && --dragDepth === 0) dropping = false;
@@ -72,6 +76,9 @@
     // dropping on a track row or pad targets that track
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-row],[data-pad]');
     const track = el ? +(el.dataset.row ?? el.dataset.pad)! : app.sel;
+    // a sound dragged from inside Loopwell (a stem, say) rather than a file from outside
+    const sound = e.dataTransfer?.getData(SOUND_TYPE);
+    if (sound) { if (track < app.project.tracks.length) { app.sel = track; useSample(track, sound); app.modal = null; } return; }
     void handleFiles([...(e.dataTransfer?.files ?? [])], track);
   }
 
@@ -125,6 +132,8 @@
           {:else if app.tab === 'rack'}<RackPanel />
           {:else if app.tab === 'mix'}<MixPanel />
           {:else if app.tab === 'fx'}<FxPanel />
+          {:else if app.tab === 'lyrics'}<LyricsPanel />
+          {:else if app.tab === 'master'}<MasterPanel />
           {:else if app.tab === 'live' && live.on}<LivePanel />
           {:else}<SongPanel />{/if}
         </div>
@@ -157,6 +166,7 @@
 {:else if app.modal === 'samples'}<SampleBrowser />
 {:else if app.modal === 'midi'}<MidiModal />
 {:else if app.modal === 'history'}<HistoryModal />
+{:else if app.modal === 'stems'}{#await import('./StemsModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'palette'}<PaletteModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 

@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { DRIVE_SHAPES, INSERTS, INSERT_TYPES, type InsertType } from '../core/dsp/inserts';
+  import { DRIVE_SHAPES, INSERTS, INSERT_TYPES, VOCAL_INSERTS, type InsertType } from '../core/dsp/inserts';
+  import { VOCAL_CHAINS } from '../core/vocalchains';
+  import { NOTE_NAMES, SCALES } from '../core/scales';
   import { MAX_INSERTS, type InsertFx } from '../core/types';
-  import { addInsert, moveInsert, removeInsert } from '../sound.svelte';
+  import { addInsert, applyVocalChain, moveInsert, removeInsert } from '../sound.svelte';
   import { app } from '../state.svelte';
   import Icon from './Icon.svelte';
   import Knob from './Knob.svelte';
@@ -23,8 +25,30 @@
     if (fx.type === 'eq' && k < 3) return (v) => `${v >= 64 ? '+' : ''}${(((v - 64) / 63) * 15).toFixed(1)}dB`;
     if (fx.type === 'eq') return (v) => `${Math.round(200 * Math.pow(30, v / 127))}Hz`;
     if (fx.type === 'crush' && k === 0) return (v) => `${(16 - (v / 127) * 14).toFixed(1)}bit`;
+    if (fx.type === 'tune' && k === 0) return (v) => (v >= 126.5 ? 'HARD' : `${Math.round(300 * Math.pow(0.004 / 0.3, v / 127))}ms`);
+    if (fx.type === 'tune' && k === 1) return (v) => `${Math.round((v / 127) * 100)}%`;
+    if (fx.type === 'tune' && k === 2) return (v) => (v >= 64 ? 'ANY NOTE' : 'SONG KEY');
+    if ((fx.type === 'tune' && k === 3) || (fx.type === 'formant' && k === 0)) {
+      const span = fx.type === 'tune' ? 6 : 12;
+      return (v) => { const st = ((v - 64) / 64) * span; return `${st >= 0 ? '+' : ''}${st.toFixed(1)}`; };
+    }
+    if (fx.type === 'formant' && k === 1) return (v) => { const st = Math.round(((v - 64) / 64) * 12); return `${st >= 0 ? '+' : ''}${st}st`; };
+    if (fx.type === 'harm' && k < 2) return (v) => { const st = Math.round(((v - 64) / 64) * 7); return st ? `${st > 0 ? '+' : ''}${st} step${Math.abs(st) === 1 ? '' : 's'}` : 'OFF'; };
+    if (fx.type === 'comp' && k === 0) return (v) => `${-Math.round((v / 127) * 48)}dB`;
+    if (fx.type === 'comp' && k === 1) return (v) => `${(1 + (v / 127) * 19).toFixed(1)}:1`;
+    if (fx.type === 'comp' && k === 2) return (v) => `${(0.5 + (v / 127) * 60).toFixed(v < 20 ? 1 : 0)}ms`;
+    if (fx.type === 'comp' && k === 3) return (v) => `+${Math.round((v / 127) * 24)}dB`;
+    if (fx.type === 'deess' && k === 0) return (v) => `${(3 * Math.pow(4, v / 127)).toFixed(1)}kHz`;
+    if (fx.type === 'deess' && k === 1) return (v) => `${-Math.round((v / 127) * 48)}dB`;
     return undefined;
   }
+  const VOCAL_TIPS: Partial<Record<InsertType, string>> = {
+    tune: 'Pitch correction: pulls each note onto the nearest note of the song\'s key. Slow is invisible, fast is the hard, stepped sound.',
+    harm: 'Harmony: adds one or two voices above or below, in key, and can double the voice left and right.',
+    formant: 'Formant: makes the voice sound bigger or smaller without changing its notes, or changes its notes without the chipmunk sound.',
+    comp: 'Compressor: evens out loud and quiet words so every one of them is heard.',
+    deess: 'De-esser: turns down harsh "s" and "t" sounds, and nothing else.',
+  };
   const maxOf = (fx: InsertFx, k: number) => (fx.type === 'duck' && k === 0 ? p.tracks.length : 127);
   const source = (fx: InsertFx) => (fx.p[0] > 0 && p.tracks[fx.p[0] - 1] ? p.tracks[fx.p[0] - 1].name : 'itself');
 
@@ -54,10 +78,24 @@
       </div>
     {/if}
     <span class="label">{name} effects</span>
-    {#each INSERT_TYPES as type}
+    {#each INSERT_TYPES.filter((x) => !VOCAL_INSERTS.includes(x)) as type}
       <button class="btn ghost" disabled={rack.length >= MAX_INSERTS} onclick={() => addInsert(target, type as InsertType)}
         aria-label="Add {INSERTS[type].name}"><Icon name="plus" size={12} />{INSERTS[type].name}</button>
     {/each}
+  </div>
+  <div class="bar">
+    <span class="label">For a voice</span>
+    {#each VOCAL_INSERTS as type}
+      <button class="btn ghost" disabled={rack.length >= MAX_INSERTS} onclick={() => addInsert(target, type)}
+        aria-label="Add {INSERTS[type].name}" title={VOCAL_TIPS[type]}><Icon name="plus" size={12} />{INSERTS[type].name}</button>
+    {/each}
+    {#if !bus}
+      <select class="pick chain" value="" onchange={(e) => { if (e.currentTarget.value) applyVocalChain(app.sel, e.currentTarget.value); e.currentTarget.value = ''; }}
+        aria-label="Vocal chain" title="A whole chain of effects for a vocal in one go. It replaces what is in this track's rack.">
+        <option value="">Vocal chain…</option>
+        {#each VOCAL_CHAINS as c}<option value={c.id} title={c.blurb}>{c.name}</option>{/each}
+      </select>
+    {/if}
   </div>
   {#if !rack.length}
     <p class="empty">No effects on this {bus ? 'group' : 'track'} yet. Add an EQ, drive, chorus, crusher or a sidechain; the sound runs through them from left to right, and you can drag them into a different order.</p>
@@ -76,10 +114,11 @@
           </header>
           <div class="k">
             {#each INSERTS[fx.type].knobs as knob, k}
-              <Knob bind:value={fx.p[k]} max={maxOf(fx, k)} def={knob.def} label={knob.label} size={40} format={format(fx, k)} {color} />
+              {#if knob.label !== '—'}<Knob bind:value={fx.p[k]} max={maxOf(fx, k)} def={knob.def} label={knob.label} size={40} format={format(fx, k)} {color} />{/if}
             {/each}
           </div>
           {#if fx.type === 'duck'}<small>ducks when {source(fx)} plays</small>{/if}
+          {#if fx.type === 'tune' || fx.type === 'harm'}<small>in {NOTE_NAMES[p.scaleRoot]} {SCALES[p.scaleType].name.toLowerCase()}, about 30 ms late</small>{/if}
         </div>
       {/each}
     </div>
@@ -91,6 +130,7 @@
   .bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .bar .label { margin-right: 8px; }
   .bar .seg { margin-right: 8px; }
+  .chain { height: 28px; font-size: 10px; margin-left: 6px; }
   .bar .seg button { min-width: 0; padding: 0 8px; font-size: 10px; }
   .bar .btn { height: 28px; padding: 0 8px; font-size: 10px; gap: 3px; }
   .empty { margin: 6px 0; max-width: 560px; font-size: 13px; line-height: 1.45; color: var(--dim); }

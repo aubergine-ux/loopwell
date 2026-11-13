@@ -432,7 +432,11 @@ describe('sound settings in links and files', () => {
     const p = emptyProject();
     p.tracks[0].kind = 'slice'; p.tracks[0].slices = [0, 1234, 40000, 65535]; p.tracks[0].reverse = true; p.tracks[0].stretch = 20; p.tracks[0].note = 3;
     p.tracks[1].stretch = 100;
-    p.tracks[2].fx = INSERT_TYPES.map((t, i) => ({ type: t, on: i % 2 === 0, p: [i, 127 - i, 64 + i, 3 * i] }));
+    // one of every effect; a rack holds five, so they go on two tracks
+    const every = INSERT_TYPES.map((t, i) => ({ type: t, on: i % 2 === 0, p: [i, 127 - i, 64 + i, 3 * i] }));
+    p.tracks[2].fx = every.slice(0, 5);
+    p.tracks[3].fx = every.slice(5, 10);
+    expect(every.length).toBe(10);
     p.tracks[6].synth = synth({ wave: 11, pos: 99, wave2: 4, pos2: 5, semi2: -24, fine2: 50, mix: 127, noise: 3, uni: 5, detune: 127, spread: 1,
       lfoShape: 4, lfoRate: 1, lfoSync: true, lfoAmt: -64, lfoDest: 10, menvAttack: 127, menvDecay: 0, menvAmt: 63, menvDest: 9 });
     p.patterns[2].notes[0] = [{ s: 3, l: 2, p: 3, v: 90 }];

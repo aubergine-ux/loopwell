@@ -16,6 +16,7 @@ import {
 } from './core/types';
 import { CODECS, encodeAudio, type Codec } from './core/encode';
 import { normalize, type LoudnessTarget } from './core/loudness';
+import { MASTER_PRESETS, findMasterGain, type MasterReport } from './core/mastering';
 import { encodeWav } from './core/wav';
 import { applyPrefs, prefs } from './prefs.svelte';
 import { app, THEMES } from './state.svelte';
@@ -655,6 +656,35 @@ async function withBusy(label: string, job: (progress: (p: number) => Promise<vo
 async function loadAllSamples(p: Project): Promise<void> {
   await audio.init();
   await Promise.all(p.tracks.filter((t) => usesSample(t.kind)).map((t) => audio.ensure(t.sample)));
+}
+
+/** What the mastering assistant found the last time it ran. */
+export const mastered = $state({ report: null as MasterReport | null });
+
+/** The mastering assistant: play the song through the chain, measure it, and set the gain that lands it on its loudness target. */
+export function autoMaster(): Promise<void> {
+  return withBusy('Measuring the song', async (progress) => {
+    const p = snapshot();
+    await loadAllSamples(p);
+    const rep = await findMasterGain(p, audio.bank, audio.sampleRate, exportChain(), progress);
+    mastered.report = rep;
+    if (rep.after <= -69) { toast('There is nothing playing to measure yet.'); return; }
+    checkpoint();
+    app.project.mastering.on = true;
+    app.project.mastering.gain = rep.gain;
+    toast(rep.short
+      ? `As loud as it will go: ${rep.after.toFixed(1)} LUFS, short of the −${p.mastering.target} asked for. Turn the mix up, or add more glue.`
+      : `Mastered to ${rep.after.toFixed(1)} LUFS (it was ${rep.before.toFixed(1)}), with peaks at ${(20 * Math.log10(Math.max(rep.peak, 1e-6))).toFixed(1)} dB.`);
+  });
+}
+
+/** Set the mastering chain up for a kind of music. The gain is left for the assistant to find. */
+export function useMasterPreset(id: string): void {
+  const preset = MASTER_PRESETS.find((x) => x.id === id);
+  if (!preset) return;
+  checkpoint();
+  Object.assign(app.project.mastering, preset.set, { on: true });
+  mastered.report = null;
 }
 
 export type AudioFormat = 'wav' | Codec;

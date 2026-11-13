@@ -8,18 +8,18 @@
 //   1  beats: tracks, four patterns and a chain of patterns
 //   2  songs: a list of tagged chunks (settings, tracks, patterns, timeline).
 //      Readers skip chunks and trailing bytes they don't know, so later
-//      additions don't need a new version. Added since: Sound (2.0), Creative, Instruments and Mix (2.1).
+//      additions don't need a new version. Added since: Sound (2.0), Creative, Instruments, Mix, Lyrics and Master (2.1).
 
 import { deflateSync, inflateSync } from 'fflate';
 import { KITS, SLOTS, isBuiltin } from './kits';
 import { isDefaultArrangement } from './arrange';
 import { PARAMS } from './params';
 import { INSERT_TYPES } from './dsp/inserts';
-import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, newTrack, sanitize, synthExtras, usesNotes, usesSample, type Clip, type Project, type Track } from './types';
+import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, defaultMastering, newTrack, sanitize, synthExtras, usesNotes, usesSample, type Clip, type Project, type Track } from './types';
 
 const VERSION = 2;
 const V1_PATTERNS = 4;
-const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7, Mix = 8 }
+const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7, Mix = 8, Lyrics = 9, Master = 10 }
 const ALL_TRACKS = 255;
 export const HASH_KEY = 'b';
 
@@ -456,6 +456,32 @@ function readMix(r: Reader, raw: any): void {
   for (const t of raw.tracks) if (r.more) t.bus = r.u8();
 }
 
+// The Master chunk: the mastering chain's settings, when it has been touched.
+const MASTER_KEYS = ['low', 'mid', 'high', 'glue', 'width', 'gain', 'target'] as const;
+
+function writeMaster(w: Writer, p: Project): void {
+  w.u8(p.mastering.on ? 1 : 0);
+  for (const k of MASTER_KEYS) w.u8(p.mastering[k]);
+}
+
+function readMaster(r: Reader, raw: any): void {
+  raw.mastering = { on: !!(r.u8() & 1) };
+  for (const k of MASTER_KEYS) if (r.more) raw.mastering[k] = r.u8();
+}
+
+// The Lyrics chunk: each line as how many steps after the one before it starts, and its words.
+function writeLyrics(w: Writer, p: Project): void {
+  w.vu(p.lyrics.length);
+  let last = 0;
+  for (const l of p.lyrics) { w.vu(l.at - last); w.str(l.text); last = l.at; }
+}
+
+function readLyrics(r: Reader, raw: any): void {
+  raw.lyrics = [];
+  let at = 0;
+  for (let n = r.vu(); n > 0; n--) { at += r.vu(); raw.lyrics.push({ at, text: r.str() }); }
+}
+
 // The Instruments chunk: which tracks are an 808 or a drum synth, and their knobs.
 const enum Inst { None = 0, Bass = 1, Drum = 2 }
 
@@ -504,6 +530,8 @@ export function packProject(p: Project): Uint8Array {
   if (p.tracks.some((t) => soundParts(t))) part(Chunk.Sound, writeSound);
   if (hasCreative(p)) part(Chunk.Creative, writeCreative);
   if (hasMix(p)) part(Chunk.Mix, writeMix);
+  if (p.lyrics.length) part(Chunk.Lyrics, writeLyrics);
+  if (JSON.stringify(p.mastering) !== JSON.stringify(defaultMastering())) part(Chunk.Master, writeMaster);
   // last, because it changes what kind a track is and the patterns are read by kind
   if (p.tracks.some((t) => t.kind === 'bass' || t.kind === 'dsyn')) part(Chunk.Instruments, writeInstruments);
   return w.bytes();
@@ -542,7 +570,9 @@ export function unpackProject(bytes: Uint8Array): Project {
     } else if (tag === Chunk.Sound) {
       if (!raw.tracks) throw new Error('sound before tracks');
       readSound(c, raw);
-    } else if (tag === Chunk.Mix) {
+    } else if (tag === Chunk.Lyrics) readLyrics(c, raw);
+    else if (tag === Chunk.Master) readMaster(c, raw);
+    else if (tag === Chunk.Mix) {
       if (!raw.tracks || !raw.fx) throw new Error('mix before tracks');
       readMix(c, raw);
     } else if (tag === Chunk.Instruments) {

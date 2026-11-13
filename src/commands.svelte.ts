@@ -3,7 +3,7 @@
 // never disagree, and any command can be given a different key.
 
 import {
-  addTrack, clearPattern, clearTrack, cycleTheme, exportAudio, exportMidiFile, exportStems, redo, removeTrack, saveProjectFile, selectPattern,
+  addTrack, autoMaster, clearPattern, clearTrack, cycleTheme, exportAudio, exportMidiFile, exportStems, redo, removeTrack, saveProjectFile, selectPattern,
   setSteps, setTheme, setView, tapTempo, toast, togglePlay, undo, useKit, useSample,
 } from './actions.svelte';
 import { applyEuclid, randomizePattern, randomizeSound, randomizeTrack } from './creative.svelte';
@@ -119,9 +119,11 @@ export const COMMANDS: Command[] = [
   { id: 'save-version', title: 'Save a version of this beat', group: 'Loopwell', keys: 'Mod+KeyS', words: 'snapshot', run: () => void saveVersion() },
   { id: 'share', title: 'Share this beat as a link', group: 'Loopwell', run: open('share') },
   { id: 'sounds', title: 'Browse sounds', group: 'Loopwell', words: 'samples library', run: open('samples') },
+  { id: 'stems', title: 'Split a song into stems: drums, bass, vocals, other', group: 'Loopwell', words: 'separate separation demucs acapella instrumental', run: open('stems') },
   { id: 'presets', title: 'Synth presets', group: 'Loopwell', run: open('presets') },
   { id: 'midi', title: 'MIDI controllers and mappings', group: 'Loopwell', run: open('midi') },
   { id: 'community', title: 'Community: gallery, cloud saves, sample packs', group: 'Loopwell', run: open('community') },
+  { id: 'master', title: 'Master the song: set its loudness', group: 'Export', words: 'mastering limiter lufs loud', run: () => { app.perform = app.stage = false; app.tab = 'master'; void autoMaster(); } },
   { id: 'export', title: 'Export…', group: 'Export', run: open('export') },
   { id: 'export-wav', title: 'Export WAV', group: 'Export', run: () => void exportAudio('wav') },
   { id: 'export-mp3', title: 'Export MP3', group: 'Export', run: () => void exportAudio('mp3', 'stream') },

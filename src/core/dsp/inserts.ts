@@ -1,8 +1,11 @@
 // Per-track insert effects. Each one processes a stereo block in place and
 // takes its settings as four knob values (0..127).
 
-export const INSERT_TYPES = ['eq', 'drive', 'chorus', 'crush', 'duck'] as const;
+// The order is part of the share-link format: new effects go on the end.
+export const INSERT_TYPES = ['eq', 'drive', 'chorus', 'crush', 'duck', 'tune', 'harm', 'formant', 'comp', 'deess'] as const;
 export type InsertType = (typeof INSERT_TYPES)[number];
+
+import { DeEsser, Formant, Harmony, TrackComp, Tune } from './vocal';
 
 export interface InsertInfo {
   name: string;
@@ -16,7 +19,15 @@ export const INSERTS: Record<InsertType, InsertInfo> = {
   chorus: { name: 'Chorus', knobs: [{ label: 'Rate', def: 40 }, { label: 'Depth', def: 70 }, { label: 'Mix', def: 64 }, { label: 'Width', def: 127 }] },
   crush: { name: 'Crusher', knobs: [{ label: 'Bits', def: 70 }, { label: 'Rate', def: 40 }, { label: 'Mix', def: 127 }, { label: 'Jitter', def: 0 }] },
   duck: { name: 'Sidechain', knobs: [{ label: 'Source', def: 1 }, { label: 'Thresh', def: 50 }, { label: 'Amount', def: 90 }, { label: 'Release', def: 50 }] },
+  tune: { name: 'Tune', knobs: [{ label: 'Speed', def: 90 }, { label: 'Amount', def: 127 }, { label: 'Scale', def: 0 }, { label: 'Formant', def: 64 }] },
+  harm: { name: 'Harmony', knobs: [{ label: 'Voice 1', def: 82 }, { label: 'Voice 2', def: 64 }, { label: 'Double', def: 0 }, { label: 'Mix', def: 90 }] },
+  formant: { name: 'Formant', knobs: [{ label: 'Formant', def: 64 }, { label: 'Pitch', def: 64 }, { label: 'Mix', def: 127 }, { label: '—', def: 0 }] },
+  comp: { name: 'Compressor', knobs: [{ label: 'Thresh', def: 50 }, { label: 'Ratio', def: 30 }, { label: 'Attack', def: 20 }, { label: 'Makeup', def: 30 }] },
+  deess: { name: 'De-esser', knobs: [{ label: 'Freq', def: 64 }, { label: 'Thresh', def: 70 }, { label: 'Amount', def: 90 }, { label: '—', def: 0 }] },
 };
+
+/** The effects made for a voice, which the rack lists together. */
+export const VOCAL_INSERTS: InsertType[] = ['tune', 'harm', 'formant', 'comp', 'deess'];
 
 export const DRIVE_SHAPES = ['Soft', 'Hard', 'Fold'];
 
@@ -25,6 +36,8 @@ export interface Insert {
   process(L: Float32Array, R: Float32Array, n: number, p: number[], keyL?: Float32Array, keyR?: Float32Array): void;
   /** Gain reduction in dB for meters; 0 for effects that don't compress. */
   reduction: number;
+  /** Effects that work in the song's key are told what it is. */
+  setKey?(root: number, type: number): void;
 }
 
 class Biquad {
@@ -224,5 +237,10 @@ export function createInsert(type: InsertType, sampleRate: number): Insert {
     case 'chorus': return new Chorus(sampleRate);
     case 'crush': return new Crusher(sampleRate);
     case 'duck': return new Ducker(sampleRate);
+    case 'tune': return new Tune(sampleRate);
+    case 'harm': return new Harmony(sampleRate);
+    case 'formant': return new Formant(sampleRate);
+    case 'comp': return new TrackComp(sampleRate);
+    case 'deess': return new DeEsser(sampleRate);
   }
 }

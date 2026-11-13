@@ -1,6 +1,7 @@
 // Sound design actions: slicing, synth presets, effect racks and recording.
 
-import { hashId, registerSample, toast } from './actions.svelte';
+import { checkpoint, hashId, registerSample, toast } from './actions.svelte';
+import { VOCAL_CHAINS } from './core/vocalchains';
 import { audio } from './audio/host';
 import type { InsertType } from './core/dsp/inserts';
 import { PRESETS, type Preset } from './core/presets';
@@ -143,6 +144,16 @@ export function addInsert(t: number, type: InsertType): void {
     fx.p[0] = src >= 0 ? src + 1 : 0;
   }
   rack.push(fx);
+}
+
+/** Put a whole vocal chain on a track: its rack is replaced, and its reverb and delay sends set. */
+export function applyVocalChain(t: number, id: string): void {
+  const tr = track(t), chain = VOCAL_CHAINS.find((c) => c.id === id);
+  if (!tr || !chain) return;
+  checkpoint();
+  tr.fx = chain.fx.map((f) => ({ type: f.type, on: true, p: [...f.p] }));
+  tr.rev = chain.rev;
+  tr.dly = chain.dly;
 }
 
 export function removeInsert(t: number, i: number): void {

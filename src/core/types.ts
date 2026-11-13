@@ -20,6 +20,7 @@ export const MAX_CLIPS = 512;
 export const MAX_LANES = 32;
 export const MAX_POINTS = 512;
 export const MAX_EVENTS = 64;
+export const MAX_LYRICS = 200;
 
 /**
  * drum: a one-shot sample on steps. synth: notes. slice: a chopped sample, played by notes whose pitch is the slice number.
@@ -186,6 +187,23 @@ export interface AutoLane {
   points: AutoPoint[]; // sorted by t, joined by straight lines
 }
 
+/** The mastering chain on the whole mix. Knobs are 0..127 with 64 in the middle meaning "unchanged". */
+export interface Mastering {
+  on: boolean;
+  low: number; // EQ
+  mid: number;
+  high: number;
+  glue: number; // multiband compression, 0 = none
+  width: number; // stereo width
+  gain: number; // drive into the limiter; the assistant sets this to reach the target
+  target: number; // loudness to aim for in LUFS below zero (14 = -14 LUFS), 0 = none chosen
+}
+
+export const defaultMastering = (): Mastering => ({ on: false, low: 64, mid: 64, high: 64, glue: 40, width: 64, gain: 64, target: 14 });
+
+/** A line of lyrics, and the step of the song it is sung on. */
+export interface LyricLine { at: number; text: string }
+
 export interface TempoEvent { at: number; bpm: number }
 export interface SigEvent { at: number; num: number; den: number }
 export interface Marker { at: number; name: string; color: number }
@@ -220,6 +238,8 @@ export interface Project {
   scaleLock: boolean;
   fx: Fx;
   master: number; // 100 = unity
+  lyrics: LyricLine[]; // sorted by `at`
+  mastering: Mastering;
 }
 
 /** Delay times in 16th-note steps. */
@@ -356,7 +376,7 @@ export function emptyProject(): Project {
     patterns: Array.from({ length: NUM_PATTERNS }, () => newPattern(tracks.length)),
     arr: emptyArrangement(tracks.length, 16), songMode: false,
     scaleRoot: 0, scaleType: 1, scaleLock: true,
-    fx: defaultFx(), master: 100,
+    fx: defaultFx(), master: 100, lyrics: [], mastering: defaultMastering(),
   };
 }
 
@@ -494,6 +514,15 @@ export function sanitize(raw: any): Project {
       revMute: !!f.revMute, dlyMute: !!f.dlyMute,
     },
     master: int(raw.master, 0, 127, 100),
+    lyrics: (Array.isArray(raw.lyrics) ? raw.lyrics.slice(0, MAX_LYRICS) : [])
+      .map((l: any) => ({ at: int(l?.at, 0, MAX_SONG_STEPS - 1, 0), text: str(l?.text, 120, '') }))
+      .sort((a: LyricLine, b: LyricLine) => a.at - b.at),
+    mastering: {
+      on: !!raw.mastering?.on,
+      low: int(raw.mastering?.low, 0, 127, 64), mid: int(raw.mastering?.mid, 0, 127, 64), high: int(raw.mastering?.high, 0, 127, 64),
+      glue: int(raw.mastering?.glue, 0, 127, 40), width: int(raw.mastering?.width, 0, 127, 64), gain: int(raw.mastering?.gain, 0, 127, 64),
+      target: int(raw.mastering?.target, 0, 30, 14),
+    },
   };
 }
 

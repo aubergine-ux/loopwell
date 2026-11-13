@@ -16,6 +16,10 @@ export default defineConfig({
         // precache everything, drum kits included, so the app works fully offline
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,wav,wasm}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // The neural-network runtime for stem separation is 29 MB and most people never open it, so it is not
+        // fetched up front. It is kept the first time it is used, and after that works offline like the rest.
+        globIgnores: ['**/ort-wasm*.wasm'],
+        runtimeCaching: [{ urlPattern: /ort-wasm.*\.wasm$/, handler: 'CacheFirst', options: { cacheName: 'loopwell-stems-runtime' } }],
       },
       manifest: {
         name: 'Loopwell',

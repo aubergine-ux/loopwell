@@ -160,6 +160,21 @@ try {
   await page.keyboard.press('Enter');
   check('Enter uses the sound on the track and closes the browser', (await page.locator('.browser').count()) === 0 && (await rowName(page, 1)) === picked!.toUpperCase(), `${await rowName(page, 1)}`);
 
+  // drag a sound out of the browser onto a track behind it
+  await page.locator('.sampler').getByRole('button', { name: 'Browse' }).click();
+  await page.getByLabel('Search sounds').fill('glass crash');
+  const dragged = (await page.locator('.browser .row').first().boundingBox())!, onto = (await page.locator('.row[data-row="5"] .cells').boundingBox())!;
+  await page.mouse.move(dragged.x + 80, dragged.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(dragged.x + 90, dragged.y + 20, { steps: 3 });
+  await page.waitForTimeout(200);
+  await page.mouse.move(onto.x + 100, onto.y + 10, { steps: 10 });
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  check('a sound can be dragged from the browser onto any track', (await rowName(page, 5)) === 'CRASH' && (await page.locator('.browser').count()) === 0, `${await rowName(page, 5)}`);
+  await page.locator('.row[data-row="1"] .name').click();
+
   // use an imported sound, reload, remove
   await page.locator('.sampler').getByRole('button', { name: 'Browse' }).click();
   await page.locator('.filters').getByRole('button', { name: 'Imported' }).click();

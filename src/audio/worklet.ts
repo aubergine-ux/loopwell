@@ -29,6 +29,7 @@ export type ToWorklet =
   | { t: 'perf'; fx: number; on: boolean; x: number; y: number }
   | { t: 'forget'; id: string }
   | { t: 'metering'; on: boolean }
+  | { t: 'compare'; on: boolean }
   | { t: 'resetLoudness' }
   | { t: 'trig'; track: number; vel: number; pitch?: number }
   | { t: 'on'; track: number; pitch: number; vel: number }
@@ -37,7 +38,7 @@ export type ToWorklet =
 export type FromWorklet =
   | { t: 'step'; step: number; pattern: number; song: number; frame: number; count: number }
   | { t: 'launched'; tracks: Int8Array; count: number }
-  | { t: 'meter'; peaks: Float32Array; buses: Float32Array; returns: Float32Array; l: number; r: number; gr: number; load: number; lufs: Float32Array | null };
+  | { t: 'meter'; peaks: Float32Array; buses: Float32Array; returns: Float32Array; l: number; r: number; gr: number; load: number; lufs: Float32Array | null; mastering: Float32Array };
 
 const METER_BLOCKS = 6;
 const now = typeof performance !== 'undefined' ? () => performance.now() : () => Date.now();
@@ -82,6 +83,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       case 'perf': e.perf.fx = m.fx; e.perf.on = m.on; e.perf.x = m.x; e.perf.y = m.y; break;
       case 'forget': e.dropSample(m.id); break;
       case 'metering': e.setMetering(m.on); break;
+      case 'compare': e.compare = m.on; break;
       case 'resetLoudness': e.resetLoudness(); break;
       case 'trig': e.trigger(m.track, m.vel, m.pitch); break;
       case 'on': e.noteOn(m.track, m.pitch, m.vel); break;
@@ -105,7 +107,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       if (!silent || !this.idle) {
         const load = this.busy / (((this.blocks * n) / sampleRate) * 1000);
         const lufs = e.readLoudness(this.lufs) ? this.lufs.slice() : null;
-        this.post({ t: 'meter', peaks: e.peaks.slice(), buses: e.busPeaks.slice(), returns: e.retPeaks.slice(), l: e.masterPeakL, r: e.masterPeakR, gr: e.compReduction, load, lufs });
+        this.post({ t: 'meter', peaks: e.peaks.slice(), buses: e.busPeaks.slice(), returns: e.retPeaks.slice(), l: e.masterPeakL, r: e.masterPeakR, gr: e.compReduction, load, lufs, mastering: e.mastering.reduction.slice() });
       }
       this.idle = silent;
       e.resetMeters();

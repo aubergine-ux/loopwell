@@ -7,6 +7,7 @@ import { StepClock, samplesPerStep } from './clock';
 import { ARP_RATES, CHANCES, GROOVES, arpIndex, condPass, modChance, modCond, modRatchet } from './creative';
 import { Compressor, DjFilter, PingPongDelay, Reverb, softClip } from './dsp/fx';
 import { createInsert, type Insert } from './dsp/inserts';
+import { MasterChain } from './dsp/master';
 import { PerfFx } from './dsp/perf';
 import { BassVoice, DrumVoice, emptyBassPatch, emptyDrumPatch, type BassPatch, type DrumPatch } from './dsp/instruments';
 import { SampleVoice, SynthVoice, emptyPatch, type SampleData, type SynthPatch } from './dsp/voices';
@@ -135,6 +136,9 @@ export class Engine {
   private launched = new Int8Array(MAX_TRACKS);
   private count = 0;
   readonly perf: PerfFx;
+  readonly mastering: MasterChain;
+  /** Hear the mix without the mastering chain, at the loudness it has with it. Live only. */
+  compare = false;
   /**
    * Wavetables take tens of milliseconds to compute. Offline that is fine and they are
    * built when first needed; the audio thread turns this off and is handed them ready-made.
@@ -213,6 +217,7 @@ export class Engine {
     this.masterFilter = new DjFilter(sampleRate);
     this.comp = new Compressor(sampleRate);
     this.perf = new PerfFx(sampleRate);
+    this.mastering = new MasterChain(sampleRate);
     this.setProject(this.project);
   }
 
@@ -248,6 +253,7 @@ export class Engine {
         const type = rack[k]?.type;
         if (!type) { c.inserts[k] = null; c.kinds[k] = ''; }
         else if (c.kinds[k] !== type) { c.inserts[k] = createInsert(type, sr); c.kinds[k] = type; }
+        c.inserts[k]?.setKey?.(p.scaleRoot, p.scaleType);
       }
       patch.attack = 0.001 * Math.pow(2000, s.attack / 127);
       patch.decayCoef = Math.exp(-1 / ((0.02 * Math.pow(200, s.decay / 127) * sr) / 3));
@@ -260,6 +266,7 @@ export class Engine {
         const type = rack[j]?.type;
         if (!type) { c.inserts[j] = null; c.kinds[j] = ''; }
         else if (c.kinds[j] !== type) { c.inserts[j] = createInsert(type, sr); c.kinds[j] = type; }
+        c.inserts[j]?.setKey?.(p.scaleRoot, p.scaleType);
       }
     }
     // timeline lookups, built here so that playing a step allocates nothing
@@ -942,6 +949,9 @@ export class Engine {
       mixL[i] *= g; mixR[i] *= g;
     }
     this.masterGain = mg;
+    // with the mastering chain on, its limiter is what keeps the level in bounds; without it, the soft clipper does
+    const mastered = p.mastering.on && this.stem < 0;
+    if (mastered) this.mastering.process(mixL, mixR, n, p.mastering, this.compare);
     for (let i = 0; i < 2; i++) if (this.previews[i].active) this.previews[i].render(mixL, mixR, 0, n);
     if (this.clickEnv > 1e-4) {
       // the metronome: a short blip, after the master so no effect touches it
@@ -955,8 +965,12 @@ export class Engine {
       }
       this.clickPh = ph; this.clickEnv = env; this.clickAt = 0;
     }
-    softClip(mixL, n);
-    softClip(mixR, n);
+    if (mastered) {
+      for (let i = 0; i < n; i++) { const a = mixL[i], b = mixR[i]; if (a > 1) mixL[i] = 1; else if (a < -1) mixL[i] = -1; if (b > 1) mixR[i] = 1; else if (b < -1) mixR[i] = -1; }
+    } else {
+      softClip(mixL, n);
+      softClip(mixR, n);
+    }
     for (let i = 0; i < n; i++) {
       const al = Math.abs(mixL[i]), ar = Math.abs(mixR[i]);
       if (al > pl) pl = al;

@@ -48,6 +48,8 @@ export class AudioHost {
   readonly returnPeaks = new Float32Array(2);
   /** Loudness in LUFS while metering is on: tracks, groups, reverb, delay, master (momentary), then the master's short-term and integrated. */
   loudness: Float32Array | null = null;
+  /** How much the mastering chain is turning down: its three bands, then the limiter, in dB. */
+  readonly mastering = new Float32Array(4);
   masterL = 0;
   masterR = 0;
   reduction = 0;
@@ -148,6 +150,7 @@ export class AudioHost {
       this.busPeaks.set(m.buses);
       this.returnPeaks.set(m.returns);
       this.loudness = m.lufs;
+      this.mastering.set(m.mastering);
       this.masterL = m.l;
       this.masterR = m.r;
       this.reduction = m.gr;
@@ -420,6 +423,11 @@ export class AudioHost {
 
   setPattern(pattern: number): void {
     this.send({ t: 'pattern', pattern });
+  }
+
+  /** Hear the mix without the mastering chain, at the loudness it has with it. */
+  setCompare(on: boolean): void {
+    this.send({ t: 'compare', on });
   }
 
   setMetronome(on: boolean): void {
