@@ -8,18 +8,18 @@
 //   1  beats: tracks, four patterns and a chain of patterns
 //   2  songs: a list of tagged chunks (settings, tracks, patterns, timeline).
 //      Readers skip chunks and trailing bytes they don't know, so later
-//      additions don't need a new version. Added since: Sound (2.0), Creative (2.1).
+//      additions don't need a new version. Added since: Sound (2.0), Creative and Instruments (2.1).
 
 import { deflateSync, inflateSync } from 'fflate';
 import { KITS, SLOTS, isBuiltin } from './kits';
 import { isDefaultArrangement } from './arrange';
 import { PARAMS } from './params';
 import { INSERT_TYPES } from './dsp/inserts';
-import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, newTrack, sanitize, synthExtras, usesNotes, type Clip, type Project, type Track } from './types';
+import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, newTrack, sanitize, synthExtras, usesNotes, usesSample, type Clip, type Project, type Track } from './types';
 
 const VERSION = 2;
 const V1_PATTERNS = 4;
-const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6 }
+const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7 }
 const ALL_TRACKS = 255;
 export const HASH_KEY = 'b';
 
@@ -128,8 +128,10 @@ function readSettings(r: Reader, raw: any): void {
 function writeTracks(w: Writer, p: Project): void {
   w.u8(p.tracks.length);
   for (const t of p.tracks) {
+    // the 808 and the drum synth go in as a synth and a drum, which is what a reader from before they existed will play them as;
+    // the Instruments chunk then says what they really are
+    const synth = t.kind === 'synth' || t.kind === 'bass';
     const builtin = isBuiltin(t.sample);
-    const synth = t.kind === 'synth';
     w.u8((synth ? 1 : 0) | (t.mute ? 2 : 0) | (t.solo ? 4 : 0) | ((t.color & 7) << 3) | (!synth && !builtin ? 64 : 0) | (t.kind === 'slice' ? 128 : 0));
     w.str(t.name);
     if (synth) {
@@ -240,8 +242,8 @@ const enum Part { Synth = 1, Sampler = 2, Rack = 4 }
 function soundParts(t: Track): number {
   const s = t.synth;
   const plain = synthExtras(s.wave) as Record<string, number | boolean>;
-  const synth = t.kind === 'synth' && Object.keys(plain).some((k) => (s as unknown as Record<string, number | boolean>)[k] !== plain[k]);
-  const sampler = t.kind !== 'synth' && (t.reverse || t.stretch !== 64 || t.slices.length > 0);
+  const synth = (t.kind === 'synth' || t.kind === 'bass') && Object.keys(plain).some((k) => (s as unknown as Record<string, number | boolean>)[k] !== plain[k]);
+  const sampler = usesSample(t.kind) && (t.reverse || t.stretch !== 64 || t.slices.length > 0);
   return (synth ? Part.Synth : 0) | (sampler ? Part.Sampler : 0) | (t.fx.length ? Part.Rack : 0);
 }
 
@@ -421,6 +423,39 @@ function readCreative(r: Reader, raw: any): void {
   }
 }
 
+// The Instruments chunk: which tracks are an 808 or a drum synth, and their knobs.
+const enum Inst { None = 0, Bass = 1, Drum = 2 }
+
+function writeInstruments(w: Writer, p: Project): void {
+  for (const t of p.tracks) {
+    if (t.kind === 'bass') {
+      const b = t.bass;
+      w.u8(Inst.Bass);
+      for (const v of [b.glide, b.drive, b.decay, b.tone, b.punch, (b.follow ? 1 : 0) | (b.key << 1)]) w.u8(v);
+    } else if (t.kind === 'dsyn') {
+      const d = t.dsyn;
+      w.u8(Inst.Drum);
+      for (const v of [d.model, d.tune + 24, d.decay, d.tone, d.snap]) w.u8(v);
+    } else w.u8(Inst.None);
+  }
+}
+
+function readInstruments(r: Reader, raw: any): void {
+  for (const t of raw.tracks) {
+    if (!r.more) return;
+    const inst = r.u8();
+    if (inst === Inst.Bass) {
+      t.kind = 'bass';
+      t.bass = { glide: r.u8(), drive: r.u8(), decay: r.u8(), tone: r.u8(), punch: r.u8() };
+      const b = r.u8();
+      t.bass.follow = !!(b & 1); t.bass.key = b >> 1;
+    } else if (inst === Inst.Drum) {
+      t.kind = 'dsyn';
+      t.dsyn = { model: r.u8(), tune: r.u8() - 24, decay: r.u8(), tone: r.u8(), snap: r.u8() };
+    }
+  }
+}
+
 export function packProject(p: Project): Uint8Array {
   const w = new Writer();
   w.u8(VERSION);
@@ -435,6 +470,8 @@ export function packProject(p: Project): Uint8Array {
   if (!isDefaultArrangement(p)) part(Chunk.Timeline, writeTimeline);
   if (p.tracks.some((t) => soundParts(t))) part(Chunk.Sound, writeSound);
   if (hasCreative(p)) part(Chunk.Creative, writeCreative);
+  // last, because it changes what kind a track is and the patterns are read by kind
+  if (p.tracks.some((t) => t.kind === 'bass' || t.kind === 'dsyn')) part(Chunk.Instruments, writeInstruments);
   return w.bytes();
 }
 
@@ -471,6 +508,9 @@ export function unpackProject(bytes: Uint8Array): Project {
     } else if (tag === Chunk.Sound) {
       if (!raw.tracks) throw new Error('sound before tracks');
       readSound(c, raw);
+    } else if (tag === Chunk.Instruments) {
+      if (!raw.patterns) throw new Error('instruments before patterns');
+      readInstruments(c, raw);
     } else if (tag === Chunk.Creative) {
       if (!raw.tracks) throw new Error('extras before tracks');
       readCreative(c, raw);

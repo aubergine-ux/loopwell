@@ -5,7 +5,7 @@
   import { ARP_MODES, ARP_RATE_LABELS, MAX_ARP_OCT } from '../core/creative';
   import { insertChord } from '../creative.svelte';
   import { NOTE_NAMES, SCALES, inScale, noteName, scalePitches } from '../core/scales';
-  import { DEFAULT_VEL, clamp, type Note } from '../core/types';
+  import { DEFAULT_VEL, clamp, usesNotes, type Note } from '../core/types';
   import { setKind } from '../sound.svelte';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
@@ -21,7 +21,7 @@
 
   const p = $derived(app.project);
   const t = $derived(p.tracks[app.sel]);
-  const isSynth = $derived(t.kind !== 'drum'); // anything played by notes
+  const isSynth = $derived(usesNotes(t.kind)); // anything played by notes
   const sliced = $derived(t.kind === 'slice');
   const notes = $derived(p.patterns[app.pat].notes[app.sel]);
 
@@ -207,11 +207,11 @@
 
   {#if !isSynth}
     <div class="hint">
-      <b>{t.name}</b> is a drum track, so it has no notes to draw.
+      <b>{t.name}</b> plays on steps, so it has no notes to draw.
       <span>Pick a synth or sliced track, or turn this one into a synth.</span>
       <div class="hintbtns">
         {#each p.tracks as tr, i}
-          {#if tr.kind !== 'drum'}<button class="btn" onclick={() => (app.sel = i)}>{tr.name}</button>{/if}
+          {#if usesNotes(tr.kind)}<button class="btn" onclick={() => (app.sel = i)}>{tr.name}</button>{/if}
         {/each}
         <button class="btn ghost" onclick={() => setKind(app.sel, 'synth')}>Make {t.name} a synth</button>
       </div>

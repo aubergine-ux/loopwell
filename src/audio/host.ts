@@ -5,7 +5,7 @@
 import { isBuiltin, sampleUrl } from '../core/kits';
 import { wavetable } from '../core/dsp/wavetable';
 import type { SampleBank } from '../core/render';
-import type { Project } from '../core/types';
+import { usesSample, type Project } from '../core/types';
 import type { FromRecorder, FromWorklet, ToWorklet } from './worklet';
 import workletUrl from './worklet.ts?worker&url';
 
@@ -162,8 +162,8 @@ export class AudioHost {
   setProject(p: Project): void {
     this.project = p;
     for (const t of p.tracks) {
-      if (t.kind !== 'synth') void this.ensure(t.sample);
-      else {
+      if (usesSample(t.kind)) void this.ensure(t.sample);
+      else if (t.kind === 'synth') {
         if (t.synth.wave >= 4) this.ensureTable(t.synth.wave - 4);
         if (t.synth.wave2 >= 4) this.ensureTable(t.synth.wave2 - 4);
       }
@@ -316,6 +316,19 @@ export class AudioHost {
 
   setPattern(pattern: number): void {
     this.send({ t: 'pattern', pattern });
+  }
+
+  /** Play a sample on its own, straight to the output. Loads it first if need be; '' stops the preview. */
+  async preview(id: string): Promise<boolean> {
+    if (id && !(await this.ensure(id))) return false;
+    this.send({ t: 'preview', id });
+    return true;
+  }
+
+  /** Forget a sample that has been removed from the library. */
+  dropSample(id: string): void {
+    delete this.bank[id];
+    this.send({ t: 'forget', id });
   }
 
   /** Hold a fill: steps marked "fill only" play until it is let go. */

@@ -4,6 +4,7 @@
 
 import { audio, type Playhead } from './audio/host';
 import { trackStepAt } from './core/arrange';
+import { usesNotes } from './core/types';
 import { app } from './state.svelte';
 
 type FrameFn = (head: Playhead | null, stepChanged: boolean) => void;
@@ -35,7 +36,7 @@ const view: Playhead = { step: 0, pattern: 0, song: -1 };
 function hits(p: typeof app.project, t: number, pattern: number, step: number): number {
   const pat = p.patterns[pattern];
   if (!pat) return 0;
-  if (p.tracks[t].kind === 'drum') return pat.steps[t]?.[step] ?? 0;
+  if (!usesNotes(p.tracks[t].kind)) return pat.steps[t]?.[step] ?? 0;
   const ns = pat.notes[t];
   if (ns) for (let i = 0; i < ns.length; i++) if (ns[i].s === step) return ns[i].v;
   return 0;

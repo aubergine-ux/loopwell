@@ -3,7 +3,7 @@
 
 import { barsUpTo, songEnd } from './arrange';
 import { GM_NOTE, type Slot } from './kits';
-import type { Project } from './types';
+import { usesNotes, type Project } from './types';
 
 const PPQ = 96;
 const STEP = PPQ / 4;
@@ -81,10 +81,10 @@ export function exportMidi(p: Project, chain?: number[]): Uint8Array<ArrayBuffer
   let melodic = 0;
   p.tracks.forEach((t, ti) => {
     const evs: Ev[] = [];
-    const drum = t.kind === 'drum';
+    const drum = !usesNotes(t.kind);
     let ch = 9;
     if (!drum) { ch = melodic++; if (ch >= 9) ch++; }
-    const drumNote = GM_NOTE[t.sample.split('/')[1] as Slot] ?? 60 + ti;
+    const drumNote = t.kind === 'dsyn' ? [36, 38, 42, 39][t.dsyn.model] : GM_NOTE[t.sample.split('/')[1] as Slot] ?? 60 + ti;
     for (const [track_, pi, start, len, offset] of parts) {
       if (track_ !== ti) continue;
       const pat = p.patterns[pi];

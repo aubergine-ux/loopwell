@@ -3,7 +3,7 @@
   import { addTrack, padDown, padUp, sampleMissing, setStep, stepVel } from '../actions.svelte';
   import { audio } from '../audio/host';
   import { modChance, modCond, modLabel, modRatchet } from '../core/creative';
-  import { DEFAULT_VEL, MAX_TRACKS, clamp } from '../core/types';
+  import { DEFAULT_VEL, MAX_TRACKS, clamp, isPitched, usesSample } from '../core/types';
   import { isLocked } from '../live/session.svelte';
   import { app } from '../state.svelte';
   import { onFlash, onFrame } from '../visual';
@@ -16,7 +16,7 @@
 
   /** Steps a synth note is still sounding on (after the step it starts). */
   function held(t: number, s: number): boolean {
-    if (p.tracks[t].kind !== 'synth') return false;
+    if (!isPitched(p.tracks[t].kind)) return false;
     for (const n of pat.notes[t]) if (s > n.s && s < n.s + n.l) return true;
     return false;
   }
@@ -144,13 +144,13 @@
         <div class="head" role="rowheader">
           <button class="chip" aria-label="Play {t.name}" onpointerdown={(e) => { e.stopPropagation(); app.sel = ti; padDown(ti); }}
             onpointerup={() => padUp(ti)} onpointerleave={() => padUp(ti)}></button>
-          <button class="name" onclick={() => { app.sel = ti; app.tab = t.kind === 'synth' && app.tab === 'keys' ? 'keys' : app.tab; }}
+          <button class="name" onclick={() => { app.sel = ti; }}
             ondblclick={() => (app.tab = t.kind === 'synth' ? 'keys' : 'sound')} title="Select track (double-click to edit its sound)">
             <b>{t.name}</b>
             <span class="meter"><i></i></span>
           </button>
           {#if isLocked(ti)}<span class="locked" title="Locked by the session's host"><Icon name="lock" size={12} /></span>{/if}
-          {#if t.kind !== 'synth' && sampleMissing(t.sample)}<span class="warn" title="This track's custom sample isn't on this device. Drop a file on it to replace.">!</span>{/if}
+          {#if usesSample(t.kind) && sampleMissing(t.sample)}<span class="warn" title="This track's custom sample isn't on this device. Drop a file on it to replace.">!</span>{/if}
           <button class="ms" class:on={t.mute} onclick={() => (t.mute = !t.mute)} aria-pressed={t.mute} aria-label="Mute {t.name}" title="Mute (M)">M</button>
           <button class="ms solo" class:on={t.solo} onclick={() => (t.solo = !t.solo)} aria-pressed={t.solo} aria-label="Solo {t.name}" title="Solo (Shift+M)">S</button>
         </div>
@@ -173,6 +173,7 @@
         <div class="head">
           <button class="btn ghost" onclick={() => addTrack('drum')}><Icon name="plus" size={13} />Drum</button>
           <button class="btn ghost" onclick={() => addTrack('synth')}><Icon name="plus" size={13} />Synth</button>
+          <button class="btn ghost" onclick={() => addTrack('bass')} title="Add an 808 bass"><Icon name="plus" size={13} />808</button>
         </div>
       </div>
     {/if}

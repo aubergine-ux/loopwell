@@ -5,7 +5,7 @@ import { audio } from './audio/host';
 import type { InsertType } from './core/dsp/inserts';
 import { PRESETS, type Preset } from './core/presets';
 import { MAX_SLICES, detectSlices, equalSlices, toFraction } from './core/slicer';
-import { MAX_INSERTS, MAX_STEPS, newInsert, sanitize, synth, type SynthParams, type TrackKind } from './core/types';
+import { MAX_INSERTS, MAX_STEPS, newInsert, sanitize, synth, usesNotes, usesSample, type SynthParams, type TrackKind } from './core/types';
 import { encodeWav } from './core/wav';
 import { app } from './state.svelte';
 import { flash } from './visual';
@@ -22,9 +22,10 @@ export function setKind(t: number, kind: TrackKind): void {
   tr.kind = kind;
   // a drum part and a sliced part are the same hits written two ways, so carry them over
   for (const pat of app.project.patterns) {
-    if (from === 'drum' && kind === 'slice' && !pat.notes[t].length) {
-      pat.notes[t] = pat.steps[t].flatMap((v, s) => (v ? [{ s, l: 1, p: 0, v }] : []));
-    } else if (from === 'slice' && kind === 'drum' && !pat.steps[t].some((v) => v > 0)) {
+    if (!usesNotes(from) && usesNotes(kind) && !pat.notes[t].length) {
+      const pitch = kind === 'slice' ? 0 : kind === 'bass' ? 36 : 48;
+      pat.notes[t] = pat.steps[t].flatMap((v, s) => (v ? [{ s, l: 1, p: pitch, v }] : []));
+    } else if (usesNotes(from) && !usesNotes(kind) && !pat.steps[t].some((v) => v > 0)) {
       for (const n of pat.notes[t]) if (n.s < MAX_STEPS) pat.steps[t][n.s] = Math.max(pat.steps[t][n.s], n.v);
     }
   }
@@ -32,6 +33,12 @@ export function setKind(t: number, kind: TrackKind): void {
     tr.note = 0;
     if (!tr.slices.length) void autoSlice(t);
   } else if (kind === 'synth' && tr.note < 12) tr.note = 48;
+  else if (kind === 'bass') {
+    // the 808 starts on the root of the song's key, down where a bass lives
+    tr.bass.key = app.project.scaleRoot;
+    tr.note = 36 + ((app.project.scaleRoot + 6) % 12) - 6;
+    if (from !== 'synth') for (const pat of app.project.patterns) for (const n of pat.notes[t]) n.p = tr.note;
+  }
 }
 
 /** Find the hits in the track's sample and put a slice on each. Returns how many it found. */
@@ -205,7 +212,7 @@ export async function stopRecording(): Promise<void> {
   if (!(await registerSample({ id, name, bytes }, true))) { toast('The take could not be saved.', 'error'); return; }
   const tr = track(rec.track);
   if (!tr) return;
-  if (tr.kind === 'synth') tr.kind = 'drum';
+  if (!usesSample(tr.kind)) tr.kind = 'drum';
   tr.sample = id;
   tr.slices = [];
   tr.reverse = false;

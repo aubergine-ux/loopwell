@@ -27,6 +27,17 @@ const synth = (id: string, label: string, def: number, key: SynthKnob, min = 0, 
   get: (t: Track) => t.synth[key],
   set: (t: Track, v) => { t.synth[key] = v; },
 });
+type BassKnob = { [K in keyof Track['bass']]: Track['bass'][K] extends number ? K : never }[keyof Track['bass']];
+const bass = (id: string, label: string, def: number, key: BassKnob): ParamDef => ({
+  id, label, min: 0, max: 127, def, scope: 'track', kind: 'bass',
+  get: (t: Track) => t.bass[key],
+  set: (t: Track, v) => { t.bass[key] = v; },
+});
+const dsyn = (id: string, label: string, def: number, key: Exclude<keyof Track['dsyn'], 'model'>, min = 0, max = 127): ParamDef => ({
+  id, label, min, max, def, scope: 'track', kind: 'dsyn',
+  get: (t: Track) => t.dsyn[key],
+  set: (t: Track, v) => { t.dsyn[key] = v; },
+});
 const fx = (id: string, label: string, min: number, max: number, def: number, key: keyof Project['fx']): ParamDef => ({
   id, label, min, max, def, scope: 'master',
   get: (p: Project) => p.fx[key] as number,
@@ -64,6 +75,14 @@ export const PARAMS: ParamDef[] = [
   synth('lfoamt', 'LFO amount', 0, 'lfoAmt', -64, 63),
   synth('menvamt', 'Mod env amount', 0, 'menvAmt', -64, 63),
   track('stretch', 'Stretch', 0, 127, 64, 'stretch', 'slice'),
+  bass('bdrive', 'Drive', 45, 'drive'),
+  bass('bdecay', 'Decay', 90, 'decay'),
+  bass('btone', 'Tone', 50, 'tone'),
+  bass('bglide', 'Glide', 40, 'glide'),
+  dsyn('dtune', 'Tune', 0, 'tune', -24, 24),
+  dsyn('ddecay', 'Decay', 50, 'decay'),
+  dsyn('dtone', 'Tone', 50, 'tone'),
+  dsyn('dsnap', 'Snap', 50, 'snap'),
 ];
 
 export const paramIndex = (id: string) => PARAMS.findIndex((d) => d.id === id);

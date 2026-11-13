@@ -25,6 +25,7 @@
   import Pads from './Pads.svelte';
   import RollPanel from './RollPanel.svelte';
   import ShareModal from './ShareModal.svelte';
+  import SampleBrowser from './SampleBrowser.svelte';
   import SongPanel from './SongPanel.svelte';
   import SoundPanel from './SoundPanel.svelte';
   import Timeline from './Timeline.svelte';
@@ -130,6 +131,7 @@
 {:else if app.modal === 'community'}<CommunityModal />
 {:else if app.modal === 'join'}<JoinModal />
 {:else if app.modal === 'folders'}<FoldersModal />
+{:else if app.modal === 'samples'}<SampleBrowser />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}

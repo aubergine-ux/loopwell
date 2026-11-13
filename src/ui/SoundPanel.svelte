@@ -5,6 +5,8 @@
   import * as fmt from './fmt';
   import Icon from './Icon.svelte';
   import Knob from './Knob.svelte';
+  import { usesSample } from '../core/types';
+  import InstrumentEditor from './InstrumentEditor.svelte';
   import SamplerEditor from './SamplerEditor.svelte';
   import SynthEditor from './SynthEditor.svelte';
 
@@ -24,6 +26,8 @@
       <button class:on={t.kind === 'drum'} onclick={() => setKind(app.sel, 'drum')} title="One sample, played on steps">Drum</button>
       <button class:on={t.kind === 'slice'} onclick={() => setKind(app.sel, 'slice')} title="A sample chopped into slices you play like notes">Slice</button>
       <button class:on={t.kind === 'synth'} onclick={() => setKind(app.sel, 'synth')}>Synth</button>
+      <button class:on={t.kind === 'bass'} onclick={() => setKind(app.sel, 'bass')} title="808 bass: one sliding, saturated voice that follows the song's key">808</button>
+      <button class:on={t.kind === 'dsyn'} onclick={() => setKind(app.sel, 'dsyn')} title="Drum synth: kicks, snares, hats and claps made from knobs instead of samples">Knobs</button>
     </div>
     <div class="idbtns">
       <button class="btn ghost" onclick={() => clearTrack(app.sel)} title="Clear this track in the current pattern (Shift+Backspace)">Clear</button>
@@ -32,12 +36,12 @@
   </div>
 
   <div class="source">
-    {#if t.kind === 'synth'}<SynthEditor />{:else}<SamplerEditor />{/if}
+    {#if t.kind === 'synth'}<SynthEditor />{:else if usesSample(t.kind)}<SamplerEditor />{:else}<InstrumentEditor />{/if}
   </div>
 
   <div class="strip">
     <div class="krow">
-      {#if t.kind !== 'synth'}
+      {#if usesSample(t.kind)}
         <Knob bind:value={t.tune} min={-24} max={24} def={0} bipolar label="Tune" format={fmt.semis} {color} />
         <Knob bind:value={t.decay} def={127} label="Decay" format={fmt.decay} {color} />
       {/if}
@@ -63,6 +67,8 @@
   }
   .name:focus { border-color: var(--c); outline: none; }
   .idbtns { display: flex; gap: 2px; margin-left: -8px; }
+  .id .seg { flex-wrap: wrap; }
+  .id .seg button { min-width: 0; padding: 0 8px; }
   .source { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .krow { display: flex; flex-wrap: wrap; gap: 4px 2px; align-items: flex-start; }
   .strip { padding-left: 18px; border-left: 1px solid var(--line); min-height: 100%; }

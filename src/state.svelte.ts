@@ -1,7 +1,7 @@
 import { emptyProject, type Project } from './core/types';
 
 export type Tab = 'sound' | 'keys' | 'tools' | 'rack' | 'mix' | 'fx' | 'song' | 'live';
-export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders';
+export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders' | 'samples';
 
 export const THEMES = [
   { id: 'cream', name: 'Cream' },

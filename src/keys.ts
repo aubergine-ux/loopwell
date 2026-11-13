@@ -5,7 +5,7 @@ import {
   cycleTheme, noteDown, noteUp, padDown, padUp, redo, selectPattern, setView, tapTempo, togglePlay, undo, clearTrack,
 } from './actions.svelte';
 import { degreeToPitch } from './core/scales';
-import { NUM_PATTERNS, clamp } from './core/types';
+import { NUM_PATTERNS, clamp, isPitched } from './core/types';
 import { setFill } from './creative.svelte';
 import { deleteClip, duplicateClip } from './song.svelte';
 import { app, TABS } from './state.svelte';
@@ -41,7 +41,7 @@ function press(code: string): boolean {
     if (i >= Math.max(1, p.tracks[t].slices.length)) return true;
     noteDown(t, i);
     down.set(code, () => noteUp(t, i));
-  } else if (p.tracks[t]?.kind === 'synth') {
+  } else if (p.tracks[t] && isPitched(p.tracks[t].kind)) {
     // home row walks up the scale, so every key is a right note
     const base = p.tracks[t].note + 12 * app.octave;
     const pitch = p.scaleLock ? degreeToPitch(p.scaleRoot, p.scaleType, base, i) : base + i;

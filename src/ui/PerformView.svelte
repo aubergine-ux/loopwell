@@ -33,7 +33,7 @@
 
   /** The second bank: eight slices of a sliced track, or eight notes up the scale of a synth. */
   const bank = $derived.by(() => {
-    if (!cur || cur.kind === 'drum') return [];
+    if (!cur || cur.kind === 'drum' || cur.kind === 'dsyn') return [];
     if (cur.kind === 'slice') return Array.from({ length: Math.min(8, Math.max(1, cur.slices.length)) }, (_, i) => ({ label: `${i + 1}`, pitch: i }));
     return Array.from({ length: 8 }, (_, i) => {
       const pitch = p.scaleLock ? degreeToPitch(p.scaleRoot, p.scaleType, cur.note, i) : cur.note + i;

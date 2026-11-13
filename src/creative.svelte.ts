@@ -82,10 +82,11 @@ export function insertChord(chord: Chord, step: number, len: number, octaveBase:
 // --- the dice --------------------------------------------------------------
 
 const KICKS = ['kick', 'sub'], SNARES = ['snare', 'clap', 'rim'], HATS = ['hat', 'open'];
+const MODEL_SLOTS = ['kick', 'snare', 'hat', 'clap'];
 
 function randomDrums(t: number, pat: number): void {
   const p = app.project, tr = p.tracks[t], n = p.steps;
-  const slot = isBuiltin(tr.sample) ? tr.sample.split('/')[1] : '';
+  const slot = tr.kind === 'dsyn' ? MODEL_SLOTS[tr.dsyn.model] : isBuiltin(tr.sample) ? tr.sample.split('/')[1] : '';
   const row = new Array<number>(MAX_STEPS).fill(0);
   if (KICKS.includes(slot)) {
     // a kick wants the downbeat, then a few pushes around it
@@ -170,6 +171,21 @@ export function randomizeSound(t = app.sel, locked: Partial<Record<SoundPart, bo
   const tr = app.project.tracks[t];
   if (!tr) return;
   checkpoint();
+  if (tr.kind === 'bass') {
+    const b = tr.bass;
+    if (!locked.osc) { b.drive = rand(10, 110); b.tone = rand(20, 100); }
+    if (!locked.env) { b.decay = rand(50, 120); b.punch = rand(0, 90); }
+    if (!locked.mod) b.glide = chance(0.3) ? 0 : rand(20, 90);
+    audio.trigger(t, 100, tr.note);
+    return;
+  }
+  if (tr.kind === 'dsyn') {
+    const d = tr.dsyn;
+    if (!locked.osc) { d.tone = rand(0, 127); d.snap = rand(0, 127); }
+    if (!locked.env) { d.tune = rand(-7, 7); d.decay = rand(10, 100); }
+    audio.trigger(t, 100);
+    return;
+  }
   if (tr.kind !== 'synth') {
     if (tr.kind === 'drum' && !locked.osc) {
       const slot = isBuiltin(tr.sample) ? tr.sample.split('/')[1] : '';

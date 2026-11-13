@@ -3,6 +3,7 @@
 
 import { noteDown, noteUp, padDown, padUp, play, stop } from '../actions.svelte';
 import { snapToScale } from '../core/scales';
+import { usesNotes } from '../core/types';
 import { app } from '../state.svelte';
 
 const PAD_BASE = 36; // C1, where pad controllers start by default
@@ -30,7 +31,7 @@ function onMessage(e: MIDIMessageEvent): void {
   if (type === 0x90 && d[2] > 0) {
     const p = app.project;
     const sel = p.tracks[app.sel];
-    const asPad = ch === 9 || !sel || sel.kind === 'drum';
+    const asPad = ch === 9 || !sel || !usesNotes(sel.kind);
     if (asPad) {
       const track = (((d[1] - PAD_BASE) % 8) + 8) % 8;
       if (track >= p.tracks.length) return;

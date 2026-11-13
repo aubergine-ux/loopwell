@@ -142,6 +142,7 @@
       {/each}
     </div>
     <button class="btn ghost" onclick={() => useKit(kit)} title="Switch every drum track to the {kit} kit">Kit → all</button>
+    <button class="btn ghost" onclick={() => (app.modal = 'samples')} title="Browse and search every sound: the kits and everything you have imported"><Icon name="grid" size={14} />Browse</button>
     <button class="btn ghost" onclick={() => picker?.click()} title="Use your own audio file. You can also drop one on a track."><Icon name="open" size={14} />Load</button>
     {#if isDesktop}<button class="btn ghost" onclick={() => (app.modal = 'folders')} title="Browse folders of samples on this computer"><Icon name="grid" size={14} />Folders</button>{/if}
     <input bind:this={picker} type="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.aiff,.m4a" multiple hidden onchange={pick} />

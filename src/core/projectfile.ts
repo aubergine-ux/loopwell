@@ -3,7 +3,7 @@
 // travel, since those can't fit in a share link.
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { sanitize, type Project } from './types';
+import { sanitize, usesSample, type Project } from './types';
 
 export interface UserSample {
   id: string;
@@ -19,7 +19,7 @@ interface Manifest {
 }
 
 export function packProjectFile(project: Project, samples: UserSample[]): Uint8Array<ArrayBuffer> {
-  const used = new Set(project.tracks.filter((t) => t.kind !== 'synth').map((t) => t.sample));
+  const used = new Set(project.tracks.filter((t) => usesSample(t.kind)).map((t) => t.sample));
   const files: Record<string, Uint8Array> = {};
   const manifest: Manifest = { format: 'loopwell', version: 2, project, samples: [] };
   samples.filter((s) => used.has(s.id)).forEach((s, i) => {

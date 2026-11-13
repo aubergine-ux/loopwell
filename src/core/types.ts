@@ -2,6 +2,7 @@
 // MIDI CCs) so beats round-trip exactly through the share-link codec.
 
 import { INSERTS, INSERT_TYPES, type InsertType } from './dsp/inserts';
+import { DRUM_MODELS } from './dsp/instruments';
 import { MAX_UNISON, MOD_DESTS } from './dsp/voices';
 import { WAVETABLES } from './dsp/wavetable';
 import { ARP_MODES, ARP_RATES, GROOVES, MAX_ARP_OCT, MAX_MOD } from './creative';
@@ -20,8 +21,12 @@ export const MAX_LANES = 32;
 export const MAX_POINTS = 512;
 export const MAX_EVENTS = 64;
 
-/** drum: a one-shot sample on steps. synth: notes. slice: a chopped sample, played by notes whose pitch is the slice number. */
-export type TrackKind = 'drum' | 'synth' | 'slice';
+/**
+ * drum: a one-shot sample on steps. synth: notes. slice: a chopped sample, played by notes whose pitch is the slice number.
+ * bass: the 808, one voice played by notes. dsyn: a drum made from knobs instead of a sample, on steps.
+ */
+export type TrackKind = 'drum' | 'synth' | 'slice' | 'bass' | 'dsyn';
+export const TRACK_KINDS: TrackKind[] = ['drum', 'synth', 'slice', 'bass', 'dsyn'];
 export const MAX_INSERTS = 5;
 /** Classic shapes, then one entry per wavetable. */
 export const NUM_WAVES = 4 + WAVETABLES.length;
@@ -67,6 +72,26 @@ export interface SynthParams {
   menvDest: number;
 }
 
+/** The 808 bass. */
+export interface BassParams {
+  glide: number; // 0 = off; otherwise overlapping notes slide into each other, this slowly
+  drive: number; // saturation
+  decay: number; // how long a held note rings
+  tone: number; // brightness of the saturation
+  punch: number; // pitch drop at the start of a note
+  follow: boolean; // move the whole part when the song's key changes
+  key: number; // 0..11, the key the part was written in
+}
+
+/** The drum synth. What tone and snap do depends on the model. */
+export interface DrumSynthParams {
+  model: number; // index into DRUM_MODELS
+  tune: number; // semitones, -24..24
+  decay: number;
+  tone: number;
+  snap: number;
+}
+
 export interface Track {
   name: string;
   kind: TrackKind;
@@ -79,6 +104,8 @@ export interface Track {
   slices: number[]; // slice starts as 0..65535 fractions of the sample; used by slice tracks
   fx: InsertFx[];
   synth: SynthParams;
+  bass: BassParams;
+  dsyn: DrumSynthParams;
   note: number; // MIDI pitch used when a synth track is toggled from the step grid / pads
   vol: number; // 100 = unity
   pan: number; // -64..63
@@ -212,20 +239,33 @@ export function defaultSynth(): SynthParams {
   return synth();
 }
 
+export const defaultBass = (): BassParams => ({ glide: 40, drive: 45, decay: 90, tone: 50, punch: 40, follow: true, key: 0 });
+
+/** Starting points for each drum model, so switching model gives something that already sounds like that drum. */
+export const DRUM_DEFAULTS: Omit<DrumSynthParams, 'model'>[] = [
+  { tune: 0, decay: 60, tone: 20, snap: 55 },
+  { tune: 0, decay: 50, tone: 60, snap: 64 },
+  { tune: 0, decay: 25, tone: 64, snap: 40 },
+  { tune: 0, decay: 50, tone: 50, snap: 50 },
+];
+export const defaultDsyn = (model = 0): DrumSynthParams => ({ model, ...DRUM_DEFAULTS[model] });
+
 export function newInsert(type: InsertType): InsertFx {
   return { type, on: true, p: INSERTS[type].knobs.map((k) => k.def) };
 }
 
 /** Does this kind of track keep its part as notes (rather than a row of steps)? */
-export const usesNotes = (kind: TrackKind) => kind !== 'drum';
+export const usesNotes = (kind: TrackKind) => kind !== 'drum' && kind !== 'dsyn';
 /** Does this kind of track play a sample? */
-export const usesSample = (kind: TrackKind) => kind !== 'synth';
+export const usesSample = (kind: TrackKind) => kind === 'drum' || kind === 'slice';
+/** Is it played by pitched notes (so scales, chords and keyboards make sense)? */
+export const isPitched = (kind: TrackKind) => kind === 'synth' || kind === 'bass';
 
 export function newTrack(kind: TrackKind, color: number, name: string, sample = 'boom/kick'): Track {
   return {
     name, kind, color, sample,
     tune: 0, decay: 127, reverse: false, stretch: 64, slices: [], fx: [],
-    synth: defaultSynth(), note: 48,
+    synth: defaultSynth(), bass: defaultBass(), dsyn: defaultDsyn(), note: kind === 'bass' ? 36 : 48,
     vol: 100, pan: 0, mute: false, solo: false,
     filter: 0, rev: 0, dly: 0,
     groove: 0, grooveAmt: 50, arpMode: 0, arpRate: 2, arpOct: 1, arpGate: 100,
@@ -312,7 +352,11 @@ export function sanitize(raw: any): Project {
   if (!raw || typeof raw !== 'object') return base;
   const rt: any[] = Array.isArray(raw.tracks) ? raw.tracks.slice(0, MAX_TRACKS) : [];
   const tracks: Track[] = rt.map((t, i) => {
-    const d = newTrack(t?.kind === 'synth' || t?.kind === 'slice' ? t.kind : 'drum', i, `TRACK ${i + 1}`);
+    const d = newTrack(TRACK_KINDS.includes(t?.kind) ? t.kind : 'drum', i, `TRACK ${i + 1}`);
+    const b = t?.bass ?? {}, db = d.bass;
+    const ds2 = t?.dsyn ?? {};
+    const model = int(ds2.model, 0, DRUM_MODELS.length - 1, 0);
+    const dd = DRUM_DEFAULTS[model];
     const s = t?.synth ?? {};
     const ds = d.synth;
     const wave = int(s.wave, 0, NUM_WAVES - 1, ds.wave);
@@ -354,7 +398,15 @@ export function sanitize(raw: any): Project {
         attack: int(s.attack, 0, 127, ds.attack), decay: int(s.decay, 0, 127, ds.decay),
         sustain: int(s.sustain, 0, 127, ds.sustain), release: int(s.release, 0, 127, ds.release),
       },
-      note: int(t?.note, 0, 127, 48),
+      bass: {
+        glide: int(b.glide, 0, 127, db.glide), drive: int(b.drive, 0, 127, db.drive), decay: int(b.decay, 0, 127, db.decay),
+        tone: int(b.tone, 0, 127, db.tone), punch: int(b.punch, 0, 127, db.punch), follow: b.follow !== false, key: int(b.key, 0, 11, 0),
+      },
+      dsyn: {
+        model, tune: int(ds2.tune, -24, 24, dd.tune), decay: int(ds2.decay, 0, 127, dd.decay),
+        tone: int(ds2.tone, 0, 127, dd.tone), snap: int(ds2.snap, 0, 127, dd.snap),
+      },
+      note: int(t?.note, 0, 127, d.note),
       vol: int(t?.vol, 0, 127, 100),
       pan: int(t?.pan, -64, 63, 0),
       mute: !!t?.mute, solo: !!t?.solo,

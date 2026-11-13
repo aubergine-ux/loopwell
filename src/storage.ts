@@ -49,6 +49,19 @@ export async function putSample(s: UserSample): Promise<void> {
   } catch { /* storage unavailable: the sample still works until reload */ }
 }
 
+export async function deleteSample(id: string): Promise<void> {
+  try {
+    const d = await db();
+    await new Promise<void>((resolve, reject) => {
+      const tx = d.transaction('samples', 'readwrite');
+      tx.objectStore('samples').delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    d.close();
+  } catch { /* nothing stored, nothing to remove */ }
+}
+
 export async function getSamples(): Promise<UserSample[]> {
   try {
     const d = await db();

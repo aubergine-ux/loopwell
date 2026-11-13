@@ -7,6 +7,7 @@ import { StepClock, samplesPerStep } from './clock';
 import { ARP_RATES, CHANCES, GROOVES, arpIndex, condPass, modChance, modCond, modRatchet } from './creative';
 import { Compressor, DjFilter, PingPongDelay, Reverb, softClip } from './dsp/fx';
 import { createInsert, type Insert } from './dsp/inserts';
+import { BassVoice, DrumVoice, emptyBassPatch, emptyDrumPatch, type BassPatch, type DrumPatch } from './dsp/instruments';
 import { SampleVoice, SynthVoice, emptyPatch, type SampleData, type SynthPatch } from './dsp/voices';
 import { wavetable, type Wavetable } from './dsp/wavetable';
 import { PARAMS, paramIndex } from './params';
@@ -23,7 +24,9 @@ const P_VOL = paramIndex('vol'), P_PAN = paramIndex('pan'), P_FILTER = paramInde
   P_REVLVL = paramIndex('revlvl'), P_REVSIZE = paramIndex('revsize'), P_DLYLVL = paramIndex('dlylvl'), P_DLYFB = paramIndex('dlyfb'),
   P_POS = paramIndex('pos'), P_POS2 = paramIndex('pos2'), P_MIX = paramIndex('mix'), P_NOISE = paramIndex('noise'),
   P_DETUNE = paramIndex('detune'), P_SPREAD = paramIndex('spread'), P_LFORATE = paramIndex('lforate'), P_LFOAMT = paramIndex('lfoamt'),
-  P_MENVAMT = paramIndex('menvamt'), P_STRETCH = paramIndex('stretch');
+  P_MENVAMT = paramIndex('menvamt'), P_STRETCH = paramIndex('stretch'),
+  P_BDRIVE = paramIndex('bdrive'), P_BDECAY = paramIndex('bdecay'), P_BTONE = paramIndex('btone'), P_BGLIDE = paramIndex('bglide'),
+  P_DTUNE = paramIndex('dtune'), P_DDECAY = paramIndex('ddecay'), P_DTONE = paramIndex('dtone'), P_DSNAP = paramIndex('dsnap');
 
 interface Curve {
   slot: number; // index into the value array
@@ -35,6 +38,7 @@ const BLOCK = 128;
 const SAMPLE_VOICES = 6;
 const SAMPLE_POLY = 4;
 const SYNTH_VOICES = 6;
+const DRUM_VOICES = 3;
 /** Hits waiting for their frame: ratchets, grooved steps and arpeggios. */
 const MAX_PENDING = 256;
 const MAX_HELD = 16;
@@ -57,6 +61,12 @@ class Channel {
   filter: DjFilter;
   gl = -1; gr = 0; // current (smoothed) output gains; -1 = not set yet
   patch: SynthPatch = emptyPatch();
+  bass: BassVoice;
+  /** The note the 808 was last asked for, before any key shift, so a note-off can find it. */
+  bassNote = -1;
+  bassPatch: BassPatch = emptyBassPatch();
+  drums: DrumVoice[] = [];
+  drumPatch: DrumPatch = emptyDrumPatch();
   /** The effect rack: one slot per insert, in playing order. */
   inserts: (Insert | null)[] = [];
   kinds: string[] = [];
@@ -64,6 +74,8 @@ class Channel {
   constructor(sr: number) {
     for (let i = 0; i < SAMPLE_VOICES; i++) this.samples.push(new SampleVoice());
     for (let i = 0; i < SYNTH_VOICES; i++) this.synths.push(new SynthVoice(sr));
+    for (let i = 0; i < DRUM_VOICES; i++) this.drums.push(new DrumVoice(sr));
+    this.bass = new BassVoice(sr);
     this.filter = new DjFilter(sr);
   }
 }
@@ -140,6 +152,8 @@ export class Engine {
   private pPitch = new Int16Array(MAX_PENDING);
   private pGate = new Float64Array(MAX_PENDING);
   private held = new Int16Array(MAX_HELD);
+  // auditioning a sample from the browser: straight to the output, past every track and effect
+  private previews = [new SampleVoice(), new SampleVoice()];
 
   constructor(readonly sampleRate: number) {
     this.clock = new StepClock(sampleRate);
@@ -218,6 +232,17 @@ export class Engine {
 
   private patch(t: number): void {
     const v = this.val, o = t * NP, patch = this.ch[t].patch;
+    const bp = this.ch[t].bassPatch, dp = this.ch[t].drumPatch, tr = this.project.tracks[t];
+    bp.drive = v[o + P_BDRIVE] / 127;
+    bp.decay = 0.12 * Math.pow(60, v[o + P_BDECAY] / 127);
+    bp.tone = v[o + P_BTONE] / 127;
+    bp.glide = v[o + P_BGLIDE] < 0.5 ? 0 : 0.01 * Math.pow(60, v[o + P_BGLIDE] / 127);
+    bp.punch = tr.bass.punch / 127;
+    dp.model = tr.dsyn.model;
+    dp.tune = v[o + P_DTUNE];
+    dp.decay = v[o + P_DDECAY] / 127;
+    dp.tone = v[o + P_DTONE] / 127;
+    dp.snap = v[o + P_DSNAP] / 127;
     patch.cutoff = v[o + P_CUTOFF] / 127;
     patch.reso = v[o + P_RESO] / 127;
     patch.envAmt = v[o + P_ENV] / 127;
@@ -265,6 +290,10 @@ export class Engine {
     this.samples.set(id, { l, r: r ?? l });
   }
 
+  dropSample(id: string): void {
+    this.samples.delete(id);
+  }
+
   /**
    * Start from the top. With `chain`, plays those patterns in order (and stops
    * at the end unless `loop`); otherwise follows the project's song/pattern mode.
@@ -308,7 +337,10 @@ export class Engine {
     if (this.automated) { this.automated = false; this.loadValues(); }
     this.queued = -1;
     this.pn = 0;
-    for (const c of this.ch) for (const v of c.synths) if (v.active && !v.held) v.release();
+    for (const c of this.ch) {
+      for (const v of c.synths) if (v.active && !v.held) v.release();
+      if (c.bass.active && !c.bass.held) c.bass.release();
+    }
   }
 
   /** Silence everything right now. */
@@ -316,6 +348,8 @@ export class Engine {
     for (const c of this.ch) {
       for (const v of c.samples) if (v.active) v.kill();
       for (const v of c.synths) if (v.active) v.kill();
+      for (const v of c.drums) if (v.active) v.kill();
+      if (c.bass.active) c.bass.kill();
     }
   }
 
@@ -325,11 +359,24 @@ export class Engine {
     else this.queued = i === this.pattern && !this.chain ? -1 : i;
   }
 
+  /** Let a sample be heard on its own (the sample browser). An empty id just stops whatever is playing. */
+  preview(id: string): void {
+    const [a, b] = this.previews;
+    if (a.active) a.kill();
+    if (b.active) b.kill();
+    const data = this.samples.get(id);
+    if (!data) return;
+    const v = a.active ? b : a;
+    if (v.active) return; // both still fading from quick flicks through a list: skip this one
+    v.start(data, 1, 0.7, 1, this.age++);
+  }
+
   /** Play a drum hit or a one-shot synth note right away (pads, MIDI, previews). */
   trigger(track: number, vel: number, pitch?: number): void {
     const t = this.project.tracks[track];
     if (!t) return;
     if (t.kind === 'drum') this.hit(track, t, vel);
+    else if (t.kind === 'dsyn') this.drum(track, vel);
     else if (t.kind === 'slice') this.hit(track, t, vel, pitch ?? t.note);
     else this.noteOn(track, pitch ?? t.note, vel, this.sampleRate * 0.2);
   }
@@ -341,6 +388,12 @@ export class Engine {
     if (tr.kind !== 'synth') {
       // on a sliced sample the "pitch" is the slice number, and it plays for as long as the note
       if (tr.kind === 'slice') this.hit(track, tr, vel, pitch, gateFrames);
+      else if (tr.kind === 'bass') {
+        // a part written in one key moves with the song when the key changes
+        const shift = tr.bass.follow ? ((this.project.scaleRoot - tr.bass.key + 18) % 12) - 6 : 0;
+        c.bass.start(pitch + shift, vel, gateFrames, c.bassPatch);
+        c.bassNote = pitch;
+      }
       return;
     }
     // re-use the voice already playing this pitch, else a free one, else the quietest
@@ -359,6 +412,19 @@ export class Engine {
     const c = this.ch[track];
     if (!c) return;
     for (const v of c.synths) if (v.active && v.held && v.pitch === pitch) v.release();
+    if (c.bass.active && c.bass.held && c.bassNote === pitch) c.bass.release();
+  }
+
+  /** Start a drum-synth voice. Like a real drum, a new hit cuts the one before short only when the voices run out. */
+  private drum(track: number, vel: number): void {
+    const c = this.ch[track];
+    let v = c.drums[0];
+    for (let i = 0; i < c.drums.length; i++) {
+      const d = c.drums[i];
+      if (!d.active) { v = d; break; }
+      if (d.age < v.age) v = d;
+    }
+    v.start(c.drumPatch, vel, this.age++);
   }
 
   /** Start a sample voice. With `slice`, only that slice plays, and it cuts off whatever was sounding (like chopping on pads). */
@@ -415,6 +481,7 @@ export class Engine {
     const tr = this.project.tracks[track];
     if (!tr) return;
     if (tr.kind === 'drum') this.hit(track, tr, vel);
+    else if (tr.kind === 'dsyn') this.drum(track, vel);
     else this.noteOn(track, pitch, vel, gate);
   }
 
@@ -445,7 +512,7 @@ export class Engine {
       const chance = modChance(m);
       if (chance && this.rnd() * 100 >= CHANCES[chance]) return;
     }
-    const drum = tr.kind === 'drum';
+    const drum = tr.kind === 'drum' || tr.kind === 'dsyn';
     const arp = !drum && tr.arpMode > 0;
     if (drum && !pat.steps[t]?.[step]) return;
     const notes = pat.notes[t];
@@ -529,6 +596,8 @@ export class Engine {
     const tempo = a.tempo;
     for (let i = 0; i < tempo.length && tempo[i].at <= s; i++) bpm = tempo[i].bpm;
     this.clock.bpm = bpm;
+    // put the automated knobs where they belong on this step before anything on it plays
+    if (this.curves.length) { this.sinceStep = 0; this.automate(); this.sinceStep = -offset; }
     const sps = samplesPerStep(bpm, this.sampleRate);
     const bar = barStart(p, s);
     for (let t = 0; t < this.clips.length; t++) {
@@ -687,6 +756,7 @@ export class Engine {
       mixL[i] *= g; mixR[i] *= g;
     }
     this.masterGain = mg;
+    for (let i = 0; i < 2; i++) if (this.previews[i].active) this.previews[i].render(mixL, mixR, 0, n);
     softClip(mixL, n);
     softClip(mixR, n);
     for (let i = 0; i < n; i++) {
@@ -704,6 +774,9 @@ export class Engine {
       const c = this.ch[t], sm = c.samples, sy = c.synths;
       for (let i = 0; i < sm.length; i++) if (sm[i].active) sm[i].render(c.l, c.r, from, to);
       for (let i = 0; i < sy.length; i++) if (sy[i].active) sy[i].render(c.l, c.r, from, to, c.patch);
+      if (c.bass.active) c.bass.render(c.l, c.r, from, to, c.bassPatch);
+      const dr = c.drums;
+      for (let i = 0; i < dr.length; i++) if (dr[i].active) dr[i].render(c.l, c.r, from, to);
     }
   }
 

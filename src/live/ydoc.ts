@@ -66,6 +66,8 @@ function writeTrack(yt: Y.Map<unknown>, p: Project, t: Track, ti: number): void 
   if (!same(yt.get('slices'), t.slices)) yt.set('slices', [...t.slices]);
   if (!same(yt.get('fx'), t.fx)) yt.set('fx', JSON.parse(JSON.stringify(t.fx)));
   syncMap(child(yt, 'synth', () => new Y.Map()), t.synth as unknown as Json);
+  if (yt.has('bass') || t.kind === 'bass') syncMap(child(yt, 'bass', () => new Y.Map()), t.bass as unknown as Json);
+  if (yt.has('dsyn') || t.kind === 'dsyn') syncMap(child(yt, 'dsyn', () => new Y.Map()), t.dsyn as unknown as Json);
 
   const pats = child(yt, 'pats', () => new Y.Array<Y.Map<unknown>>());
   while (pats.length < NUM_PATTERNS) pats.push([new Y.Map()]);
@@ -143,6 +145,8 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
     t.slices = yt.get('slices');
     t.fx = yt.get('fx');
     t.synth = (yt.get('synth') as Y.Map<unknown> | undefined)?.toJSON() ?? {};
+    t.bass = (yt.get('bass') as Y.Map<unknown> | undefined)?.toJSON();
+    t.dsyn = (yt.get('dsyn') as Y.Map<unknown> | undefined)?.toJSON();
     tracks.push(t);
     const pats = yt.get('pats') as Y.Array<Y.Map<unknown>> | undefined;
     for (let pi = 0; pi < NUM_PATTERNS; pi++) {
@@ -217,7 +221,7 @@ export function describeChange(before: Project, after: Project): string {
   const n = Math.min(before.tracks.length, after.tracks.length);
   for (let t = 0; t < n && after.tracks.length === before.tracks.length; t++) {
     const a = before.tracks[t], b = after.tracks[t], name = b.name;
-    if (a.sample !== b.sample || a.kind !== b.kind || !same(a.synth, b.synth) || !same(a.slices, b.slices) || a.reverse !== b.reverse || a.stretch !== b.stretch
+    if (a.sample !== b.sample || a.kind !== b.kind || !same(a.synth, b.synth) || !same(a.bass, b.bass) || !same(a.dsyn, b.dsyn) || !same(a.slices, b.slices) || a.reverse !== b.reverse || a.stretch !== b.stretch
       || a.tune !== b.tune || a.decay !== b.decay) say(`${name}: sound`);
     if (!same(a.fx, b.fx)) say(`${name}: effects`);
     if (a.mute !== b.mute) say(`${b.mute ? 'muted' : 'unmuted'} ${name}`);

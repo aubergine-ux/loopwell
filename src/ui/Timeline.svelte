@@ -126,7 +126,7 @@
     if (!pat || !tr) return '';
     const h = ROW - 16;
     let d = '';
-    if (tr.kind === 'drum') {
+    if (tr.kind === 'drum' || tr.kind === 'dsyn') {
       const row = pat.steps[c.track];
       for (let k = 0; k < c.len; k++) {
         const v = row[(k + c.offset) % p.steps];

@@ -10,12 +10,12 @@ import { renderProject } from './core/render';
 import { beatFromHash, beatUrl, HASH_KEY } from './core/share';
 import { isDefaultArrangement, tempoAt, trackStepAt } from './core/arrange';
 import {
-  DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyArrangement, emptyProject, newId, newTrack, sanitize,
+  DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyArrangement, emptyProject, newId, newTrack, sanitize, usesNotes, usesSample,
   type Project, type TrackKind,
 } from './core/types';
 import { encodeWav } from './core/wav';
 import { app, THEMES } from './state.svelte';
-import { getSamples, loadSaved, loadTheme, putSample, saveProject, saveTheme } from './storage';
+import { deleteSample, getSamples, loadSaved, loadTheme, putSample, saveProject, saveTheme } from './storage';
 import { flash, startVisuals } from './visual';
 import { isDesktop, log, onProjectOpened, saveFile } from './desktop';
 import { initCommunity } from './community/store.svelte';
@@ -256,7 +256,7 @@ export function tapTempo(): void {
 /** Velocity shown for a cell in the step grid (0 = off). */
 export function stepVel(t: number, s: number, pat = app.pat): number {
   const p = app.project.patterns[pat];
-  if (app.project.tracks[t].kind === 'drum') return p.steps[t][s];
+  if (!usesNotes(app.project.tracks[t].kind)) return p.steps[t][s];
   let v = 0;
   for (const n of p.notes[t]) if (n.s === s && n.v > v) v = n.v;
   return v;
@@ -266,7 +266,7 @@ export function setStep(t: number, s: number, vel: number, pat = app.pat): void 
   const tr = app.project.tracks[t];
   const p = app.project.patterns[pat];
   if (!vel) p.mods[t][s] = 0; // a step that is switched off forgets its extras
-  if (tr.kind === 'drum') {
+  if (!usesNotes(tr.kind)) {
     p.steps[t][s] = vel;
   } else if (vel === 0) {
     p.notes[t] = p.notes[t].filter((n) => n.s !== s);
@@ -285,7 +285,11 @@ export function addTrack(kind: TrackKind): void {
   while (used.has(color) && color < 7) color++;
   const kit = p.tracks.find((t) => t.kind === 'drum' && isBuiltin(t.sample))?.sample.split('/')[0] ?? KITS[0].id;
   const untouched = isDefaultArrangement(p);
-  p.tracks.push(newTrack(kind, color, kind === 'drum' ? 'RIM' : 'SYNTH', `${kit}/rim`));
+  const name = { drum: 'RIM', synth: 'SYNTH', slice: 'CHOP', bass: '808', dsyn: 'DRUM' }[kind];
+  const tr = newTrack(kind, color, name, `${kit}/rim`);
+  tr.bass.key = p.scaleRoot;
+  if (kind === 'bass') tr.note = 36 + ((p.scaleRoot + 6) % 12) - 6;
+  p.tracks.push(tr);
   for (const pat of p.patterns) {
     pat.steps.push(new Array<number>(MAX_STEPS).fill(0));
     pat.notes.push([]);
@@ -339,6 +343,20 @@ export function assignSample(t: number, id: string): void {
   flash(t, 110);
 }
 
+/** Put any sample from the library on a track, turning the track into one that plays samples if it isn't. */
+export function useSample(t: number, id: string): void {
+  const tr = app.project.tracks[t];
+  if (!tr) return;
+  checkpoint();
+  if (!usesSample(tr.kind)) tr.kind = 'drum';
+  if (tr.sample !== id) tr.slices = tr.kind === 'slice' ? [0] : [];
+  if (isBuiltin(id)) { assignSample(t, id); return; }
+  tr.sample = id;
+  tr.name = (app.userSamples[id] ?? 'sample').replace(/\.[^.]+$/, '').slice(0, 12).toUpperCase() || 'SAMPLE';
+  audio.trigger(t, 110);
+  flash(t, 110);
+}
+
 /** Swap every built-in drum sound for the same slot in another kit. */
 export function useKit(kit: string): void {
   for (const tr of app.project.tracks) {
@@ -369,7 +387,7 @@ export function padDown(t: number, vel = 110): void {
   const tr = app.project.tracks[t];
   if (!tr) return;
   void audio.resume();
-  if (tr.kind !== 'drum') return noteDown(t, tr.note, vel);
+  if (usesNotes(tr.kind)) return noteDown(t, tr.note, vel);
   audio.trigger(t, vel);
   flash(t, vel);
   if (!app.rec || !app.playing) return;
@@ -384,12 +402,12 @@ export function padDown(t: number, vel = 110): void {
 
 export function padUp(t: number): void {
   const tr = app.project.tracks[t];
-  if (tr && tr.kind !== 'drum') noteUp(t, tr.note);
+  if (tr && usesNotes(tr.kind)) noteUp(t, tr.note);
 }
 
 export function noteDown(t: number, pitch: number, vel = 100): void {
   const tr = app.project.tracks[t];
-  if (!tr || tr.kind === 'drum') return;
+  if (!tr || !usesNotes(tr.kind)) return;
   void audio.resume();
   pitch = clamp(pitch, 0, 127);
   audio.noteOn(t, pitch, vel);
@@ -446,18 +464,34 @@ export async function registerSample(s: UserSample, persist: boolean): Promise<b
 
 const MAX_SAMPLE_BYTES = 25 * 1024 * 1024;
 
-export async function importSample(file: File, t: number): Promise<boolean> {
-  if (file.size === 0) { toast(`${file.name} is empty.`, 'error'); return false; }
-  if (file.size > MAX_SAMPLE_BYTES) { toast(`${file.name} is too big (25 MB max).`, 'error'); return false; }
+/** Read an audio file into the sample library. Returns its id, or null (after saying why) if it can't be used. */
+export async function addToLibrary(file: File): Promise<string | null> {
+  if (file.size === 0) { toast(`${file.name} is empty.`, 'error'); return null; }
+  if (file.size > MAX_SAMPLE_BYTES) { toast(`${file.name} is too big (25 MB max).`, 'error'); return null; }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const id = hashId(bytes);
   if (!(await registerSample({ id, name: file.name, bytes }, true))) {
     toast(`Couldn't read ${file.name} as audio.`, 'error');
-    return false;
+    return null;
   }
+  return id;
+}
+
+/** Take an imported sample out of the library for good. Tracks still pointing at it fall silent until given another. */
+export function forgetSample(id: string): void {
+  if (!isUser(id)) return;
+  userBytes.delete(id);
+  delete app.userSamples[id];
+  audio.dropSample(id);
+  void deleteSample(id);
+}
+
+export async function importSample(file: File, t: number): Promise<boolean> {
+  const id = await addToLibrary(file);
+  if (!id) return false;
   const tr = app.project.tracks[t];
   if (!tr) return false;
-  if (tr.kind === 'synth') tr.kind = 'drum';
+  if (!usesSample(tr.kind)) tr.kind = 'drum';
   tr.slices = [];
   tr.sample = id;
   tr.name = file.name.replace(/\.[^.]+$/, '').slice(0, 12).toUpperCase() || 'SAMPLE';
@@ -528,7 +562,7 @@ export function shareUrl(): string {
 
 /** How many tracks use samples that can't travel in a link. */
 export function customSampleCount(): number {
-  return app.project.tracks.filter((t) => t.kind !== 'synth' && isUser(t.sample)).length;
+  return app.project.tracks.filter((t) => usesSample(t.kind) && isUser(t.sample)).length;
 }
 
 /** Song view exports the timeline; pattern view exports the pattern on screen, once through. */
@@ -537,7 +571,7 @@ const exportChain = () => (app.project.songMode ? undefined : [app.pat]);
 /** Does track `i` play anything in what is about to be exported? */
 function trackHasNotes(p: Project, i: number, chain: number[] | undefined): boolean {
   const pats = chain ?? p.arr.clips.filter((c) => c.track === i).map((c) => c.pattern);
-  return pats.some((c) => (p.tracks[i].kind === 'drum' ? p.patterns[c].steps[i].some((v) => v > 0) : p.patterns[c].notes[i].length > 0));
+  return pats.some((c) => (usesNotes(p.tracks[i].kind) ? p.patterns[c].notes[i].length > 0 : p.patterns[c].steps[i].some((v) => v > 0)));
 }
 
 async function withBusy(label: string, job: (progress: (p: number) => Promise<void>) => Promise<void>): Promise<void> {
@@ -555,7 +589,7 @@ async function withBusy(label: string, job: (progress: (p: number) => Promise<vo
 
 async function loadAllSamples(p: Project): Promise<void> {
   await audio.init();
-  await Promise.all(p.tracks.filter((t) => t.kind !== 'synth').map((t) => audio.ensure(t.sample)));
+  await Promise.all(p.tracks.filter((t) => usesSample(t.kind)).map((t) => audio.ensure(t.sample)));
 }
 
 export function exportWav(): Promise<void> {

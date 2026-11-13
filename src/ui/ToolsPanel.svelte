@@ -31,8 +31,15 @@
   // --- dice ---
   let keep = $state<'none' | 'rhythm' | 'pitch'>('none');
   let soundLocks = $state<Partial<Record<SoundPart, boolean>>>({});
-  const parts = $derived(t.kind === 'synth' ? SOUND_PARTS : (['osc', 'env', 'filter'] as SoundPart[]));
-  const partLabel = (k: SoundPart) => (t.kind === 'synth' ? SOUND_PART_LABELS[k] : k === 'osc' ? 'Sample' : k === 'env' ? 'Tune & decay' : 'Filter');
+  // which parts of the sound can be held still depends on what makes it
+  const PARTS: Record<string, [SoundPart, string][]> = {
+    synth: SOUND_PARTS.map((k) => [k, SOUND_PART_LABELS[k]]),
+    drum: [['osc', 'Sample'], ['env', 'Tune & decay'], ['filter', 'Filter']],
+    slice: [],
+    bass: [['osc', 'Saturation'], ['env', 'Body'], ['mod', 'Slide']],
+    dsyn: [['osc', 'Character'], ['env', 'Tune & decay']],
+  };
+  const parts = $derived(PARTS[t.kind]);
   const lockedCount = $derived(p.tracks.filter((_, i) => app.locks[i]).length);
   function rollPattern(): void {
     if (!randomizePattern()) toast('Every track is locked, so there is nothing to roll.');
@@ -128,9 +135,9 @@
     <div class="row">
       <button class="btn" onclick={() => randomizeSound(app.sel, soundLocks)} disabled={t.kind === 'slice'}
         title="A new sound for {t.name}, leaving the locked parts alone"><Icon name="dice" size={13} />Sound</button>
-      {#each parts as k}
+      {#each parts as [k, label]}
         <button class="chip" class:on={soundLocks[k]} aria-pressed={!!soundLocks[k]} onclick={() => (soundLocks[k] = !soundLocks[k])}
-          title="{soundLocks[k] ? 'Kept' : 'Keep'}: {partLabel(k)}">{#if soundLocks[k]}<Icon name="lock" size={10} />{/if}{partLabel(k)}</button>
+          title="{soundLocks[k] ? 'Kept' : 'Keep'}: {label}">{#if soundLocks[k]}<Icon name="lock" size={10} />{/if}{label}</button>
       {/each}
     </div>
   </section>
