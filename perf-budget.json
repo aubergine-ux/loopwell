@@ -1,0 +1,23 @@
+{
+  "startJsGzip": 175,
+  "startJsRaw": 480,
+  "startCssGzip": 18,
+  "embedGzip": 60,
+  "lazy": {
+    "live sessions (Yjs)": "^engine\\.svelte-.*\\.js$",
+    "video encoder": "^(render|mediabunny-mp3-encoder)-.*\\.js$",
+    "stem separation": "^(worker-.*\\.js|ort-wasm.*\\.wasm)$",
+    "MP3 and OGG encoders": "^(mp3|ogg)-.*\\.(js|wasm)$",
+    "plugin host": "^host-.*\\.js$",
+    "MIDI files": "^midi-.*\\.js$",
+    "DAW project export": "^dawproject-.*\\.js$",
+    "the song timeline": "^Timeline-.*\\.js$",
+    "dialogs": "^(Share|Export|Demos|Help|Community|Video|Stems|Plugins|Learn|Midi|History|Presets|Folders|Join)Modal-.*\\.js$"
+  },
+  "absent": {
+    "Yjs": "YJS$",
+    "video muxer (Mediabunny)": "Mp4OutputFormat",
+    "ONNX runtime": "onnxruntime",
+    "WAM SDK": "wam-host-"
+  }
+}

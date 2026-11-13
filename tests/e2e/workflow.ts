@@ -136,6 +136,7 @@ try {
   await page.locator('.row[data-row="0"] .ms').first().click();
   await page.waitForTimeout(450);
   await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.waitForSelector('.modal ol li span');
   const steps = await page.locator('.modal ol li span').allTextContents();
   check('history says what each step did', steps[0] === 'Muted KICK' && steps[1] === 'KICK: pattern A' && steps[2] === 'Tempo 97 → 98', steps.slice(0, 4).join(' | '));
   await page.locator('.modal ol li button').nth(2).click();

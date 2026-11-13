@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { DEMOS } from '../src/core/demos';
 import { emptyProject, newId, newInsert, sanitize, type Project } from '../src/core/types';
-import { describeChange, fromY, patchInto, toY } from '../src/live/ydoc';
+import { describeChange } from '../src/core/describe';
+import { fromY, patchInto, toY } from '../src/live/ydoc';
 import { stressProject } from './realtime/stress';
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));

@@ -7,42 +7,27 @@
   import { onKeyDown, onKeyUp, releaseAll } from '../keys';
   import { live } from '../live/session.svelte';
   import { app, TABS } from '../state.svelte';
-  import CommunityModal from './CommunityModal.svelte';
-  import DemosModal from './DemosModal.svelte';
   import { SOUND_TYPE } from './dragsound';
-  import ExportModal from './ExportModal.svelte';
   import { initLibrary } from '../projects.svelte';
   import FxPanel from './FxPanel.svelte';
-  import HistoryModal from './HistoryModal.svelte';
   import PaletteModal from './PaletteModal.svelte';
   import Grid from './Grid.svelte';
-  import HelpModal from './HelpModal.svelte';
-  import JoinModal from './JoinModal.svelte';
-  import LiveCursors from './LiveCursors.svelte';
-  import LivePanel from './LivePanel.svelte';
   import { learn } from '../learn.svelte';
   import ChallengeBar from './ChallengeBar.svelte';
+  // Dialogs and the less-used views are fetched when they are first opened, so they cost nothing at startup.
   import CodePanel from './CodePanel.svelte';
   import LyricsPanel from './LyricsPanel.svelte';
   import MasterPanel from './MasterPanel.svelte';
   import Icon from './Icon.svelte';
   import MixPanel from './MixPanel.svelte';
-  import PerformView from './PerformView.svelte';
-  import PresetsModal from './PresetsModal.svelte';
-  import FoldersModal from './FoldersModal.svelte';
   import RackPanel from './RackPanel.svelte';
   import Pads from './Pads.svelte';
   import RollPanel from './RollPanel.svelte';
   import { midimap, setLearning } from '../midimap.svelte';
-  import MidiModal from './MidiModal.svelte';
-  import ShareModal from './ShareModal.svelte';
-  import StageView from './StageView.svelte';
-  import SampleBrowser from './SampleBrowser.svelte';
   import SongPanel from './SongPanel.svelte';
   import SoundPanel from './SoundPanel.svelte';
   import { prefs, setPref } from '../prefs.svelte';
   import { startTour } from '../tour.svelte';
-  import Timeline from './Timeline.svelte';
   import Tips from './Tips.svelte';
   import Tour from './Tour.svelte';
   import ToolsPanel from './ToolsPanel.svelte';
@@ -104,15 +89,15 @@
 
 <div class="stage">
   <main class="device" bind:this={device}>
-    {#if live.on && device}<LiveCursors host={device} />{/if}
+    {#if live.on && device}{#await import('./LiveCursors.svelte') then m}<m.default host={device}  />{/await}{/if}
     <Transport />
     {#if app.perform}
-      <PerformView />
+      {#await import('./PerformView.svelte') then m}<m.default  />{/await}
     {:else if app.stage}
-      <StageView />
+      {#await import('./StageView.svelte') then m}<m.default  />{/await}
     {:else}
     {#if learn.challenge}<ChallengeBar />{/if}
-    {#if app.project.songMode}<Timeline />{:else}<Grid />{/if}
+    {#if app.project.songMode}{#await import('./Timeline.svelte') then m}<m.default  />{/await}{:else}<Grid />{/if}
     <section class="lower">
       <div class="padwrap">
         <span class="label">Pads</span>
@@ -139,7 +124,7 @@
           {:else if app.tab === 'lyrics'}<LyricsPanel />
           {:else if app.tab === 'code'}<CodePanel />
           {:else if app.tab === 'master'}<MasterPanel />
-          {:else if app.tab === 'live' && live.on}<LivePanel />
+          {:else if app.tab === 'live' && live.on}{#await import('./LivePanel.svelte') then m}<m.default  />{/await}
           {:else}<SongPanel />{/if}
         </div>
       </div>
@@ -162,23 +147,23 @@
   </footer>
 </div>
 
-{#if app.modal === 'share'}<ShareModal />
-{:else if app.modal === 'export'}<ExportModal />
-{:else if app.modal === 'demos'}<DemosModal />
-{:else if app.modal === 'presets'}<PresetsModal />
-{:else if app.modal === 'community'}<CommunityModal />
-{:else if app.modal === 'join'}<JoinModal />
-{:else if app.modal === 'folders'}<FoldersModal />
-{:else if app.modal === 'samples'}<SampleBrowser />
-{:else if app.modal === 'midi'}<MidiModal />
-{:else if app.modal === 'history'}<HistoryModal />
+{#if app.modal === 'share'}{#await import('./ShareModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'export'}{#await import('./ExportModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'demos'}{#await import('./DemosModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'presets'}{#await import('./PresetsModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'community'}{#await import('./CommunityModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'join'}{#await import('./JoinModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'folders'}{#await import('./FoldersModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'samples'}{#await import('./SampleBrowser.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'midi'}{#await import('./MidiModal.svelte') then m}<m.default  />{/await}
+{:else if app.modal === 'history'}{#await import('./HistoryModal.svelte') then m}<m.default  />{/await}
 {:else if app.modal === 'video'}{#await import('./VideoModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'plugins'}{#await import('./PluginsModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'plugin'}{#await import('./PluginWindow.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'learn'}{#await import('./LearnModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'stems'}{#await import('./StemsModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'palette'}<PaletteModal />
-{:else if app.modal === 'help'}<HelpModal />{/if}
+{:else if app.modal === 'help'}{#await import('./HelpModal.svelte') then m}<m.default  />{/await}{/if}
 
 <Tour />
 <Tips />

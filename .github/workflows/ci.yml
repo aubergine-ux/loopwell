@@ -44,6 +44,8 @@ jobs:
         run: npm run test:e2e
         env:
           CHROMIUM: /usr/bin/google-chrome
+      - name: Startup size is within budget, and the heavy parts load on demand
+        run: npm run budget
       - name: Pattern tools, instruments, live screen, mixer, workflow, onboarding, accessibility
         run: npm run test:features
         env:

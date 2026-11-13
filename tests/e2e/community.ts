@@ -36,6 +36,7 @@ async function visitor(name: string): Promise<Page> {
   await p.goto(`${b.url}#server=${api}`);
   await p.waitForSelector('.cell');
   await p.getByRole('button', { name: 'Community' }).click();
+  await p.waitForSelector('.modal');
   await tab(p, 'Sign in');
   await p.getByLabel('Test account name').fill(name);
   await p.getByRole('button', { name: 'Development sign-in' }).click();
@@ -49,6 +50,7 @@ const { page } = b;
 await page.goto(b.url);
 await page.waitForSelector('.cell');
 await page.getByRole('button', { name: 'Community' }).click();
+await page.waitForSelector('.modal');
 check('with no server, the app only offers to connect to one', (await page.getByLabel('Server address').count()) === 1 && (await modal(page).getByRole('tab').count()) === 0);
 await page.getByLabel('Server address').fill('ftp://nope');
 await page.getByRole('button', { name: 'Connect' }).click();
@@ -82,6 +84,7 @@ check('a beat can be saved to the cloud', /version 1/.test((await beatRow(ada, '
 await ada.keyboard.press('Escape');
 await ada.locator('.cell[data-t="1"][data-s="6"]').click(); // change something
 await ada.getByRole('button', { name: 'Community' }).click();
+await ada.waitForSelector('.modal');
 await tab(ada, 'My saves');
 await modal(ada).getByRole('button', { name: /^Save a new version/ }).click();
 await ada.waitForFunction(() => /version 2/.test(document.querySelector('.modal .beat')?.textContent ?? ''));
@@ -92,6 +95,7 @@ await modal(ada).locator('.ver', { hasText: 'Version 1' }).getByRole('button', {
 await ada.waitForSelector('.modal', { state: 'detached' });
 check('an earlier version can be opened', !((await ada.locator('.cell[data-t="1"][data-s="6"]').getAttribute('class'))!.includes('on')));
 await ada.getByRole('button', { name: 'Community' }).click();
+await ada.waitForSelector('.modal');
 await tab(ada, 'My saves');
 await modal(ada).getByRole('button', { name: /^History/ }).click();
 await modal(ada).locator('.ver').first().waitFor();
@@ -132,6 +136,7 @@ check('remixing opens a copy in the editor and plays it', (await bob.locator('.c
 await bob.keyboard.press('Space');
 await bob.locator('.cell[data-t="1"][data-s="2"]').click();
 await bob.getByRole('button', { name: 'Community' }).click();
+await bob.waitForSelector('.modal');
 await modal(bob).getByRole('button', { name: 'Publish' }).click();
 const credit = (await modal(bob).locator('.card').textContent())!;
 await bob.getByLabel('Title').fill('Second light');
@@ -163,6 +168,8 @@ await bob.keyboard.press('Escape');
 check('the track now plays that sample', (await bob.locator('.row.sel .name b').textContent()) === 'BLIP');
 
 await bob.getByRole('button', { name: 'Community' }).click();
+
+await bob.waitForSelector('.modal');
 await beatRow(bob, 'First light').getByRole('button', { name: 'Report First light' }).click();
 await bob.getByLabel('Reason').selectOption('copyright');
 await bob.getByLabel('Details').fill('this is my melody');
@@ -199,6 +206,7 @@ await modal(bob).getByRole('tab', { name: 'Bobby' }).waitFor();
 await bob.reload();
 await bob.waitForSelector('.cell');
 await bob.getByRole('button', { name: 'Community' }).click();
+await bob.waitForSelector('.modal');
 check('the session and profile survive a reload', (await modal(bob).getByRole('tab', { name: 'Bobby' }).count()) === 1);
 await tab(bob, 'Bobby');
 await modal(bob).getByRole('button', { name: 'Delete account' }).click();
@@ -220,6 +228,7 @@ await ada.keyboard.press('Space');
 await ada.waitForSelector('.cell.ph');
 check('if the server is down, the app still starts and plays', (await ada.locator('.cell.ph').count()) > 0);
 await ada.getByRole('button', { name: 'Community' }).click();
+await ada.waitForSelector('.modal');
 check('and says it could not reach the server', await modal(ada).getByText('Could not reach').isVisible());
 
 const real = b.errors.filter((e) => !/Failed to load resource|ERR_CONNECTION_REFUSED|net::ERR/.test(e));

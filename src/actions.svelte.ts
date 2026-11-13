@@ -4,11 +4,9 @@
 import { strToU8, zipSync } from 'fflate';
 import { audio } from './audio/host';
 import { KITS, isBuiltin, isUser, slotLabel } from './core/kits';
-import { dawproject } from './core/dawproject';
-import { exportMidi, importMidi, midiToProject } from './core/midi';
 import { codeInfo, compileCode } from './core/mini';
 import { NOTE_NAMES, SCALES } from './core/scales';
-import { describeChange } from './live/ydoc';
+import { describeChange } from './core/describe';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
 import { renderProject } from './core/render';
 import { pluginAudio, syncPlugins } from './plugins.svelte';
@@ -600,6 +598,7 @@ export async function openMidiFile(file: File): Promise<boolean> {
   if (file.size > 5 * 1024 * 1024) { toast('That MIDI file is too big.', 'error'); return false; }
   try {
     const kit = app.project.tracks.find((t) => t.kind === 'drum' && isBuiltin(t.sample))?.sample.split('/')[0] ?? KITS[0].id;
+    const { importMidi, midiToProject } = await import('./core/midi');
     const got = midiToProject(importMidi(new Uint8Array(await file.arrayBuffer())), kit);
     got.project.name = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'imported';
     loadProject(got.project);
@@ -778,6 +777,7 @@ export function exportBundle(): Promise<void> {
     const chain = exportChain();
     const stems = await renderStems(p, chain, progress);
     const pitched = p.tracks.some((t) => isPitched(t.kind));
+    const { exportMidi } = await import('./core/midi');
     const files: Record<string, Uint8Array> = {
       [`${slug()}.mid`]: exportMidi(p, chain),
       'readme.txt': strToU8([
@@ -803,6 +803,7 @@ export function exportDawproject(): Promise<void> {
     const p = snapshot();
     const chain = exportChain();
     const stems = await renderStems(p, chain, progress);
+    const { dawproject } = await import('./core/dawproject');
     const xml = dawproject(p, chain, stems.map((s) => ({ track: s.track, path: `audio/${s.file}`, seconds: s.seconds, sampleRate: s.sampleRate })), __APP_VERSION__);
     const files: Record<string, Uint8Array> = { 'project.xml': strToU8(xml.project), 'metadata.xml': strToU8(xml.metadata) };
     for (const s of stems) files[`audio/${s.file}`] = s.wav;
@@ -811,7 +812,8 @@ export function exportDawproject(): Promise<void> {
   });
 }
 
-export function exportMidiFile(): void {
+export async function exportMidiFile(): Promise<void> {
+  const { exportMidi } = await import('./core/midi');
   download(exportMidi(snapshot(), exportChain()), `${slug()}.mid`, 'audio/midi');
   toast('MIDI exported');
 }
