@@ -128,6 +128,7 @@ export const COMMANDS: Command[] = [
   { id: 'export-wav', title: 'Export WAV', group: 'Export', run: () => void exportAudio('wav') },
   { id: 'export-mp3', title: 'Export MP3', group: 'Export', run: () => void exportAudio('mp3', 'stream') },
   { id: 'export-ogg', title: 'Export OGG', group: 'Export', run: () => void exportAudio('ogg', 'stream') },
+  { id: 'export-video', title: 'Export a video (MP4) for TikTok, Reels, YouTube', group: 'Export', words: 'visualizer mp4 film', run: open('video') },
   { id: 'export-stems', title: 'Export stems', group: 'Export', run: () => void exportStems() },
   { id: 'export-midi', title: 'Export MIDI', group: 'Export', run: exportMidiFile },
   { id: 'export-project', title: 'Save a project file', group: 'Export', run: saveProjectFile },

@@ -62,6 +62,10 @@
         <span><b>{FORMATS.find((f) => f.id === format)!.name}</b><small>The full mix with effects. {target.blurb}{loudness === 'off' || loudness === 'peak' ? '' : ', turned up or down to get there without clipping'}.</small></span>
       </button>
     </div>
+    <button onclick={() => (app.modal = 'video')}>
+      <Icon name="play" size={22} />
+      <span><b>Video</b><small>An MP4 with a moving picture, sized for TikTok, Reels, YouTube or a square post</small></span>
+    </button>
     <button onclick={() => run(exportStems)}>
       <Icon name="grid" size={22} />
       <span><b>Stems</b><small>One WAV per track in a zip, for mixing in a DAW</small></span>

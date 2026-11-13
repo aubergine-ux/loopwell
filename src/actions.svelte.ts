@@ -687,6 +687,21 @@ export function useMasterPreset(id: string): void {
   mastered.report = null;
 }
 
+/** Render what an export would (the song, or the pattern on screen once through), for anything that needs the audio itself. */
+export async function renderMix(onProgress?: (done: number) => void | Promise<void>, seconds?: number): Promise<{ project: Project; chain: number[] | undefined; l: Float32Array; r: Float32Array; sampleRate: number }> {
+  const project = snapshot();
+  await loadAllSamples(project);
+  const chain = exportChain();
+  const out = await renderProject(project, audio.bank, { sampleRate: audio.sampleRate, chain, onProgress, maxTail: 3 });
+  const n = seconds ? Math.min(out.l.length, Math.round(seconds * out.sampleRate)) : out.l.length;
+  return { project, chain, l: out.l.subarray(0, n), r: out.r.subarray(0, n), sampleRate: out.sampleRate };
+}
+
+/** Hand a finished file to the person: a download in the browser, a save dialog in the desktop app. */
+export function saveAs(data: Uint8Array<ArrayBuffer>, ext: string, type: string): void {
+  download(data, `${slug()}.${ext}`, type);
+}
+
 export type AudioFormat = 'wav' | Codec;
 
 /** Render the mix and save it. `loudness` scales the whole file towards a target; nothing is compressed to get there. */
