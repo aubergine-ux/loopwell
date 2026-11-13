@@ -1,11 +1,16 @@
 <script lang="ts">
   import { stop } from '../actions.svelte';
   import { app } from '../state.svelte';
-  import { TOUR, endTour, tour, tourNext } from '../tour.svelte';
+  import { endTour, tour, tourNext } from '../tour.svelte';
   import Icon from './Icon.svelte';
 
-  const step = $derived(TOUR[app.tour]);
-  const finished = $derived(app.tour >= TOUR.length);
+  const step = $derived(tour.steps[app.tour]);
+  const finished = $derived(app.tour >= tour.steps.length);
+  const lesson = $derived(!!tour.lesson);
+  function lessons(): void {
+    endTour();
+    app.modal = 'learn';
+  }
   let box = $state<{ x: number; y: number; w: number; h: number } | null>(null);
   let card = $state<HTMLElement>();
   let place = $state({ left: 0, top: 0 });
@@ -47,16 +52,25 @@
 {#if app.tour >= 0 && !finished}
   {#if box}<div class="spot" class:ok={tour.ticked} style:left="{box.x - 6}px" style:top="{box.y - 6}px" style:width="{box.w + 12}px" style:height="{box.h + 12}px"></div>{/if}
   <div class="card" class:float={!!box} bind:this={card} style:left={box ? `${place.left}px` : null} style:top={box ? `${place.top}px` : null}
-    role="dialog" aria-label="Walkthrough, step {app.tour + 1} of {TOUR.length}" aria-live="polite">
+    role="dialog" aria-label="{tour.name}, step {app.tour + 1} of {tour.steps.length}" aria-live="polite">
     <header>
       <span class="n" class:ok={tour.ticked}>{#if tour.ticked}<Icon name="check" size={13} />{:else}{app.tour + 1}{/if}</span>
       <b>{step.title}</b>
-      <span class="of">{app.tour + 1} / {TOUR.length}</span>
+      <span class="of">{app.tour + 1} / {tour.steps.length}</span>
     </header>
     <p>{step.text}</p>
     <footer>
-      <button class="btn ghost" onclick={endTour}>End the walkthrough</button>
+      <button class="btn ghost" onclick={endTour}>{lesson ? 'End the lesson' : 'End the walkthrough'}</button>
       <button class="btn" onclick={tourNext}>Skip this step</button>
+    </footer>
+  </div>
+{:else if finished && lesson}
+  <div class="card done" role="dialog" aria-label="Lesson finished" aria-live="polite">
+    <header><span class="n ok"><Icon name="check" size={13} /></span><b>{tour.end.title}</b></header>
+    <p>{tour.end.text}</p>
+    <footer>
+      <button class="btn ghost" onclick={endTour}>Keep playing with it</button>
+      <button class="btn on" onclick={lessons}>More lessons</button>
     </footer>
   </div>
 {:else if finished}

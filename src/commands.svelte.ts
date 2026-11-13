@@ -138,6 +138,7 @@ export const COMMANDS: Command[] = [
   { id: 'export-project', title: 'Save a project file', group: 'Export', run: saveProjectFile },
   { id: 'tips', title: 'Tooltips on / off', group: 'Settings', words: 'hints help', run: () => { setPref('tips', !prefs.tips); toast(prefs.tips ? 'Tooltips on' : 'Tooltips off'); } },
   { id: 'calm', title: 'Reduce motion on / off', group: 'Settings', words: 'animation', run: () => { setPref('calm', !prefs.calm); toast(prefs.calm ? 'Less motion' : 'Full motion'); } },
+  { id: 'learn', title: 'Learn: lessons and beats to recreate', group: 'Loopwell', words: 'tutorial lesson challenge teach how to trap hi-hat sidechain chop', run: open('learn') },
   { id: 'tour', title: 'Show the walkthrough again', group: 'Settings', words: 'tutorial onboarding', run: () => void startTour() },
 ];
 

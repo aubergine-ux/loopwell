@@ -95,7 +95,10 @@
       <h3>Settings</h3>
       <label class="check"><input type="checkbox" checked={prefs.tips} onchange={(e) => setPref('tips', e.currentTarget.checked)} /> Tooltips that explain each control</label>
       <label class="check"><input type="checkbox" checked={prefs.calm} onchange={(e) => setPref('calm', e.currentTarget.checked)} /> Reduce motion</label>
-      <button class="btn" onclick={() => void startTour()}>Show the walkthrough</button>
+      <div class="learnrow">
+        <button class="btn on" onclick={() => (app.modal = 'learn')}>Lessons and challenges</button>
+        <button class="btn" onclick={() => void startTour()}>Show the walkthrough</button>
+      </div>
       <h3>Audio</h3>
       <div class="seg" role="radiogroup" aria-label="Audio latency">
         {#each LATENCY_MODES as m}
@@ -137,4 +140,5 @@
   section > .btn { margin-top: 10px; height: 30px; font-size: 11px; }
   a { color: var(--accent); font-weight: 600; }
   @media (max-width: 640px) { .cols { grid-template-columns: 1fr; gap: 0; } }
+  .learnrow { display: flex; gap: 8px; flex-wrap: wrap; }
 </style>

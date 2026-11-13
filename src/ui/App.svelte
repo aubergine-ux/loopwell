@@ -20,6 +20,8 @@
   import JoinModal from './JoinModal.svelte';
   import LiveCursors from './LiveCursors.svelte';
   import LivePanel from './LivePanel.svelte';
+  import { learn } from '../learn.svelte';
+  import ChallengeBar from './ChallengeBar.svelte';
   import CodePanel from './CodePanel.svelte';
   import LyricsPanel from './LyricsPanel.svelte';
   import MasterPanel from './MasterPanel.svelte';
@@ -109,6 +111,7 @@
     {:else if app.stage}
       <StageView />
     {:else}
+    {#if learn.challenge}<ChallengeBar />{/if}
     {#if app.project.songMode}<Timeline />{:else}<Grid />{/if}
     <section class="lower">
       <div class="padwrap">
@@ -147,6 +150,7 @@
     <div class="invite">
       <b>New here?</b><span>Make your first beat in two minutes.</span>
       <button class="btn on" onclick={startTour}>Show me how</button>
+      <button class="btn" onclick={() => { setPref('toured', true); app.modal = 'learn'; }}>More lessons</button>
       <button class="btn ghost" onclick={() => setPref('toured', true)}>No thanks</button>
     </div>
   {/if}
@@ -171,6 +175,7 @@
 {:else if app.modal === 'video'}{#await import('./VideoModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'plugins'}{#await import('./PluginsModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'plugin'}{#await import('./PluginWindow.svelte') then m}<m.default />{/await}
+{:else if app.modal === 'learn'}{#await import('./LearnModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'stems'}{#await import('./StemsModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'palette'}<PaletteModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}

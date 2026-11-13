@@ -72,13 +72,40 @@ export const TOUR: TourStep[] = [
 export const tour = $state({
   /** A step was just done; the tick is showing before the next one. */
   ticked: false,
+  /** What is being walked through: the first-run walkthrough, or a lesson from Learn. */
+  steps: TOUR,
+  /** The lesson's id; '' for the walkthrough. */
+  lesson: '',
+  /** What to call it on the cards. */
+  name: 'Walkthrough',
+  /** Said when the last step is done. */
+  end: { title: '', text: '' },
+  /** Called when a lesson is finished to the end. */
+  finished: null as null | (() => void),
 });
+
+/** Walk through a lesson's steps on the beat that is open. */
+export function runSteps(lesson: string, name: string, steps: TourStep[], end: { title: string; text: string }, finished: () => void): void {
+  tour.ticked = false;
+  tour.steps = steps;
+  tour.lesson = lesson;
+  tour.name = name;
+  tour.end = end;
+  tour.finished = finished;
+  app.modal = null;
+  app.tour = 0;
+  steps[0].enter?.();
+}
 
 /** Begin on a clean beat, so that everything heard at the end was made in the tour. */
 export async function startTour(): Promise<void> {
   const p = emptyProject();
   p.name = 'My first beat';
   await openAsNew(p, 'Started the walkthrough');
+  tour.steps = TOUR;
+  tour.lesson = '';
+  tour.name = 'Walkthrough';
+  tour.finished = null;
   app.modal = null;
   app.tour = 0;
   TOUR[0].enter?.();
@@ -88,12 +115,13 @@ export function tourNext(): void {
   tour.ticked = false;
   if (app.tour < 0) return;
   app.tour++;
-  if (app.tour >= TOUR.length) setPref('toured', true); // the last card is the finish, not a step
-  else TOUR[app.tour].enter?.();
+  // the last card is the finish, not a step
+  if (app.tour >= tour.steps.length) { if (tour.lesson) tour.finished?.(); else setPref('toured', true); }
+  else tour.steps[app.tour].enter?.();
 }
 
 export function endTour(): void {
   tour.ticked = false;
   app.tour = -1;
-  setPref('toured', true);
+  if (!tour.lesson) setPref('toured', true);
 }
