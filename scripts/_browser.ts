@@ -23,6 +23,10 @@ export async function launch(opts: { width?: number; height?: number; touch?: bo
     viewport: size, deviceScaleFactor: opts.scale ?? 1, hasTouch: !!opts.touch,
     recordVideo: opts.video ? { dir: opts.video, size } : undefined,
   });
+  // SLOW=300 holds every script back by that many milliseconds, as a slow connection or a busy machine would: the
+  // way to find a test (or a part of the app) that assumes something loaded on demand is there at once
+  const slow = Number(process.env.SLOW) || 0;
+  if (slow) await ctx.route(/\/assets\/.*\.js$/, async (route) => { await new Promise((r) => setTimeout(r, slow)); await route.continue(); });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

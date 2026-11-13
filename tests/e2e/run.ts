@@ -267,7 +267,7 @@ await page.waitForSelector('.toast', { state: 'detached', timeout: 8000 }).catch
 
 // ---- pads view ----
 await page.keyboard.press('p');
-await page.waitForSelector('.perform');
+await page.waitForSelector('.perform .pad[data-pad]');
 check('P opens the pads view, with a second bank for the selected track', (await page.locator('.perform .pad[data-pad]').count()) === 8 && (await page.locator('.cell').count()) === 0);
 // this track has a slow, swelling sound by now, so hold the pads rather than tapping them
 const hold = async (sel: string, n = 0) => {
