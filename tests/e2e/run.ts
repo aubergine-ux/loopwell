@@ -487,7 +487,7 @@ check('stems export has one WAV per track with notes', stemNames.length === 8 &&
 await page.waitForSelector('.busy', { state: 'detached' });
 
 await page.getByTitle(/^Export WAV/).click();
-const mid = await download(page, () => page.locator('.modal').getByRole('button', { name: /^MIDI/ }).click());
+const mid = await download(page, () => page.locator('.modal').getByRole('button', { name: /^MIDI\s*Notes/ }).click());
 check('MIDI export is a standard MIDI file', mid.name === 'dust-loop.mid' && String.fromCharCode(...mid.bytes.subarray(0, 4)) === 'MThd' && mid.bytes.length > 500);
 
 check('MIDI export of a song carries its tempo change', [...mid.bytes].some((_, i) => mid.bytes[i] === 0xff && mid.bytes[i + 1] === 0x51 && i > 40));

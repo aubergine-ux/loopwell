@@ -56,9 +56,10 @@ try {
   await section(page, 'Dice').getByLabel('Lock KICK').click();
   await section(page, 'Dice').getByLabel('Lock HAT').click();
   let changed = false;
-  for (let i = 0; i < 4 && !changed; i++) {
+  // dice can land the same way twice, so give them a few throws and look at both unlocked tracks
+  for (let i = 0; i < 12 && !changed; i++) {
     await section(page, 'Dice').getByRole('button', { name: 'Pattern' }).click();
-    changed = JSON.stringify(await onSteps(page, 2)) !== JSON.stringify(before[2]);
+    changed = JSON.stringify([await onSteps(page, 1), await onSteps(page, 2)]) !== JSON.stringify([before[1], before[2]]);
   }
   const after = await Promise.all([0, 1, 2, 3].map((t) => onSteps(page, t)));
   check('the dice change unlocked tracks', changed);
