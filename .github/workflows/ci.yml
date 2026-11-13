@@ -38,8 +38,18 @@ jobs:
         run: npm test
       - name: Engine stress benchmark
         run: npm run bench
+      - name: Engine stress benchmark, with everything newer switched on
+        run: npx tsx scripts/bench.ts --full
       - name: End-to-end tests
         run: npm run test:e2e
+        env:
+          CHROMIUM: /usr/bin/google-chrome
+      - name: Pattern tools, instruments, live screen, mixer, workflow, onboarding, accessibility
+        run: npm run test:features
+        env:
+          CHROMIUM: /usr/bin/google-chrome
+      - name: Audio thread keeps time while the page is busy
+        run: npm run test:realtime
         env:
           CHROMIUM: /usr/bin/google-chrome
       - name: Community features against the real server
