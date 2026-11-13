@@ -23,6 +23,10 @@
     file: 'M6 3h8l4 4v14H6zM14 3v4h4',
     note: 'M9 18V5l10-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
     wave: 'M2 12h3l2-7 4 14 3-10 2 5 2-2h4',
+    edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+    clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3.5 2',
+    search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM16 16l4.5 4.5',
+    metro: 'M9 3h6l4 18H5zM12 14l5-8M7.5 14h9',
     dice: 'M5 5h14v14H5zM9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01',
   };
   let { name, size = 16, fill = false }: { name: string; size?: number; fill?: boolean } = $props();

@@ -564,6 +564,7 @@ await other.setOffline(true);
 await page3.reload();
 await page3.waitForSelector('.cell', { timeout: 8000 }).catch(() => {});
 await page3.getByTitle('Demo beats and new beat').click();
+await page3.getByRole('radio', { name: 'Demos' }).click(); // this browser has beats of its own by now, so the list opens on those
 await page3.getByText('Glass Hours').click(); // a kit this page has never fetched
 await page3.waitForSelector('.cell.ph', { timeout: 8000 }).catch(() => {});
 await page3.waitForTimeout(1200);

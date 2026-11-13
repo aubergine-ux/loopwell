@@ -5,6 +5,7 @@ import { zipSync } from 'fflate';
 import { audio } from './audio/host';
 import { KITS, isBuiltin, isUser, slotLabel } from './core/kits';
 import { exportMidi } from './core/midi';
+import { describeChange } from './live/ydoc';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
 import { renderProject } from './core/render';
 import { beatFromHash, beatUrl, HASH_KEY } from './core/share';
@@ -16,6 +17,7 @@ import {
 import { CODECS, encodeAudio, type Codec } from './core/encode';
 import { normalize, type LoudnessTarget } from './core/loudness';
 import { encodeWav } from './core/wav';
+import { applyPrefs, prefs } from './prefs.svelte';
 import { app, THEMES } from './state.svelte';
 import { deleteSample, getSamples, loadSaved, loadTheme, putSample, saveProject, saveTheme } from './storage';
 import { flash, startVisuals } from './visual';
@@ -52,23 +54,41 @@ function download(data: Uint8Array<ArrayBuffer>, name: string, type: string): vo
 }
 
 // --- history & persistence -------------------------------------------------
+// Every state the beat has been in, oldest first, with a few words on what
+// changed to get there. Undo and redo walk along it; the history panel jumps.
 
-const past: string[] = [];
-let future: string[] = [];
-let committed = '';
+interface Past { json: string; label: string; time: number }
+const MAX_HISTORY = 100;
+const states: Past[] = [];
+let at = -1;
 let commitTimer = 0;
 
-function commit(): void {
+/** Called with the beat (as JSON) each time a change is committed, for anything that keeps a copy of it. */
+export const saveHooks: ((json: string) => void)[] = [];
+
+function mirror(): void {
+  app.history = states.map((s) => ({ label: s.label, time: s.time }));
+  app.historyAt = at;
+  app.canUndo = at > 0;
+  app.canRedo = at < states.length - 1;
+}
+
+function commit(label?: string): void {
   clearTimeout(commitTimer);
   const cur = JSON.stringify(app.project);
-  if (cur === committed) return;
-  if (committed) past.push(committed);
-  if (past.length > 100) past.shift();
-  committed = cur;
-  future = [];
+  const prev = states[at];
+  if (prev && cur === prev.json) return;
+  states.length = at + 1; // a new change drops whatever had been undone
+  let said = label;
+  if (!said && prev) {
+    try { said = describeChange(JSON.parse(prev.json), JSON.parse(cur)); } catch { /* a state that can't be compared still gets recorded */ }
+  }
+  states.push({ json: cur, label: said || 'Edit', time: Date.now() });
+  if (states.length > MAX_HISTORY) states.shift();
+  at = states.length - 1;
   saveProject(cur);
-  app.canUndo = past.length > 0;
-  app.canRedo = false;
+  for (const hook of saveHooks) hook(cur);
+  mirror();
 }
 
 /** Close the current undo step now, so that the next edit is undone on its own. */
@@ -97,31 +117,33 @@ export function projectChanged(snap: Project): void {
   commitTimer = window.setTimeout(commit, 350);
 }
 
-function restore(json: string): void {
-  committed = json;
+function restore(i: number): void {
+  at = i;
+  const json = states[i].json;
   app.project = JSON.parse(json);
   saveProject(json);
+  for (const hook of saveHooks) hook(json);
   fixSelection();
-  app.canUndo = past.length > 0;
-  app.canRedo = future.length > 0;
+  mirror();
 }
 
 export function undo(): void {
   if (hooks.noHistory) { toast('Undo is off during a live session, so nobody loses someone else\'s changes.'); return; }
   commit();
-  const prev = past.pop();
-  if (prev === undefined) return;
-  future.push(committed);
-  restore(prev);
+  if (at > 0) restore(at - 1);
 }
 
 export function redo(): void {
   if (hooks.noHistory) return;
   commit();
-  const next = future.pop();
-  if (next === undefined) return;
-  past.push(committed);
-  restore(next);
+  if (at < states.length - 1) restore(at + 1);
+}
+
+/** Go straight to any point in the history (the history panel). */
+export function jumpTo(i: number): void {
+  if (hooks.noHistory) { toast('History is off during a live session, so nobody loses someone else\'s changes.'); return; }
+  commit();
+  if (i >= 0 && i < states.length && i !== at) restore(i);
 }
 
 export function fixSelection(): void {
@@ -142,7 +164,7 @@ export const resetHooks: (() => void)[] = [];
 export const loadHooks: (() => void)[] = [];
 
 /** Replace the whole beat. The old one stays reachable with undo. */
-export function loadProject(p: Project): void {
+export function loadProject(p: Project, label = `Opened “${p.name}”`): void {
   for (const hook of loadHooks) hook();
   commit();
   stopPlaying();
@@ -152,10 +174,11 @@ export function loadProject(p: Project): void {
   app.cursor = 0;
   app.clip = null;
   app.step = null;
+  app.range = null;
   app.locks = [];
   for (const hook of resetHooks) hook();
   fixSelection();
-  commit();
+  commit(label);
 }
 
 export function newBeat(): void {
@@ -194,12 +217,13 @@ export async function play(): Promise<void> {
   }
   app.needsTap = false;
   if (hooks.transport?.(true)) return; // in a session everyone starts together
-  startPlaying(app.pat, app.cursor);
+  // a count-in gives you time to get your hands in place before a recording
+  startPlaying(app.pat, app.cursor, 0, app.rec ? prefs.countIn * 16 : 0);
 }
 
 /** Start the engine now. `step` starts a looping pattern part-way through (joining a session that is already playing). */
-export function startPlaying(pattern: number, from: number, step = 0): void {
-  audio.play(pattern, from, step);
+export function startPlaying(pattern: number, from: number, step = 0, countIn = 0): void {
+  audio.play(pattern, from, step, countIn);
   app.playing = true;
   for (const hook of transportHooks) hook(true);
 }
@@ -248,6 +272,7 @@ export function setSteps(n: 16 | 32): void {
   p.steps = n;
   if (untouched) p.arr = emptyArrangement(p.tracks.length, n);
   for (const c of p.arr.clips) c.offset %= n;
+  app.range = null;
   fixSelection();
 }
 
@@ -684,9 +709,10 @@ export function boot(): void {
   setTheme(loadTheme() ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'cream'));
   const saved = loadSaved();
   app.project = saved ? sanitize(saved) : starter();
-  committed = JSON.stringify(app.project);
   fixSelection();
+  commit('Where you left off');
   startVisuals();
+  applyPrefs();
   void audio.init().catch(() => toast('This browser can\'t run the audio engine (AudioWorklet is missing).', 'error'));
   void getSamples().then(async (all) => { for (const s of all) await registerSample(s, false); });
   checkHash();

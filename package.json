@@ -21,6 +21,7 @@
     "test:sounds": "vite build && tsx tests/e2e/instruments.ts",
     "test:stage": "vite build && tsx tests/e2e/stage.ts",
     "test:mix": "vite build && tsx tests/e2e/mix.ts",
+    "test:workflow": "vite build && tsx tests/e2e/workflow.ts",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri"

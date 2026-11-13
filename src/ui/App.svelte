@@ -10,7 +10,10 @@
   import CommunityModal from './CommunityModal.svelte';
   import DemosModal from './DemosModal.svelte';
   import ExportModal from './ExportModal.svelte';
+  import { initLibrary } from '../projects.svelte';
   import FxPanel from './FxPanel.svelte';
+  import HistoryModal from './HistoryModal.svelte';
+  import PaletteModal from './PaletteModal.svelte';
   import Grid from './Grid.svelte';
   import HelpModal from './HelpModal.svelte';
   import JoinModal from './JoinModal.svelte';
@@ -36,9 +39,13 @@
   import Transport from './Transport.svelte';
 
   boot();
+  void initLibrary();
 
   // any change to the beat goes to the audio thread, autosave and undo history
   $effect(() => projectChanged($state.snapshot(app.project) as Project));
+
+  // the stretch of the pattern being looped, if only part of it is
+  $effect(() => audio.setRange(app.range?.from ?? 0, app.range?.to ?? 0));
 
   let device = $state<HTMLElement>();
   let dropping = $state(false);
@@ -138,6 +145,8 @@
 {:else if app.modal === 'folders'}<FoldersModal />
 {:else if app.modal === 'samples'}<SampleBrowser />
 {:else if app.modal === 'midi'}<MidiModal />
+{:else if app.modal === 'history'}<HistoryModal />
+{:else if app.modal === 'palette'}<PaletteModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}

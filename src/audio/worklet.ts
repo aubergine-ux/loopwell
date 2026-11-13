@@ -16,7 +16,9 @@ export type ToWorklet =
   | { t: 'project'; project: Project }
   | { t: 'sample'; id: string; l: Float32Array; r?: Float32Array }
   | { t: 'table'; index: number; frames: Float32Array[][] }
-  | { t: 'play'; pattern: number; from: number; step: number }
+  | { t: 'play'; pattern: number; from: number; step: number; countIn: number }
+  | { t: 'metronome'; on: boolean }
+  | { t: 'range'; from: number; to: number }
   | { t: 'seek'; step: number }
   | { t: 'stop' }
   | { t: 'panic' }
@@ -67,7 +69,9 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       case 'project': e.setProject(m.project); break;
       case 'sample': e.setSample(m.id, m.l, m.r); break;
       case 'table': e.setTable(m.index, m.frames); break;
-      case 'play': e.play({ pattern: m.pattern, from: m.from, step: m.step }); break;
+      case 'play': e.play({ pattern: m.pattern, from: m.from, step: m.step, countIn: m.countIn }); break;
+      case 'metronome': e.metronome = m.on; break;
+      case 'range': e.setRange(m.from, m.to); break;
       case 'seek': e.seek(m.step); break;
       case 'stop': e.stop(); break;
       case 'panic': e.stop(); e.panic(); break;

@@ -121,6 +121,8 @@ export class Engine {
   inSong = false;
   /** Solo exactly one track and skip the master compressor (stem export). */
   stem = -1;
+  /** Click on every beat while playing. Live only: a render never has it. */
+  metronome = false;
   /** While true, "fill only" steps play and "not in fill" steps rest. */
   fill = false;
   onStep: ((info: StepInfo) => void) | null = null;
@@ -183,6 +185,13 @@ export class Engine {
   private curStep = 0;
   /** Times the looping pattern has come round since it started. */
   private loops = 0;
+  /** Count-in steps still to go before the beat starts. */
+  private pre = 0;
+  private preTotal = 0;
+  /** Loop only these steps of the pattern (the whole of it when `to` is not past `from`). */
+  private rangeFrom = 0;
+  private rangeTo = 0;
+  private clickAt = 0; private clickPh = 0; private clickEnv = 0; private clickHz = 1000;
   private seed = 1;
   // hits scheduled for a frame later than the step that asked for them, as parallel arrays so nothing allocates
   private pn = 0;
@@ -348,10 +357,11 @@ export class Engine {
    * Start from the top. With `chain`, plays those patterns in order (and stops
    * at the end unless `loop`); otherwise follows the project's song/pattern mode.
    */
-  play(opts: { chain?: number[]; loop?: boolean; pattern?: number; from?: number; step?: number } = {}): void {
+  play(opts: { chain?: number[]; loop?: boolean; pattern?: number; from?: number; step?: number; countIn?: number } = {}): void {
     this.clock.reset();
+    this.pre = this.preTotal = Math.max(0, Math.round(opts.countIn ?? 0));
     // `step` joins a looping pattern part-way through, for a session that is already playing
-    this.stepIdx = opts.step ? opts.step % this.project.steps : 0;
+    this.stepIdx = opts.step ? opts.step % this.project.steps : opts.chain ? 0 : this.loopFrom();
     this.clock.phase = this.stepIdx & 1;
     this.songPos = 0;
     this.started = false;
@@ -375,6 +385,28 @@ export class Engine {
     this.playing = true;
   }
 
+  /** Loop steps `from` up to (not including) `to` of the pattern instead of all of it. Pass 0, 0 for the whole pattern. */
+  setRange(from: number, to: number): void {
+    this.rangeFrom = to > from ? Math.max(0, from) : 0;
+    this.rangeTo = to > from ? to : 0;
+  }
+
+  private loopFrom(): number {
+    return this.rangeTo > this.rangeFrom && this.rangeFrom < this.project.steps ? this.rangeFrom : 0;
+  }
+
+  private loopTo(): number {
+    const steps = this.project.steps;
+    return this.rangeTo > this.rangeFrom && this.rangeFrom < steps ? Math.min(steps, this.rangeTo) : steps;
+  }
+
+  private click(accent: boolean, offset: number): void {
+    this.clickAt = offset;
+    this.clickPh = 0;
+    this.clickEnv = accent ? 0.5 : 0.32;
+    this.clickHz = accent ? 1760 : 1175;
+  }
+
   /** Jump to a timeline step: right away while the song plays, or as the place the next play() starts from. */
   seek(step: number): void {
     this.cue = step;
@@ -388,6 +420,7 @@ export class Engine {
     if (this.automated) { this.automated = false; this.loadValues(); }
     this.queued = -1;
     this.pn = 0;
+    this.pre = 0;
     for (const c of this.ch) {
       for (const v of c.synths) if (v.active && !v.held) v.release();
       if (c.bass.active && !c.bass.held) c.bass.release();
@@ -688,6 +721,7 @@ export class Engine {
       // notes are cut where their clip ends
       this.stepTrack(t, p.tracks[t], pat, along % p.steps, Math.floor(along / p.steps), s - bar, c.start + c.len - s, sps, offset);
     }
+    if (this.metronome && (s - bar) % 4 === 0) this.click(s === bar, offset);
     if (this.onStep) {
       const info = this.info;
       info.step = s; info.pattern = this.pattern; info.song = s; info.offset = offset; info.count = this.count++;
@@ -700,6 +734,18 @@ export class Engine {
     this.runTo(offset);
     if (!this.playing) return;
     const p = this.project;
+    if (this.pre > 0) {
+      // the count-in: clicks on the beat and nothing else, for as many steps as were asked for
+      const k = this.preTotal - this.pre;
+      if (k % 4 === 0) this.click(k % 16 === 0, offset);
+      if (this.onStep) {
+        const info = this.info;
+        info.step = 0; info.pattern = this.pattern; info.song = -1; info.offset = offset; info.count = -this.pre;
+        this.onStep(info);
+      }
+      this.pre--;
+      return;
+    }
     // Moving between pattern and song playback waits for a bar line, so the switch never stumbles.
     const wantSong = !this.chain && p.songMode;
     if (this.inSong && !wantSong) {
@@ -715,8 +761,10 @@ export class Engine {
       return;
     }
     if (this.automated) { this.automated = false; this.loadValues(); }
-    if (this.stepIdx >= p.steps) this.stepIdx = 0;
-    if (this.stepIdx === 0 && this.started) {
+    // a chain (an export, a preview) always plays whole patterns; the loop range is for building a beat
+    const from = this.chain ? 0 : this.loopFrom(), to = this.chain ? p.steps : this.loopTo();
+    if (this.stepIdx >= to || this.stepIdx < from) this.stepIdx = from;
+    if (this.stepIdx === from && this.started) {
       const chain = this.chain;
       if (chain) {
         this.songPos++;
@@ -746,6 +794,7 @@ export class Engine {
     }
     this.info.pattern = this.pattern;
     if (changed) this.tellLaunch();
+    if (this.metronome && step % 4 === 0) this.click(step % 16 === 0, offset);
     const sps = samplesPerStep(p.bpm, this.sampleRate);
     for (let t = 0; t < p.tracks.length; t++) {
       const which = this.launch[t];
@@ -894,6 +943,18 @@ export class Engine {
     }
     this.masterGain = mg;
     for (let i = 0; i < 2; i++) if (this.previews[i].active) this.previews[i].render(mixL, mixR, 0, n);
+    if (this.clickEnv > 1e-4) {
+      // the metronome: a short blip, after the master so no effect touches it
+      const w = (2 * Math.PI * this.clickHz) / this.sampleRate, decay = Math.exp(-1 / (0.012 * this.sampleRate));
+      let ph = this.clickPh, env = this.clickEnv;
+      for (let i = this.clickAt; i < n; i++) {
+        const x = Math.sin(ph) * env;
+        mixL[i] += x; mixR[i] += x;
+        ph += w; env *= decay;
+        if (env < 1e-4) { env = 0; break; } // stop on the sample it dies away, not at the end of the block
+      }
+      this.clickPh = ph; this.clickEnv = env; this.clickAt = 0;
+    }
     softClip(mixL, n);
     softClip(mixR, n);
     for (let i = 0; i < n; i++) {

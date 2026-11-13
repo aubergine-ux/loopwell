@@ -59,6 +59,8 @@ export class AudioHost {
   onLaunched: ((tracks: Int8Array, count: number) => void) | null = null;
   /** Steps the engine has played since play was pressed, as of the last one it reported. */
   count = 0;
+  /** Steps of count-in still to go (0 once the beat is playing). */
+  countIn = 0;
 
   private node: AudioWorkletNode | null = null;
   private starting: Promise<void> | null = null;
@@ -130,6 +132,9 @@ export class AudioHost {
   private receive(m: FromWorklet): void {
     if (m.t === 'step') {
       const ctx = this.ctx!;
+      // a negative count is the count-in: that many steps to go before the beat starts
+      if (m.count < 0) { this.countIn = -m.count; return; }
+      this.countIn = 0;
       this.count = m.count;
       this.onStepFired?.(m, m.frame);
       if (!this.playing) return;
@@ -385,11 +390,13 @@ export class AudioHost {
     return this.ctx?.sampleRate ?? 48000;
   }
 
-  play(pattern: number, from = 0, step = 0): void {
+  /** `countIn` steps of metronome come first; the beat starts after them. */
+  play(pattern: number, from = 0, step = 0, countIn = 0): void {
     this.queue = [];
     this.head = null;
     this.playing = true;
-    this.send({ t: 'play', pattern, from, step });
+    this.countIn = countIn;
+    this.send({ t: 'play', pattern, from, step, countIn });
   }
 
   /** Move the song position (and where the next play starts). */
@@ -405,6 +412,7 @@ export class AudioHost {
   stop(): void {
     const wasPlaying = this.playing;
     this.playing = false;
+    this.countIn = 0;
     this.queue = [];
     this.head = null;
     this.send(wasPlaying ? { t: 'stop' } : { t: 'panic' });
@@ -412,6 +420,15 @@ export class AudioHost {
 
   setPattern(pattern: number): void {
     this.send({ t: 'pattern', pattern });
+  }
+
+  setMetronome(on: boolean): void {
+    this.send({ t: 'metronome', on });
+  }
+
+  /** Loop only steps `from`..`to` of the pattern (0, 0 = all of it). */
+  setRange(from: number, to: number): void {
+    this.send({ t: 'range', from, to });
   }
 
   /** Run the loudness meters (they cost a little CPU, so only while a mixer is on screen). */

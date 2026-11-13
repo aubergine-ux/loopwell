@@ -76,7 +76,8 @@
 
     const off = onFrame((head) => {
       // position readout: bar.beat.sixteenth
-      const text = !head ? '-.-.-' : head.song >= 0 ? posLabel(p, head.song) : `1.${(head.step >> 2) + 1}.${(head.step & 3) + 1}`;
+      // during a count-in: the beats left before the music starts
+      const text = audio.countIn ? `in ${Math.ceil(audio.countIn / 4)}` : !head ? '-.-.-' : head.song >= 0 ? posLabel(p, head.song) : `1.${(head.step >> 2) + 1}.${(head.step & 3) + 1}`;
       if (posEl.textContent !== text) posEl.textContent = text;
 
       // master meters fall back smoothly

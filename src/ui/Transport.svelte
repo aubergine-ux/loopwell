@@ -4,6 +4,7 @@
   import { PATTERN_NAMES } from '../core/types';
   import { connectMidi } from '../audio/midi-in';
   import { community } from '../community/store.svelte';
+  import { prefs, setPref } from '../prefs.svelte';
   import { app, THEMES } from '../state.svelte';
   import { onFlash, onFrame } from '../visual';
   import Icon from './Icon.svelte';
@@ -47,8 +48,10 @@
     <div class="tools">
       <button class="btn ghost sq" onclick={undo} disabled={!app.canUndo} aria-label="Undo" title="Undo (Ctrl+Z)"><Icon name="undo" /></button>
       <button class="btn ghost sq" onclick={redo} disabled={!app.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Icon name="redo" /></button>
+      <button class="btn ghost sq" onclick={() => (app.modal = 'history')} aria-label="History" title="History: every change, and back to any of them"><Icon name="clock" /></button>
       <span class="sep"></span>
-      <button class="btn ghost" onclick={() => (app.modal = 'demos')} aria-label="Beats" title="Demo beats and new beat"><Icon name="grid" /><span>Beats</span></button>
+      <button class="btn ghost sq" onclick={() => (app.modal = 'palette')} aria-label="Find anything" title="Find any action, sound or setting (Ctrl+K)"><Icon name="search" /></button>
+      <button class="btn ghost" onclick={() => (app.modal = 'demos')} aria-label="Beats" title="Your beats, demo beats and new beat"><Icon name="grid" /><span>Beats</span></button>
       <button class="btn ghost" class:live={!!community.me} onclick={() => (app.modal = 'community')} aria-label="Community"
         title={community.server ? 'Gallery, cloud saves and sample packs' : 'Connect to a Loopwell server for a gallery, cloud saves and sample packs'}><Icon name="note" /><span>Community</span></button>
       <button class="btn ghost" onclick={() => (app.modal = 'export')} aria-label="Export" title="Export WAV, stems, MIDI or a project file"><Icon name="download" /><span>Export</span></button>
@@ -70,6 +73,13 @@
         title="Record what you play into the pattern (R)">
         <i></i>
       </button>
+      <div class="click">
+        <button class="mini" class:on={prefs.metronome} onclick={() => setPref('metronome', !prefs.metronome)} aria-pressed={prefs.metronome} aria-label="Metronome"
+          title="Metronome: a click on every beat (C)"><Icon name="metro" size={15} /></button>
+        <button class="mini" class:on={prefs.countIn > 0} onclick={() => setPref('countIn', (prefs.countIn + 1) % 3)}
+          aria-label="Count-in before recording: {prefs.countIn ? `${prefs.countIn} bar${prefs.countIn > 1 ? 's' : ''}` : 'off'}"
+          title="Count-in: bars of click before a recording starts. Press to change.">{prefs.countIn ? `${prefs.countIn} bar` : 'Off'}</button>
+      </div>
     </div>
 
     <div class="lcdwrap"><Lcd /></div>
@@ -141,6 +151,14 @@
   .tbtn.rec.on i { opacity: 1; box-shadow: 0 0 0 4px color-mix(in srgb, var(--rec) 28%, transparent), 0 0 14px var(--rec); animation: blink 1s steps(2, jump-none) infinite; }
   @keyframes blink { 50% { opacity: 0.45; } }
 
+  .click { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+  .mini {
+    width: 40px; height: 24px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); color: var(--dim);
+    box-shadow: 0 2px 0 var(--edge), inset 0 1px 0 var(--hi); display: grid; place-items: center; font: 700 9px var(--mono); text-transform: uppercase;
+    touch-action: manipulation;
+  }
+  .mini:active { transform: translateY(2px); box-shadow: none; }
+  .mini.on { background: var(--ink); color: var(--panel); border-color: transparent; }
   .lcdwrap { flex: 1 1 260px; min-width: 200px; }
   .knobs { display: flex; gap: 2px; }
   .group { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }

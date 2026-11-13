@@ -95,6 +95,47 @@
     drag = null;
   }
 
+  // --- loop region: drag along the ruler to loop just those steps ---
+  let ruler = $state<HTMLElement>();
+  let anchor = -1, swept = false;
+  const stepAt = (e: PointerEvent) => {
+    const r = ruler!.getBoundingClientRect();
+    return clamp(Math.floor(((e.clientX - r.left) / r.width) * p.steps), 0, p.steps - 1);
+  };
+  function rulerDown(e: PointerEvent): void {
+    if (e.button) return;
+    ruler!.setPointerCapture(e.pointerId);
+    anchor = stepAt(e);
+    swept = false;
+  }
+  function rulerMove(e: PointerEvent): void {
+    if (anchor < 0 || !ruler!.hasPointerCapture(e.pointerId)) return;
+    const s = stepAt(e);
+    if (s === anchor && !swept) return;
+    swept = true;
+    app.range = { from: Math.min(anchor, s), to: Math.max(anchor, s) + 1 };
+  }
+  function rulerUp(): void {
+    // a click without a drag takes the loop off again
+    if (anchor >= 0 && !swept) app.range = null;
+    anchor = -1;
+  }
+  function rulerKey(e: KeyboardEvent): void {
+    const r = app.range;
+    const beat = 4;
+    // Space is left alone: it always means play / stop
+    if (e.key === 'Enter') app.range = r ? null : { from: 0, to: Math.min(p.steps, 16) };
+    else if (e.key === 'Escape' && r) app.range = null;
+    else if (r && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const d = e.key === 'ArrowLeft' ? -beat : beat;
+      if (e.shiftKey) app.range = { from: r.from, to: clamp(r.to + d, r.from + 1, p.steps) }; // longer or shorter
+      else if (r.from + d >= 0 && r.to + d <= p.steps) app.range = { from: r.from + d, to: r.to + d }; // moved along
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const outside = (s: number) => !!app.range && (s < app.range.from || s >= app.range.to);
+
   function cellKey(e: KeyboardEvent, t: number, s: number): void {
     if (e.key === 'Enter' && e.shiftKey) pickStep(t, s);
     else if (e.key === 'Enter') setStep(t, s, stepVel(t, s) ? 0 : DEFAULT_VEL);
@@ -139,6 +180,20 @@
 <div class="scroller" bind:this={scroller}>
   <div class="rows" class:wide={p.steps === 32} bind:this={rows} style:--steps={p.steps}
     onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} oncontextmenu={menu} role="grid" tabindex="-1" aria-label="Step sequencer">
+    <div class="row ruler">
+      <div class="head rhead">
+        <span class="label">{app.range ? `Loop ${app.range.from + 1}–${app.range.to}` : 'Loop'}</span>
+        {#if app.range}<button class="unloop" onclick={() => (app.range = null)} aria-label="Loop the whole pattern again" title="Loop the whole pattern again">×</button>{/if}
+      </div>
+      <div class="cells ticks" bind:this={ruler} onpointerdown={rulerDown} onpointermove={rulerMove} onpointerup={rulerUp} onpointercancel={rulerUp}
+        onkeydown={rulerKey} role="slider" tabindex="0" aria-label="Loop region" aria-valuemin={1} aria-valuemax={p.steps} aria-valuenow={(app.range?.from ?? 0) + 1}
+        aria-valuetext={app.range ? `steps ${app.range.from + 1} to ${app.range.to}` : 'the whole pattern'}
+        title="Drag across to loop just those steps. Click to loop the whole pattern again.">
+        {#each { length: p.steps } as _, s}
+          <i class="tick" class:in={!!app.range && !outside(s)} class:bar={s % 4 === 0}>{s % 4 === 0 ? s + 1 : ''}</i>
+        {/each}
+      </div>
+    </div>
     {#each p.tracks as t, ti (ti)}
       <div class="row" class:sel={app.sel === ti} class:off={t.mute} data-row={ti} style:--c="var(--t{t.color})" role="row">
         <div class="head" role="rowheader">
@@ -158,7 +213,7 @@
           {#each { length: p.steps } as _, s}
             {@const v = stepVel(ti, s)}
             {@const m = pat.mods[ti]?.[s] ?? 0}
-            <i class="cell" class:on={v > 0} class:hold={v === 0 && held(ti, s)} class:alt={(s >> 2) & 1} class:bar={s % 4 === 0}
+            <i class="cell" class:out={outside(s)} class:on={v > 0} class:hold={v === 0 && held(ti, s)} class:alt={(s >> 2) & 1} class:bar={s % 4 === 0}
               class:pick={app.step?.t === ti && app.step.s === s} class:maybe={v > 0 && (modChance(m) > 0 || modCond(m) > 0)}
               data-t={ti} data-s={s} data-roll={v > 0 && modRatchet(m) > 1 ? modRatchet(m) : null} style:--v={v ? (0.25 + (v / 127) * 0.75).toFixed(2) : null}
               role="gridcell" tabindex="-1" aria-label="{t.name} step {s + 1}{v ? `, velocity ${v}` : ''}{v && m ? `, ${modLabel(m)}` : ''}" aria-selected={v > 0}
@@ -260,6 +315,19 @@
   :global(.cell.on.ph) { animation: hit 0.24s cubic-bezier(.2,.8,.3,1); z-index: 1; overflow: visible; }
   @keyframes hit { 0% { transform: scale(1.22); filter: brightness(1.6); } 100% { transform: scale(1); filter: brightness(1); } }
 
+  .row.ruler { height: 16px; }
+  .rhead { background: none; gap: 4px; }
+  .rhead .label { font-size: 8.5px; }
+  .unloop { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: var(--ink); color: var(--panel); font: 700 10px/16px var(--mono); }
+  .ticks { cursor: ew-resize; touch-action: none; border-radius: 5px; outline-offset: 2px; }
+  .tick {
+    display: flex; align-items: center; padding-left: 3px; border-radius: 4px; font: 700 8px var(--mono); font-style: normal; color: var(--dim);
+    background: color-mix(in srgb, var(--well) 50%, transparent);
+  }
+  .tick.bar { margin-left: 3px; }
+  .tick.bar:first-child { margin-left: 0; }
+  .tick.in { background: var(--accent); color: var(--accent-ink); }
+  .cell.out { opacity: 0.38; }
   .row.add { height: 30px; }
   .row.add .head { background: none; flex-basis: auto; padding: 0; }
   .row.add .btn { height: 26px; font-size: 10px; padding: 0 8px; gap: 3px; }

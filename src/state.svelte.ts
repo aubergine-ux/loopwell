@@ -1,7 +1,7 @@
 import { emptyProject, type Project } from './core/types';
 
 export type Tab = 'sound' | 'keys' | 'tools' | 'rack' | 'mix' | 'fx' | 'song' | 'live';
-export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders' | 'samples' | 'midi';
+export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders' | 'samples' | 'midi' | 'history' | 'palette';
 
 export const THEMES = [
   { id: 'cream', name: 'Cream' },
@@ -55,8 +55,15 @@ export const app = $state({
   locks: [] as boolean[],
   /** The group whose effects the Rack tab is showing, or -1 for the selected track's. */
   rackBus: -1,
+  /** Steps of the pattern being looped instead of all of it: from, up to (not including) to. */
+  range: null as { from: number; to: number } | null,
+  /** Step of the first-run walkthrough being shown, or -1 when it isn't. */
+  tour: -1,
   /** A fill is being held. */
   fill: false,
   canUndo: false,
   canRedo: false,
+  /** What each step of the undo history did, oldest first, and which one the beat is at. */
+  history: [] as { label: string; time: number }[],
+  historyAt: -1,
 });

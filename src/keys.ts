@@ -1,15 +1,13 @@
 // Computer-keyboard control. Uses physical key positions (event.code), so it
 // works the same on any layout.
 
-import {
-  cycleTheme, noteDown, noteUp, padDown, padUp, redo, selectPattern, setView, tapTempo, togglePlay, undo, clearTrack,
-} from './actions.svelte';
-import { degreeToPitch } from './core/scales';
-import { NUM_PATTERNS, clamp, isPitched } from './core/types';
+import { noteDown, noteUp, padDown, padUp } from './actions.svelte';
+import { combo, commandFor } from './commands.svelte';
 import { setFill } from './creative.svelte';
+import { degreeToPitch } from './core/scales';
+import { isPitched } from './core/types';
 import { isLearning, setLearning } from './midimap.svelte';
-import { deleteClip, duplicateClip } from './song.svelte';
-import { app, TABS } from './state.svelte';
+import { app } from './state.svelte';
 
 const HOME = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'];
 const down = new Map<string, () => void>(); // code -> release
@@ -56,56 +54,27 @@ function press(code: string): boolean {
 }
 
 export function onKeyDown(e: KeyboardEvent): void {
-  if (e.key === 'Escape') { app.modal = null; if (isLearning()) setLearning(false); return; }
-  if (typing(e) || app.modal) return;
-  const mod = e.ctrlKey || e.metaKey;
-  if (mod) {
-    if (e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
-    else if (e.code === 'KeyY') { e.preventDefault(); redo(); }
-    else if (e.code === 'KeyD' && app.clip && app.project.songMode) { e.preventDefault(); duplicateClip(app.clip); }
+  if (e.key === 'Escape') {
+    if (app.modal) app.modal = null;
+    else if (isLearning()) setLearning(false);
+    else if (app.tour >= 0) app.tour = -1;
     return;
   }
-  if (e.altKey) return;
-  if (e.repeat) { if (down.has(e.code) || e.code === 'Space') e.preventDefault(); return; }
-  if (press(e.code)) { e.preventDefault(); return; }
-  const p = app.project;
-  switch (e.code) {
-    case 'Space': togglePlay(); break;
-    case 'KeyR': app.rec = !app.rec; break;
-    case 'KeyT': tapTempo(); break;
-    case 'KeyM':
-      if (e.shiftKey) p.tracks[app.sel].solo = !p.tracks[app.sel].solo;
-      else p.tracks[app.sel].mute = !p.tracks[app.sel].mute;
-      break;
-    case 'ArrowUp': app.sel = clamp(app.sel - 1, 0, p.tracks.length - 1); break;
-    case 'ArrowDown': app.sel = clamp(app.sel + 1, 0, p.tracks.length - 1); break;
-    case 'ArrowLeft': selectPattern((app.pat + NUM_PATTERNS - 1) % NUM_PATTERNS); break;
-    case 'ArrowRight': selectPattern((app.pat + 1) % NUM_PATTERNS); break;
-    case 'KeyV': app.perform = app.stage = false; setView(!p.songMode); break;
-    case 'KeyP':
-      if (e.shiftKey) { app.perform = false; app.stage = !app.stage; if (app.stage) setView(false); }
-      else { app.stage = false; app.perform = !app.perform; }
-      break;
-    case 'Minus': p.bpm = clamp(p.bpm - (e.shiftKey ? 10 : 1), 40, 240); break;
-    case 'Equal': p.bpm = clamp(p.bpm + (e.shiftKey ? 10 : 1), 40, 240); break;
-    case 'KeyZ': app.octave = clamp(app.octave - 1, -3, 3); break;
-    case 'KeyX': app.octave = clamp(app.octave + 1, -3, 3); break;
-    case 'BracketLeft': case 'BracketRight': {
-      const i = TABS.findIndex((t) => t.id === app.tab);
-      app.tab = TABS[(i + (e.code === 'BracketLeft' ? TABS.length - 1 : 1)) % TABS.length].id;
-      break;
-    }
-    case 'Backspace': case 'Delete':
-      if (e.shiftKey) clearTrack(app.sel);
-      else if (app.clip && p.songMode) deleteClip(app.clip);
-      else return;
-      break;
-    case 'KeyC': if (e.shiftKey) cycleTheme(); else return; break;
-    case 'Slash': if (e.shiftKey) app.modal = 'help'; else return; break;
-    default: return;
-  }
+  const keys = combo(e);
+  // the palette opens from anywhere, even while typing or with a dialog up
+  const cmd = commandFor(keys);
+  if (cmd?.id === 'palette') { e.preventDefault(); app.modal = app.modal === 'palette' ? null : 'palette'; return; }
+  if (typing(e) || app.modal) return;
+  if (e.repeat && !(cmd && REPEATS.has(cmd.id))) { if (down.has(e.code) || cmd) e.preventDefault(); return; }
+  // keys that play come first, but only bare: with Ctrl or Alt held they are shortcuts
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && press(e.code)) { e.preventDefault(); return; }
+  if (!cmd || (cmd.when && !cmd.when())) return;
   e.preventDefault();
+  cmd.run();
 }
+
+/** Commands it makes sense to repeat while the key is held. */
+const REPEATS = new Set(['bpm-', 'bpm+', 'bpm--', 'bpm++', 'track-up', 'track-down', 'undo', 'redo', 'redo2']);
 
 export function onKeyUp(e: KeyboardEvent): void {
   // a focused button would otherwise "click" when Space is released
