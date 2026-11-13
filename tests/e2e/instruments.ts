@@ -167,11 +167,12 @@ try {
   await page.mouse.move(dragged.x + 80, dragged.y + 10);
   await page.mouse.down();
   await page.mouse.move(dragged.x + 90, dragged.y + 20, { steps: 3 });
-  await page.waitForTimeout(200);
+  // wait for the drag to have really begun (the dialog steps aside) rather than for a fixed time: a busy machine takes longer
+  await page.waitForFunction(() => 'dragging' in document.documentElement.dataset, undefined, { timeout: 5000 }).catch(() => {});
   await page.mouse.move(onto.x + 100, onto.y + 10, { steps: 10 });
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(250);
   await page.mouse.up();
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => !document.querySelector('.browser'), undefined, { timeout: 5000 }).catch(() => {});
   check('a sound can be dragged from the browser onto any track', (await rowName(page, 5)) === 'CRASH' && (await page.locator('.browser').count()) === 0, `${await rowName(page, 5)}`);
   await page.locator('.row[data-row="1"] .name').click();
 
