@@ -98,3 +98,34 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # The browser tests above run on Linux. Everything that doesn't need a browser is also run where the
+  # desktop app is built, so a path or line-ending mistake shows up here and not in a release.
+  platforms:
+    name: Checks, unit tests and build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - run: npm ci
+      - name: Install the server's packages
+        run: npm ci
+        working-directory: server
+      - name: Type check
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Startup size is within budget
+        run: npm run budget

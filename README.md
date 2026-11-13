@@ -7,19 +7,20 @@
 
 ### A tactile beat maker that lives in your browser.
 
-Make a beat in seconds, arrange it into a song, share it with a link. No account, no install, no backend.
+Make a beat in seconds, arrange it into a song, mix and master it, share it with a link.<br>No account, no install, nothing uploaded.
 
 [![Build](https://img.shields.io/github/actions/workflow/status/aubergine-ux/loopwell/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/aubergine-ux/loopwell/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/github/package-json/v/aubergine-ux/loopwell?style=flat-square&color=ff4f1a&label=version)](package.json)
 [![License](https://img.shields.io/github/license/aubergine-ux/loopwell?style=flat-square&color=35c47c)](LICENSE)
 [![TypeScript](https://img.shields.io/github/languages/top/aubergine-ux/loopwell?style=flat-square&color=3f7cff)](https://github.com/aubergine-ux/loopwell/search?l=typescript)
 [![Works offline](https://img.shields.io/badge/PWA-works%20offline-8b5cf6?style=flat-square)](#-install-it)
+[![Changelog](https://img.shields.io/badge/changelog-3.0-ee5aa6?style=flat-square)](CHANGELOG.md)
 
 **[▶ Open Loopwell](https://aubergine-ux.github.io/loopwell/)**
 
 <br>
 
-<img src="docs/demo.gif" alt="A beat being built in Loopwell: steps are clicked in, a bass line is drawn in the piano roll, the filter is swept, then the parts are stretched out on the song timeline and a fade is drawn on the bass" width="860">
+<img src="docs/features.gif" alt="Loopwell 3.0 in twenty seconds: hi-hats are typed in as live code while a house beat plays, a mastering style is switched on, then a beat is recreated by ear in learn mode until the meter reads 100%" width="860">
 
 </div>
 
@@ -38,28 +39,45 @@ Each of these is a complete song packed into a URL. Click one and it plays.
 
 <br>
 
+## 🆕 New in 3.0
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/shot-code.png" alt="The Code tab: five lines of mini-notation playing over a house beat, each drawn as a bar of hits with a playhead"></td>
+    <td width="50%"><img src="docs/shot-learn.png" alt="Learn mode: a beat being recreated, with a meter at 67% and a note per track of what is still missing"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Live coding</b>, in time with the grid</td>
+    <td align="center"><b>Recreate this beat</b>, by ear</td>
+  </tr>
+  <tr>
+    <td><img src="docs/shot-video.png" alt="The video export dialog, with a preview of pads lighting up in a tall video for TikTok"></td>
+    <td><img src="docs/shot-plugin.png" alt="A Web Audio Module plugin's own window, with sliders and keys to try it"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Video export</b> for TikTok, Reels and YouTube</td>
+    <td align="center"><b>Plugins</b>, yours or the community's</td>
+  </tr>
+</table>
+
+Also new: stem separation, vocal tools, a mastering chain, MP3 and OGG export, DAW project export, an embeddable player, a launchpad, an 808 and a drum synth, step chance and rolls, grooves, chords, a command palette, a project browser, genre templates and a high-contrast theme. The full list is in the **[changelog](CHANGELOG.md)**.
+
+<br>
+
 ## ✨ Features
+
+**Make**
 
 <table>
   <tr>
     <td align="center" width="56">🥁</td>
     <td width="170"><b>Step sequencer</b></td>
-    <td>16 or 32 steps, up to 8 tracks, per-step velocity, swing, and eight patterns</td>
+    <td>16 or 32 steps, up to 8 tracks, per-step velocity, swing, eight patterns. Steps can roll, play by chance, or only on certain repeats</td>
   </tr>
   <tr>
-    <td align="center" width="56">🎬</td>
-    <td width="170"><b>Song timeline</b></td>
-    <td>Place patterns as clips on each track: drag, resize, duplicate, loop. Draw automation for any knob, change tempo and time signature along the way, drop markers</td>
-  </tr>
-  <tr>
-    <td align="center" width="56">✂️</td>
-    <td width="170"><b>Sampler</b></td>
-    <td>Four built-in kits (40 CC0 sounds) or your own audio. Chop a sample into slices at its hits, play them from the pads, reverse it, stretch it without changing pitch</td>
-  </tr>
-  <tr>
-    <td align="center" width="56">🎹</td>
-    <td width="170"><b>Synth</b></td>
-    <td>Two oscillators with eight wavetables, noise, unison, a filter, and an LFO and mod envelope you can point at eleven targets. 24 presets, plus your own</td>
+    <td align="center" width="56">🎲</td>
+    <td width="170"><b>Pattern tools</b></td>
+    <td>Euclidean rhythms, groove templates, chords and an arpeggiator, and dice that reroll a pattern or a sound while leaving locked tracks alone</td>
   </tr>
   <tr>
     <td align="center" width="56">🎼</td>
@@ -67,14 +85,94 @@ Each of these is a complete song packed into a URL. Click one and it plays.
     <td>Draw bass lines and melodies. Scale lock removes every out-of-key row, so wrong notes are hard to play</td>
   </tr>
   <tr>
-    <td align="center" width="56">🎚️</td>
-    <td width="170"><b>Mixer and FX</b></td>
-    <td>A rack of EQ, drive, chorus, crusher and sidechain on every track, in any order. Reverb, tempo-synced delay, filter and compressor on the master</td>
+    <td align="center" width="56">⌨️</td>
+    <td width="170"><b>Live coding</b></td>
+    <td>A Code tab that plays TidalCycles-style mini-notation in time with the grid, edited while it plays</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎬</td>
+    <td width="170"><b>Song timeline</b></td>
+    <td>Place patterns as clips on each track. Draw automation for any knob, change tempo and time signature, drop markers, pin lyrics to the bar they are sung on</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎤</td>
+    <td width="170"><b>Ideas to notes</b></td>
+    <td>Hum a melody, tap a rhythm, open a MIDI file, or drop in a loop and have it fitted to the song's tempo</td>
+  </tr>
+</table>
+
+**Sound**
+
+<table>
+  <tr>
+    <td align="center" width="56">✂️</td>
+    <td width="170"><b>Sampler</b></td>
+    <td>Four built-in kits (40 CC0 sounds) or your own audio. Chop a sample at its hits, reverse it, stretch it. A browser with previews, detected tempo and key, favourites and tags</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎹</td>
+    <td width="170"><b>Synths</b></td>
+    <td>A two-oscillator wavetable synth with 24 presets, a sliding 808 bass, and a drum synth that makes kicks, snares, hats and claps from knobs</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🧩</td>
+    <td width="170"><b>Stem separation</b></td>
+    <td>Split a song into drums, bass, vocals and the rest, on your own device. Drag a stem onto a track</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🗣️</td>
+    <td width="170"><b>Vocal tools</b></td>
+    <td>Pitch correction that follows the song's key, harmoniser, doubler, formant shift, de-esser, and one-click vocal chains</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🔌</td>
+    <td width="170"><b>Plugins</b></td>
+    <td>Hosts <a href="https://www.webaudiomodules.com/">Web Audio Modules</a>: browse the community's instruments and effects, or <a href="docs/plugins.md">build your own</a></td>
   </tr>
   <tr>
     <td align="center" width="56">🎙️</td>
     <td width="170"><b>Recording</b></td>
     <td>Record from a microphone or audio interface straight onto a track</td>
+  </tr>
+</table>
+
+**Mix and finish**
+
+<table>
+  <tr>
+    <td align="center" width="56">🎚️</td>
+    <td width="170"><b>Mixer and FX</b></td>
+    <td>An effect rack on every track, groups, reverb and delay sends, peak and LUFS meters, a spectrum view, and a reference track to compare against</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">💿</td>
+    <td width="170"><b>Mastering</b></td>
+    <td>EQ, multiband glue, stereo width and a limiter, with genre presets, a loudness target and before/after at the same volume</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">💾</td>
+    <td width="170"><b>Export</b></td>
+    <td>WAV, MP3 or OGG at a chosen loudness; stems; MIDI; both in one zip; a <code>.dawproject</code> for Bitwig, Studio One and Cubase; or a project file with your samples inside</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">📹</td>
+    <td width="170"><b>Video</b></td>
+    <td>An MP4 with a waveform, spectrum, pads or cover-art visualiser, sized for TikTok and Reels, YouTube, or a square post</td>
+  </tr>
+</table>
+
+**Play and share**
+
+<table>
+  <tr>
+    <td align="center" width="56">🚀</td>
+    <td width="170"><b>Launchpad</b></td>
+    <td>Launch clips per track, quantised to the bar, with a performance effects pad. Record the performance onto the timeline</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🎮</td>
+    <td width="170"><b>Hardware</b></td>
+    <td>Web MIDI pads and keyboards work as soon as they are plugged in. MIDI learn ties any knob to your controller</td>
   </tr>
   <tr>
     <td align="center" width="56">🔗</td>
@@ -82,34 +180,44 @@ Each of these is a complete song packed into a URL. Click one and it plays.
     <td>The whole song is encoded into the URL. Opening it loads and plays, nothing is uploaded. Links from every earlier version still open</td>
   </tr>
   <tr>
+    <td align="center" width="56">📺</td>
+    <td width="170"><b>Embeds</b></td>
+    <td>Put a beat on any web page: a small player with its waveform and an "Open in Loopwell" button</td>
+  </tr>
+  <tr>
     <td align="center" width="56">👥</td>
     <td width="170"><b>Live sessions</b></td>
     <td>Make a beat together: everyone edits at once, sees each other's cursors, hears it in time, and can chat</td>
-  </tr>
-  <tr>
-    <td align="center" width="56">💾</td>
-    <td width="170"><b>Export</b></td>
-    <td>Render to 24-bit WAV, export a stem per track, export MIDI, or save a project file that bundles your samples</td>
-  </tr>
-  <tr>
-    <td align="center" width="56">🎮</td>
-    <td width="170"><b>Hardware</b></td>
-    <td>Web MIDI pads and keyboards work as soon as they are plugged in, and the computer keyboard plays pads and notes</td>
-  </tr>
-  <tr>
-    <td align="center" width="56">📱</td>
-    <td width="170"><b>Anywhere</b></td>
-    <td>Installs as a PWA and works offline. A pads view fills a phone or tablet with big pads. There is a desktop app for Windows, macOS and Linux</td>
   </tr>
   <tr>
     <td align="center" width="56">🌍</td>
     <td width="170"><b>Community</b></td>
     <td>Optional and self-hosted: accounts, cloud saves with history, a gallery of published beats with remixes, and shared sample packs</td>
   </tr>
+</table>
+
+**Feel at home**
+
+<table>
+  <tr>
+    <td align="center" width="56">🎓</td>
+    <td width="170"><b>Learn mode</b></td>
+    <td>A two-minute walkthrough, lessons you do rather than read, and beats to recreate by ear with a meter that says how close you are</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">🧭</td>
+    <td width="170"><b>Find anything</b></td>
+    <td>A command palette on <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>K</kbd>, a history of every edit, shortcuts you can change, genre templates to start from</td>
+  </tr>
+  <tr>
+    <td align="center" width="56">📱</td>
+    <td width="170"><b>Anywhere</b></td>
+    <td>Installs as a PWA and works offline. A pads view fills a phone or tablet. There is a desktop app for Windows, macOS and Linux</td>
+  </tr>
   <tr>
     <td align="center" width="56">🎨</td>
     <td width="170"><b>Themes</b></td>
-    <td>Cream, Night, Slate and Arcade</td>
+    <td>Cream, Night, Slate, Arcade and High contrast. Motion follows your system's reduced-motion setting</td>
   </tr>
 </table>
 
@@ -211,6 +319,8 @@ To send those beats, use **Export → Save project**. The `.loopwell` file bundl
 
 ## 🎬 From loop to song
 
+<div align="center"><img src="docs/demo.gif" alt="A beat being built from nothing: steps are clicked in, a bass line is drawn in the piano roll, the filter is swept, then the parts are stretched out on the song timeline" width="760"></div>
+
 The **pattern view** is where loops are built; the **song view** is where they are arranged. Switching between them never stops the music: the change happens on the next bar line.
 
 | On the timeline | How |
@@ -220,6 +330,82 @@ The **pattern view** is where loops are built; the **song view** is where they a
 | Tempo and time signature | **+ Tempo** and **+ Time sig** add a change at the cursor. Playback, WAV export and MIDI export all follow them |
 | Markers | **+ Marker** names a section: intro, verse, hook |
 | Loop | Drag along the ruler to loop a section while you work on it |
+
+<br>
+
+## ⌨️ Live coding
+
+Open the **Code** tab and type. Each line is a track and fills one bar; it plays from the next step, alongside whatever is on the grid.
+
+```text
+kick:  x ~ ~ x  ~ ~ x ~
+hat:   [x x x]*4            // triplets
+perc:  x(3,8)?              // 3 hits spread over 8 steps, each one a coin toss
+lead:  <c4 eb4 g4 bb4> ~ [c5 g4]/2
+```
+
+<details>
+<summary><b>The notation</b></summary>
+
+<br>
+
+| Write | To get |
+| :-- | :-- |
+| `x ~ x ~` | Things in a row share the bar. `~` is a rest |
+| `[x x] x` | A group: two hits in the first half |
+| `x*4` &nbsp; `x/2` | Faster and slower |
+| `x _ _ x` &nbsp; `x@3 x` | Hold for three shares of the time |
+| `x!3` | Repeat |
+| `<a b c>` | Take turns, one each bar |
+| `x(3,8)` | A Euclidean rhythm: 3 hits over 8 steps |
+| `[c4,eb4,g4]` | Together: a chord |
+| `x?` &nbsp; `a \| b` | Maybe; one or the other |
+| `c4 eb3 f#2` &nbsp; `0 2 4` | Notes by name, or by step of the song's scale |
+
+A line with a mistake in it keeps playing what it played before, so a typo never stops the music. **From grid** writes the pattern on screen out as code; **To grid** does the reverse.
+
+</details>
+
+<br>
+
+## 📺 Embed a beat
+
+**Share → Put a player on a website** gives you the code. It is one line:
+
+```html
+<iframe src="https://aubergine-ux.github.io/loopwell/embed.html#b=YOUR_BEAT" width="100%" height="152"
+  style="border:0;border-radius:14px;max-width:560px" loading="lazy" allow="autoplay"></iframe>
+```
+
+Or, as a web component, one script and then a tag for each beat:
+
+```html
+<script src="https://aubergine-ux.github.io/loopwell/player.js" async></script>
+<loopwell-player beat="YOUR_BEAT" theme="night"></loopwell-player>
+```
+
+`YOUR_BEAT` is the part of a share link after `#b=`. The player shows the waveform, plays the beat with the same engine as the app, and has a button that opens it in Loopwell to remix. It follows the visitor's light or dark setting unless you give it a `theme`.
+
+<br>
+
+## 🔌 Plugins
+
+Select a track, open **Sound → Plugin**, and pick an instrument: one of the two that come with Loopwell, one from the Web Audio Modules community's list, or the address of your own. A plugin plays the track's notes and goes through its mixer strip, and is in every export.
+
+A plugin is someone else's program, so a beat that arrives with one you haven't used before loads nothing until you say so.
+
+**[How plugins work, and how to build one →](docs/plugins.md)**
+
+<br>
+
+## 🎓 Learn
+
+Press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>K</kbd> and type "learn", or open it from the **?** menu.
+
+| | |
+| :-- | :-- |
+| **Lessons** | Your first beat · A trap hi-hat pattern · Sidechain a bass · Chop a sample. Each opens a beat prepared for it, points at what to do, and moves on when you have done it |
+| **Recreate this beat** | You hear a beat and rebuild it. A meter shows how close you are, track by track, and **Peek** shows where the hits are if you are stuck |
 
 <br>
 
@@ -293,16 +479,16 @@ npm run desktop:build       # needs Rust; on Linux also the WebKitGTK 4.1 develo
     <td align="center"><b>Slate</b>, with the synth</td>
     <td align="center"><b>Arcade</b>, with an effect rack</td>
   </tr>
+  <tr>
+    <td><img src="docs/theme-contrast.png" alt="High contrast theme showing the mixer"></td>
+    <td><img src="docs/tablet.png" alt="The pads view on a tablet, in the Night theme"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>High contrast</b>, with the mixer</td>
+    <td align="center">The <b>pads view</b> on a tablet</td>
+  </tr>
 </table>
 
-<details>
-<summary><b>Pads view on a tablet</b></summary>
-
-<br>
-
-<div align="center"><img src="docs/tablet.png" alt="Loopwell's pads view on a tablet: eight large track pads, a row of note pads, pattern and mute buttons" width="520"></div>
-
-</details>
 
 <br>
 
@@ -328,6 +514,9 @@ Then open the address it prints, usually <http://localhost:5173>.
 | `npm run check` | Type-check the TypeScript and Svelte code |
 | `npm run bench` | Stress-test the audio engine and print its real-time headroom |
 | `npm run test:e2e` | Build, then drive the real app in headless Chromium |
+| `npm run test:features` | The same for every newer area: pattern tools, instruments, mixer, video, plugins, live code, learn mode and the rest |
+| `npm run budget` | Check the startup size against `perf-budget.json`, and that the heavy parts still load on demand |
+| `npm run test:stems` | Split a real song with the real model (downloads 180 MB the first time) |
 | `npm run test:realtime` | Play a stress song through the real AudioWorklet while freezing the main thread |
 | `npm run test:community` | The community features against the real server |
 | `npm run test:live` | Three browsers in one live session |
@@ -422,18 +611,22 @@ The four kits are not recordings. [`scripts/build-kits.ts`](scripts/build-kits.t
 
 ```text
 src/
-  core/        engine, clock, timeline, DSP, share-link codec, MIDI, WAV, project files, presets, demo beats
+  core/        engine, clock, timeline, DSP, formats (links, files, MIDI, WAV, DAWproject), analysis, live-code compiler
   audio/       AudioWorklet wrapper, main-thread host, recorder, Web MIDI input
   live/        live sessions: the shared document and the session itself
+  stems/ video/ plugins/ embed/   the parts that load only when used
   community/   client for the optional server
   ui/          Svelte components
-  actions.svelte.ts   everything the interface can do to a beat
+  *.svelte.ts  state and actions, a file per area; actions.svelte.ts has the core verbs
+public/plugins/   the example plugins
 server/        the optional backend: API, live-session relay, migrations, Dockerfile
 src-tauri/     the desktop shell (Rust)
 scripts/       drum kit synthesis, benchmark, browser checks, README assets
 tests/         unit tests, end-to-end tests, real-time timing check
 public/kits/   the generated drum samples
 ```
+
+There is more in **[ARCHITECTURE.md](ARCHITECTURE.md)**: how the engine is built, how the formats stay compatible, and what loads when.
 
 </details>
 
@@ -448,6 +641,8 @@ public/kits/   the generated drum samples
 | Firefox | Uses only APIs Firefox supports, but is not covered by the automated tests |
 | Safari (macOS, iPadOS, iOS) | Same, minus MIDI controllers, which Safari does not support |
 
+Video export needs a browser that can encode video (WebCodecs): current Chrome, Edge and Safari. Stem separation is fastest with WebGPU and falls back to WebAssembly, which is slow but works; it downloads a 180 MB model the first time, takes up to 30 seconds of audio at a go, and it is up to you to have the rights to what you split and sample.
+
 Browsers only allow sound after a click or tap. If you open a share link in a browser that has never seen the site, you get one big play button first.
 
 </details>
@@ -456,7 +651,7 @@ Browsers only allow sound after a click or tap. If you open a share link in a br
 
 ## 🧱 Built with
 
-[TypeScript](https://www.typescriptlang.org) · [Svelte 5](https://svelte.dev) · [Vite](https://vite.dev) · Web Audio `AudioWorklet` · Web MIDI · [Yjs](https://yjs.dev) · [fflate](https://github.com/101arrowz/fflate) · [Tauri](https://tauri.app) · [Fastify](https://fastify.dev) · [Vitest](https://vitest.dev) · [Playwright](https://playwright.dev)
+[TypeScript](https://www.typescriptlang.org) · [Svelte 5](https://svelte.dev) · [Vite](https://vite.dev) · Web Audio `AudioWorklet` · Web MIDI · [Yjs](https://yjs.dev) · [fflate](https://github.com/101arrowz/fflate) · [ONNX Runtime Web](https://onnxruntime.ai) with [HT-Demucs](https://github.com/facebookresearch/demucs) · [Mediabunny](https://mediabunny.dev) · [Web Audio Modules](https://www.webaudiomodules.com/) · [wasm-media-encoders](https://github.com/arseneyr/wasm-media-encoders) · [Tauri](https://tauri.app) · [Fastify](https://fastify.dev) · [Vitest](https://vitest.dev) · [Playwright](https://playwright.dev)
 
 Typefaces: [Space Grotesk](https://github.com/floriankarsten/space-grotesk) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/), both under the SIL Open Font License.
 

@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a tag like v2.0.0 builds the desktop app for every platform and
+# Pushing a tag like v3.0.0 builds the desktop app for every platform and
 # attaches the installers, plus a zip of the web app, to a draft GitHub
 # release. Running it by hand builds the same things and keeps them as
 # workflow artifacts, without creating a release.

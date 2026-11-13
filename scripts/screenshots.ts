@@ -20,7 +20,9 @@ await page.waitForSelector('.cell');
 for (const s of SHOTS) {
   await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, s.theme);
   await page.getByTitle('Demo beats and new beat').click();
-  await page.getByText(s.demo).click();
+  // the dialog opens on your own beats once there are some
+  await page.getByRole('radio', { name: 'Demos' }).click();
+  await page.locator('.modal').getByText(s.demo).click();
   // every demo opens in the song view; step into the pattern to pick a track, then go where the shot wants to be
   await page.getByRole('button', { name: 'Pattern', exact: true }).click();
   await page.locator(`.row[data-row="${s.track}"] .name`).click();
@@ -43,13 +45,76 @@ for (const s of SHOTS) {
   await page.screenshot({ path: join(docs, `theme-${s.theme}.png`) });
   await page.keyboard.press('Space');
 }
+// the high-contrast theme, on the mixer
+await page.evaluate(() => { document.documentElement.dataset.theme = 'contrast'; });
+await page.getByRole('tab', { name: 'Mix' }).click();
+await page.keyboard.press('Space');
+await page.waitForTimeout(1500);
+await page.screenshot({ path: join(docs, 'theme-contrast.png') });
+await page.keyboard.press('Space');
+
+// ---- the newer parts, one picture each ----
+const palette = async (what: string) => { await page.keyboard.press('Control+k'); await page.waitForSelector('.palette input'); await page.keyboard.type(what); await page.keyboard.press('Enter'); };
+const template = async (name: string) => {
+  await page.getByTitle('Demo beats and new beat').click();
+  await page.getByRole('radio', { name: 'Templates' }).click();
+  await page.locator('.modal .list button', { hasText: name }).click();
+  await page.waitForSelector('.cell.ph');
+};
+
+// live code, playing
+await page.evaluate(() => { document.documentElement.dataset.theme = 'night'; });
+await template('House');
+await page.getByRole('tab', { name: 'Code' }).click();
+await page.getByLabel('Live code').fill('// typed while it plays; heard from the next step\nhat:   [x x x]*4\nperc:  x(3,8)?\nlead:  <c4 eb4 g4 bb4>*2 ~ [c5 g4]/2\nsnare: ~ x ~ [x x]');
+await page.getByLabel('Live code').blur();
+await page.mouse.move(5, 5);
+await page.waitForTimeout(1600);
+await page.screenshot({ path: join(docs, 'shot-code.png') });
+await page.keyboard.press('Space');
+
+// a plugin's window
+await page.evaluate(() => { document.documentElement.dataset.theme = 'slate'; });
+await page.locator('.row[data-row="7"] .name').click();
+await page.getByRole('tab', { name: 'Sound' }).click();
+await page.locator('.sound .seg button', { hasText: 'Plugin' }).click();
+await page.locator('.modal .plugin', { hasText: 'Pluck' }).click();
+await page.waitForFunction(() => !(document.querySelector('.plugs .chain li .btn') as HTMLButtonElement | null)?.disabled && !!document.querySelector('.plugs .chain li'));
+await page.locator('.plugs .chain li .btn', { hasText: 'Open' }).first().click();
+await page.waitForSelector('.modal .face input[type="range"]');
+await page.waitForTimeout(500);
+await page.screenshot({ path: join(docs, 'shot-plugin.png') });
+await page.getByRole('button', { name: 'Close' }).click();
+
+// the video export
+await page.evaluate(() => { document.documentElement.dataset.theme = 'cream'; });
+await palette('export a video');
+await page.waitForSelector('.modal canvas');
+await page.waitForFunction(() => !document.querySelector('.modal .wait'), undefined, { timeout: 60000 });
+await page.getByRole('radio', { name: 'Pads', exact: true }).click();
+await page.getByLabel('Producer tag shown in the video').fill('prod. you');
+await page.waitForTimeout(900);
+await page.screenshot({ path: join(docs, 'shot-video.png') });
+await page.getByRole('button', { name: 'Close' }).click();
+
+// recreating a beat in learn mode
+await page.evaluate(() => { document.documentElement.dataset.theme = 'arcade'; });
+await palette('learn lessons');
+await page.locator('.modal .list button', { hasText: 'Trap bounce' }).click();
+await page.waitForSelector('.challenge');
+for (const [t, steps] of [[0, [0, 6, 9]], [2, [8]], [3, [0, 2, 4, 6, 8]], [3, [5]]] as [number, number[]][]) for (const st of steps) await page.locator(`.cell[data-t="${t}"][data-s="${st}"]`).click();
+await page.locator('.challenge .btn', { hasText: 'Peek' }).click();
+await page.mouse.move(5, 5);
+await page.waitForTimeout(600);
+await page.screenshot({ path: join(docs, 'shot-learn.png') });
 await b.close();
 
 const t = await launch({ width: 820, height: 1120, scale: 1.5, touch: true });
 await t.page.addInitScript(() => localStorage.setItem('loopwell:theme', 'night'));
 await t.page.goto(t.url);
 await t.page.getByTitle('Demo beats and new beat').click();
-await t.page.getByText('Night Drive').click();
+await t.page.getByRole('radio', { name: 'Demos' }).click();
+await t.page.locator('.modal').getByText('Night Drive').click();
 await t.page.getByRole('button', { name: 'Pads', exact: true }).click();
 await t.page.locator('.perform .pad[data-pad="6"]').tap();
 await t.page.waitForTimeout(1500);

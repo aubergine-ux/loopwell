@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Loopwell",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "identifier": "io.github.aubergine-ux.loopwell",
   "build": {
     "frontendDist": "../dist",

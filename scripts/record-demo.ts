@@ -62,7 +62,7 @@ await wait(300);
 
 // bass line in the piano roll
 await click('.row[data-row="6"] .name', 200);
-await click('[role=tab]:nth-child(2)', 400);
+await click('[role=tab]:text-is("Keys")', 400);
 const roll = (await page.locator('.roll .scroller').boundingBox())!;
 const laneX = (s: number) => roll.x + 46 + ((roll.width - 46) * (s + 0.5)) / 16;
 // the roll is a scrolling list of rows; aim at the root-note row nearest the middle of what is visible
@@ -82,7 +82,7 @@ for (const [s, row, len] of [[0, 0, 2], [3, 0, 1], [6, -2, 2], [10, 0, 2], [13, 
 await wait(900);
 
 // sweep the master filter
-await click('[role=tab]:nth-child(5)', 400);
+await click('[role=tab]:text-is("FX")', 400);
 const knob = (await page.locator('.fx section:nth-child(3) .knob').first().boundingBox())!;
 const kx = knob.x + knob.width / 2, ky = knob.y + 30;
 await page.mouse.move(kx, ky, { steps: 8 });
