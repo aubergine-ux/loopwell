@@ -7,21 +7,28 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Engine } from '../src/core/engine';
-import { stressProject } from '../tests/realtime/stress';
+import { fullProject, stressProject } from '../tests/realtime/stress';
 import { decodeWav } from '../src/core/wav';
 
 const SR = 48000;
 const SECONDS = 60;
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+// `--full` adds everything newer than the original stress song, and runs the live-only extras as well
+const full = process.argv.includes('--full');
 const eng = new Engine(SR);
-const p = stressProject();
+const p = full ? fullProject() : stressProject();
 for (const t of p.tracks) {
-  if (t.kind === 'synth') continue;
+  if (t.kind !== 'drum' && t.kind !== 'slice') continue;
   const w = decodeWav(readFileSync(join(root, 'public/kits', `${t.sample}.wav`)));
   eng.setSample(t.sample, w.channels[0]);
 }
 eng.setProject(p);
+if (full) {
+  eng.setMetering(true);
+  eng.metronome = true;
+  eng.perf.fx = 1; eng.perf.on = true; eng.perf.x = 0.9; // a beat repeat held down the whole time
+}
 
 const l = new Float32Array(128), r = new Float32Array(128);
 const blocks = Math.floor((SR * SECONDS) / 128);
@@ -45,6 +52,7 @@ const row = (name: string, ms: number) =>
   console.log(`  ${name.padEnd(8)} ${ms.toFixed(3).padStart(7)} ms   ${((ms / budgetMs) * 100).toFixed(1).padStart(5)}% of budget`);
 
 console.log(`\nLoopwell engine stress test: a 16-bar song, 8 tracks with every step on, 6-note chords on\n5-voice unison wavetable synths, 5 insert effects per track, automation, all master FX`);
+if (full) console.log('plus an 808, drum synths, four-hit rolls on every drum step, arpeggios, grooves, four groups with effects,\nloudness meters on every channel, the metronome and a performance effect');
 console.log(`${SECONDS}s of audio at ${SR} Hz, ${blocks} blocks of 128 frames (budget ${budgetMs.toFixed(3)} ms each), ${steps} steps\n`);
 row('median', pct(0.5));
 row('p99', pct(0.99));

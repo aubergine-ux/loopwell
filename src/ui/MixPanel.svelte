@@ -6,7 +6,7 @@
   import { MAX_BUSES, MAX_TRACKS } from '../core/types';
   import { addBus, clearReference, listenTo, loadReference, reference, removeBus, routeTrack } from '../mix.svelte';
   import { app } from '../state.svelte';
-  import { onFrame } from '../visual';
+  import { frameNo, meterScale, onFrame } from '../visual';
   import Fader from './Fader.svelte';
   import * as fmt from './fmt';
   import Icon from './Icon.svelte';
@@ -27,65 +27,82 @@
     const lv = new Float32Array(MAX_TRACKS + MAX_BUSES + 4);
     const freq = new Uint8Array(1024), wave = new Uint8Array(1024);
     let frame = 0;
+    // looked up once and again whenever the set of strips changes, not on every frame
+    let bars: { el: HTMLElement; kind: string; k: number }[] = [];
+    let readouts: HTMLElement[] = [];
+    let strips = -1;
+    let ink = '';
     const off = onFrame(() => {
-      // peak bars: every strip carries data-m saying which meter it shows
-      const bars = root.querySelectorAll<HTMLElement>('.vu i');
-      bars.forEach((el, i) => {
-        const m = el.dataset.m!;
-        const k = +m.slice(1);
-        const src = m[0] === 't' ? audio.peaks[k] : m[0] === 'b' ? audio.busPeaks[k] : m[0] === 'r' ? audio.returnPeaks[k] : k ? audio.masterR : audio.masterL;
-        const next = Math.max(src, lv[i] * 0.88);
-        if (next === lv[i]) return;
-        lv[i] = next < 0.001 ? 0 : next;
-        el.style.transform = `scaleY(${Math.min(1, Math.sqrt(lv[i])).toFixed(3)})`;
-        el.classList.toggle('hot', lv[i] > 0.98);
-      });
+      const count = p.tracks.length * 10 + p.buses.length;
+      if (count !== strips) {
+        strips = count;
+        bars = [...root.querySelectorAll<HTMLElement>('.vu i')].map((el) => ({ el, kind: el.dataset.m![0], k: +el.dataset.m!.slice(1) }));
+        readouts = [...root.querySelectorAll<HTMLElement>('[data-lufs]')];
+      }
+      frame++;
       // loudness numbers change slowly, so they are written a few times a second
-      if (++frame % 8 === 0) {
+      if (frame % 12 === 0) {
         const l = audio.loudness;
-        root.querySelectorAll<HTMLElement>('[data-lufs]').forEach((el) => {
+        for (const el of readouts) {
           const text = l ? lufs(l[+el.dataset.lufs!]) : '–';
           if (el.textContent !== text) el.textContent = text;
-        });
+        }
       }
-      draw(freq, wave);
+      // the level bars move on the frames the grid's don't, and the displays are drawn on the others:
+      // thirty times a second each looks the same as sixty and leaves room for everything else
+      if (frameNo & 1) {
+        for (let i = 0; i < bars.length; i++) {
+          const { el, kind, k } = bars[i];
+          const src = kind === 't' ? audio.peaks[k] : kind === 'b' ? audio.busPeaks[k] : kind === 'r' ? audio.returnPeaks[k] : k ? audio.masterR : audio.masterL;
+          const next = Math.max(src, lv[i] * 0.77);
+          if (next === lv[i]) continue;
+          const hot = next > 0.98, was = lv[i] > 0.98;
+          lv[i] = next < 0.001 ? 0 : next;
+          meterScale(el, Math.sqrt(lv[i]), 'Y');
+          if (hot !== was) el.classList.toggle('hot', hot);
+        }
+      } else if (frame % 6 < 2) {
+        // the displays: twenty times a second is as much as an analyser needs
+        if (frame % 120 < 2 || !ink) ink = getComputedStyle(root).getPropertyValue('--accent').trim() || '#f50';
+        draw(freq, wave, ink);
+      }
     });
     return () => { off(); audio.setMetering(false); };
   });
 
-  function draw(freq: Uint8Array<ArrayBuffer>, wave: Uint8Array<ArrayBuffer>): void {
+  function draw(freq: Uint8Array<ArrayBuffer>, wave: Uint8Array<ArrayBuffer>, ink: string): void {
     const c = view === 'spectrum' ? spectrum : scope;
     if (!c || !c.clientWidth) return;
-    const dpr = Math.min(2, devicePixelRatio || 1);
+    // bars and a line a pixel and a half wide gain nothing from a high-density canvas, which is four times the pixels to fill
+    const dpr = 1;
     const w = c.clientWidth, h = c.clientHeight;
     if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     const g = c.getContext('2d')!;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
-    const cs = getComputedStyle(c);
-    const ink = cs.getPropertyValue('--accent').trim() || '#f50';
     if (view === 'spectrum') {
       if (!audio.spectrum(freq)) return;
       // bars spaced by pitch, 30 Hz to 18 kHz, the way ears and mixing decisions work
-      const bars = Math.max(24, Math.floor(w / 5));
+      const n = Math.max(24, Math.floor(w / 5));
       const hzPerBin = audio.sampleRate / 2048;
       g.fillStyle = ink;
-      for (let i = 0; i < bars; i++) {
-        const f0 = 30 * Math.pow(600, i / bars), f1 = 30 * Math.pow(600, (i + 1) / bars);
+      g.beginPath();
+      for (let i = 0; i < n; i++) {
+        const f0 = 30 * Math.pow(600, i / n), f1 = 30 * Math.pow(600, (i + 1) / n);
         const a = Math.max(1, Math.floor(f0 / hzPerBin)), b = Math.min(1023, Math.max(a, Math.floor(f1 / hzPerBin)));
         let v = 0;
         for (let k = a; k <= b; k++) if (freq[k] > v) v = freq[k];
+        if (!v) continue;
         const bh = (v / 255) * (h - 2);
-        g.globalAlpha = 0.35 + (v / 255) * 0.65;
-        g.fillRect((i / bars) * w, h - bh, w / bars - 1, bh);
+        g.rect((i / n) * w, h - bh, w / n - 1, bh);
       }
-      g.globalAlpha = 1;
+      g.fill();
     } else {
       if (!audio.scope(wave)) return;
       g.strokeStyle = ink;
       g.lineWidth = 1.5;
       g.beginPath();
-      for (let x = 0; x < w; x++) {
+      for (let x = 0; x < w; x += 2) {
         const y = h / 2 - ((wave[Math.floor((x / w) * wave.length)] - 128) / 128) * (h / 2 - 2);
         if (x) g.lineTo(x, y); else g.moveTo(x, y);
       }
@@ -257,7 +274,7 @@
   .fd { display: flex; gap: 6px; align-items: stretch; }
   .fd.tall { flex: 1; align-items: flex-end; }
   .vu { width: 5px; border-radius: 3px; background: var(--well); overflow: hidden; display: flex; align-items: flex-end; }
-  .vu i { display: block; width: 100%; height: 100%; background: var(--c, var(--ink)); transform-origin: bottom; transform: scaleY(0); }
+  .vu i { display: block; width: 100%; height: 100%; background: var(--c, var(--ink)); transform-origin: bottom; transform: scaleY(0); will-change: transform; }
   .vu :global(i.hot) { background: var(--rec); }
   .lufs { font: 600 9px var(--mono); color: var(--dim); min-width: 34px; text-align: center; }
   .lufs b { font-weight: 700; color: var(--ink); }

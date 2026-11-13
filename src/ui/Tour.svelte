@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { stop } from '../actions.svelte';
   import { app } from '../state.svelte';
   import { TOUR, endTour, tour, tourNext } from '../tour.svelte';
@@ -11,11 +10,13 @@
   let card = $state<HTMLElement>();
   let place = $state({ left: 0, top: 0 });
 
-  onMount(() => {
+  // follows what it is pointing at frame by frame, but only while a step is showing: the rest of the time nothing runs
+  $effect(() => {
+    if (app.tour < 0 || finished) { box = null; return; }
     let raf = 0, held = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      if (app.tour < 0 || finished) { box = null; return; }
+      if (app.tour < 0 || finished) return;
       const el = document.querySelector<HTMLElement>(step.target);
       const r = el?.getBoundingClientRect();
       if (r && r.width && (box?.x !== r.left || box.y !== r.top || box.w !== r.width || box.h !== r.height)) box = { x: r.left, y: r.top, w: r.width, h: r.height };

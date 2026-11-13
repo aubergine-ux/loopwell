@@ -5,7 +5,7 @@
   import { posLabel } from '../core/arrange';
   import { PATTERN_NAMES, clamp } from '../core/types';
   import { app } from '../state.svelte';
-  import { onFrame } from '../visual';
+  import { meterScale, onFrame } from '../visual';
 
   let canvas: HTMLCanvasElement;
   let posEl: HTMLElement;
@@ -54,7 +54,7 @@
   onMount(() => {
     const ctx = canvas.getContext('2d')!;
     const data = new Uint8Array(1024);
-    let fg = '', dim = '', w = 0, h = 0, l = 0, r = 0, quiet = 99;
+    let fg = '', dim = '', w = 0, h = 0, l = 0, r = 0, quiet = 99, odd = false;
     const readColors = () => {
       const cs = getComputedStyle(canvas);
       fg = cs.getPropertyValue('--lcd-fg').trim();
@@ -82,14 +82,17 @@
 
       // master meters fall back smoothly
       l = Math.max(audio.masterL, l * 0.9); r = Math.max(audio.masterR, r * 0.9);
-      meterL.style.transform = `scaleX(${Math.min(1, l).toFixed(3)})`;
-      meterR.style.transform = `scaleX(${Math.min(1, r).toFixed(3)})`;
-      loadEl.textContent = `${Math.round(audio.load * 100)}%`;
+      meterScale(meterL, l, 'X');
+      meterScale(meterR, r, 'X');
+      // written only when it changes: replacing a text node, even with the same text, costs a layout
+      const load = `${Math.round(audio.load * 100)}%`;
+      if (loadEl.textContent !== load) loadEl.textContent = load;
 
       // scope: skip drawing once the line has gone flat
       const live = l + r > 0.002;
       quiet = live ? 0 : quiet + 1;
-      if (quiet > 3 || !w) return;
+      // the scope is redrawn on every other frame: it looks the same and costs half as much
+      if (quiet > 3 || !w || (odd = !odd)) return;
       ctx.clearRect(0, 0, w, h);
       ctx.lineWidth = 1.5;
       ctx.lineJoin = 'round';
@@ -169,6 +172,6 @@
   .scope { flex: 1; min-width: 70px; display: flex; flex-direction: column; gap: 2px; }
   canvas { flex: 1; width: 100%; min-height: 0; display: block; }
   .vu { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--lcd-dim) 45%, transparent); overflow: hidden; }
-  .vu i { display: block; height: 100%; background: var(--lcd-fg); transform-origin: left; transform: scaleX(0); }
+  .vu i { display: block; height: 100%; background: var(--lcd-fg); transform-origin: left; transform: scaleX(0); will-change: transform; }
   @media (max-width: 560px) { .info { display: none; } }
 </style>

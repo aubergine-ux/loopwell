@@ -136,8 +136,13 @@ select.pick {
   background-repeat: no-repeat;
 }
 
+/* Less motion, when the system asks for it or it is switched on in the settings: nothing bounces, pulses or slides.
+   Blinking that carries meaning (recording, a queued pattern) becomes a steady state instead. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+:root[data-calm] *, :root[data-calm] *::before, :root[data-calm] *::after {
+  animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important;
 }
 
 /* MIDI learn: everything that can be tied to a controller shows it */

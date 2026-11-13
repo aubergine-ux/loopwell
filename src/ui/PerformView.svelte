@@ -4,7 +4,7 @@
   import { degreeToPitch } from '../core/scales';
   import { PATTERN_NAMES } from '../core/types';
   import { app } from '../state.svelte';
-  import { onFlash } from '../visual';
+  import { fade, onFlash } from '../visual';
 
   // Pads first: the whole screen is for playing. Track pads on top, a second
   // bank that plays the selected track's notes or slices, pattern switching,
@@ -60,7 +60,8 @@
   }
 
   onMount(() => onFlash((t, vel) => {
-    root.querySelector(`.pad[data-pad="${t}"] .glow`)?.animate([{ opacity: 0.35 + (vel / 127) * 0.65 }, { opacity: 0 }], { duration: 320, easing: 'ease-out' });
+    const glow = root.querySelector(`.pad[data-pad="${t}"] .glow`);
+    if (glow) fade(glow, 0.35 + (vel / 127) * 0.65);
   }));
 </script>
 

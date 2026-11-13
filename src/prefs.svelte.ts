@@ -24,9 +24,17 @@ export function setPref<K extends keyof typeof prefs>(key: K, value: (typeof pre
   prefs[key] = value;
   savePrefs($state.snapshot(prefs));
   if (key === 'metronome') audio.setMetronome(prefs.metronome);
+  if (key === 'calm') showCalm();
+}
+
+/** The page carries the "reduce motion" setting as an attribute, where both the styles and the animation code can see it. */
+function showCalm(): void {
+  if (prefs.calm) document.documentElement.dataset.calm = '';
+  else delete document.documentElement.dataset.calm;
 }
 
 /** Send the settings the audio engine cares about. Call once at startup. */
 export function applyPrefs(): void {
   audio.setMetronome(prefs.metronome);
+  showCalm();
 }

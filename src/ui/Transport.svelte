@@ -6,7 +6,7 @@
   import { community } from '../community/store.svelte';
   import { prefs, setPref } from '../prefs.svelte';
   import { app, THEMES } from '../state.svelte';
-  import { onFlash, onFrame } from '../visual';
+  import { lively, onFlash, onFrame } from '../visual';
   import Icon from './Icon.svelte';
   import Knob from './Knob.svelte';
   import Lcd from './Lcd.svelte';
@@ -18,7 +18,7 @@
   onMount(() => {
     const offFrame = onFrame((head, changed) => {
       // the logo ring kicks on every beat, harder on the downbeat
-      if (head && changed && (head.step & 3) === 0) {
+      if (head && changed && (head.step & 3) === 0 && lively()) {
         ring.animate(
           [{ transform: `scale(${head.step === 0 ? 1.35 : 1.18})` }, { transform: 'scale(1)' }],
           { duration: 260, easing: 'cubic-bezier(.2,.8,.3,1)' },

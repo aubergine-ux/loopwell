@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { noteDown, noteUp, padDown, padUp } from '../actions.svelte';
   import { app } from '../state.svelte';
-  import { onFlash } from '../visual';
+  import { fade, onFlash } from '../visual';
 
   let root: HTMLElement;
   const p = $derived(app.project);
@@ -49,7 +49,7 @@
 
   onMount(() => onFlash((t, vel) => {
     const glow = root.querySelector(`.pad[data-pad="${t}"] .glow`);
-    glow?.animate([{ opacity: 0.35 + (vel / 127) * 0.65 }, { opacity: 0 }], { duration: 320, easing: 'ease-out' });
+    if (glow) fade(glow, 0.35 + (vel / 127) * 0.65);
   }));
 </script>
 

@@ -58,3 +58,26 @@ export function stressProject() {
   p.songMode = true;
   return p;
 }
+
+/**
+ * The same song with everything added since 2.0 piled on top: an 808 and drum synths, four-hit rolls and
+ * chance on every drum step, arpeggiated chords, a groove, and every track in a group with its own effects.
+ */
+export function fullProject() {
+  const p = stressProject();
+  p.groove = 5; p.grooveAmt = 80;
+  p.tracks[6].kind = 'bass';
+  p.tracks[6].bass = { glide: 70, drive: 100, decay: 110, tone: 90, punch: 60, follow: true, key: 3 };
+  p.tracks[1].kind = 'dsyn'; p.tracks[1].dsyn = { model: 1, tune: 2, decay: 90, tone: 80, snap: 90 };
+  p.tracks[3].kind = 'dsyn'; p.tracks[3].dsyn = { model: 2, tune: 0, decay: 70, tone: 64, snap: 40 };
+  p.tracks[7].arpMode = 3; p.tracks[7].arpRate = 3; p.tracks[7].arpOct = 3;
+  p.buses = [0, 1, 2, 3].map((k) => ({ name: `G${k}`, vol: 90, mute: false, fx: INSERT_TYPES.slice(0, 4).map((type) => newInsert(type)) }));
+  p.tracks.forEach((t, i) => { t.bus = (i % 4) + 1; t.groove = i % 2 ? 4 : 0; });
+  for (const pat of p.patterns) {
+    p.tracks.forEach((t, i) => {
+      if (t.kind !== 'drum' && t.kind !== 'dsyn') return;
+      for (let s = 0; s < 32; s++) pat.mods[i][s] = 3 | ((s % 3 ? 0 : 2) << 2); // four hits a step, some at 75%
+    });
+  }
+  return p;
+}

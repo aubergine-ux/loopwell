@@ -7,8 +7,45 @@ import { trackStepAt } from './core/arrange';
 import { usesNotes } from './core/types';
 import { app } from './state.svelte';
 
+/**
+ * Should things move? Not when the system asks for reduced motion, nor when it has been switched off in the
+ * settings. Sound and the playhead carry on; the bounces, flashes and pulses that go with them don't.
+ */
+const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+export const lively = (): boolean => !(reduced?.matches || document.documentElement.dataset.calm !== undefined);
+
+/**
+ * A meter bar's transform for a level, or null if it would look the same as it does now. Writing a style
+ * only when the bar would actually move by a pixel keeps most frames free of any work at all.
+ */
+/**
+ * Flash an element by fading it out from `level`. Each element keeps one animation that is played again for every
+ * hit: making a new one each time (dozens a second on a busy beat) is what costs.
+ */
+const fades = new WeakMap<Element, { anim: Animation; level: number }>();
+export function fade(el: Element, level: number, duration = 320): void {
+  if (!lively()) return;
+  const lv = Math.round(level * 8) / 8; // near enough, and it means the keyframes rarely have to change
+  const had = fades.get(el);
+  if (!had) { fades.set(el, { anim: el.animate([{ opacity: lv }, { opacity: 0 }], { duration, easing: 'ease-out' }), level: lv }); return; }
+  if (had.level !== lv) { (had.anim.effect as KeyframeEffect).setKeyframes([{ opacity: lv }, { opacity: 0 }]); had.level = lv; }
+  had.anim.cancel();
+  had.anim.play();
+}
+
+/** Counts frames, so that things which don't need all sixty a second can take turns. */
+export let frameNo = 0;
+
+export function meterScale(el: HTMLElement, level: number, axis: 'X' | 'Y'): void {
+  const v = Math.round(Math.min(1, level) * 200) / 200;
+  const was = (el as HTMLElement & { _lv?: number })._lv;
+  if (was === v) return;
+  (el as HTMLElement & { _lv?: number })._lv = v;
+  el.style.transform = `scale${axis}(${v.toFixed(3)})`;
+}
+
 type FrameFn = (head: Playhead | null, stepChanged: boolean) => void;
-type FlashFn = (track: number, vel: number) => void;
+type FlashFn = (track: number, vel: number, sequenced: boolean) => void;
 
 const frames = new Set<FrameFn>();
 const flashes = new Set<FlashFn>();
@@ -24,9 +61,9 @@ export function onFlash(fn: FlashFn): () => void {
   return () => flashes.delete(fn);
 }
 
-/** Light up a track's pad (sequenced hit, finger, key or MIDI). */
-export function flash(track: number, vel: number): void {
-  for (const fn of flashes) fn(track, vel);
+/** Light up a track's pad. `sequenced` is true for a hit the pattern played, false for a finger, a key or MIDI. */
+export function flash(track: number, vel: number, sequenced = false): void {
+  for (const fn of flashes) fn(track, vel, sequenced);
 }
 
 // What the pattern grid should show. While the song plays, that is the pattern
@@ -70,10 +107,11 @@ function tick(): void {
           const at = trackStepAt(p, t, raw.song);
           if (at) v = hits(p, t, at.pattern, at.local);
         }
-        if (v) flash(t, v);
+        if (v) flash(t, v, true);
       }
     }
   } else lastStep = lastPat = -1;
+  frameNo++;
   for (const fn of frames) fn(head, changed);
   requestAnimationFrame(tick);
 }

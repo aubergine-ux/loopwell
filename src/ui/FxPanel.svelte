@@ -3,7 +3,7 @@
   import { audio } from '../audio/host';
   import { DELAY_LABELS } from '../core/types';
   import { app } from '../state.svelte';
-  import { onFrame } from '../visual';
+  import { meterScale, onFrame } from '../visual';
   import * as fmt from './fmt';
   import Knob from './Knob.svelte';
 
@@ -16,7 +16,7 @@
       const next = Math.max(audio.reduction, lv * 0.9);
       if (next === lv) return;
       lv = next < 0.01 ? 0 : next;
-      gr.style.transform = `scaleX(${Math.min(1, lv / 18).toFixed(3)})`;
+      meterScale(gr, lv / 18, 'X');
     });
   });
 </script>

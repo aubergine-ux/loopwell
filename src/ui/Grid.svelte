@@ -6,7 +6,7 @@
   import { DEFAULT_VEL, MAX_TRACKS, clamp, isPitched, usesSample } from '../core/types';
   import { isLocked } from '../live/session.svelte';
   import { app } from '../state.svelte';
-  import { onFlash, onFrame } from '../visual';
+  import { frameNo, lively, meterScale, onFlash, onFrame } from '../visual';
   import Icon from './Icon.svelte';
 
   let rows: HTMLElement;
@@ -144,15 +144,54 @@
     e.stopPropagation();
   }
 
+  // The playhead and the flash of each hit are a handful of overlay elements moved with transforms, which the
+  // browser can do without repainting the grid. Marking the cells themselves cost a repaint of every one of
+  // them on every step, and that is what dropped frames on slower machines.
+  let headcol = $state<HTMLElement>();
+  const pops = new Map<HTMLElement, Animation>();
+
   onMount(() => {
     let lit: Element[] = [];
     let meters: HTMLElement[] = [];
     const levels = new Float32Array(MAX_TRACKS);
+    // where each step and each row is, measured when the grid changes shape rather than on every step
+    let colX: number[] = [], colW = 0, rowY: number[] = [], rowH = 0, stale = true;
+    const ro = new ResizeObserver(() => { stale = true; });
+    ro.observe(rows);
+    const measure = () => {
+      colX = []; rowY = [];
+      for (const c of rows.querySelectorAll<HTMLElement>('.cell[data-t="0"]')) { colX.push(c.offsetLeft); colW = c.offsetWidth; }
+      for (const r of rows.querySelectorAll<HTMLElement>('.row[data-row]')) { rowY.push(r.offsetTop); rowH = r.offsetHeight; }
+      stale = false;
+    };
+    const flashAt = (t: number, x: number) => {
+      const el = rows.querySelector<HTMLElement>(`.pop[data-pop="${t}"]`);
+      if (!el || rowY[t] === undefined) return;
+      el.style.transform = `translate(${x}px, ${rowY[t]}px)`;
+      if (el.style.width !== `${colW}px`) { el.style.width = `${colW}px`; el.style.height = `${rowH}px`; }
+      // one animation per row, played again for each hit, instead of a new one every time
+      const anim = pops.get(el);
+      if (anim) { anim.cancel(); anim.play(); }
+      else pops.set(el, (el.firstElementChild as HTMLElement).animate([{ transform: 'scale(1.3)', opacity: 0.9 }, { transform: 'scale(1)', opacity: 0 }], { duration: 260, easing: 'cubic-bezier(.2,.8,.3,1)' }));
+    };
     const offFrame = onFrame((head, changed) => {
       if (changed || (!head && lit.length)) {
+        // the cells still carry the class (it says which step is sounding), but nothing is painted from it
         for (const el of lit) el.classList.remove('ph');
         lit = head ? [...rows.querySelectorAll(`.cell[data-s="${head.step}"]`)] : [];
         for (const el of lit) el.classList.add('ph');
+        if (stale || colX.length !== p.steps || rowY.length !== p.tracks.length) measure();
+        const x = head ? colX[head.step] : undefined;
+        if (headcol) {
+          if (x === undefined || !rowY.length) headcol.style.opacity = '0';
+          else {
+            headcol.style.transform = `translate(${x}px, ${rowY[0]}px)`;
+            headcol.style.width = `${colW}px`;
+            headcol.style.height = `${rowY[rowY.length - 1] + rowH - rowY[0]}px`;
+            headcol.style.opacity = '1';
+          }
+        }
+        if (x !== undefined && lively()) for (let t = 0; t < lit.length; t++) if (lit[t].classList.contains('on')) flashAt(t, x);
         // on narrow screens a 32-step grid scrolls; keep the playhead's half in view
         if (head && scroller.scrollWidth > scroller.clientWidth + 4 && (head.step & 15) === 0 && !drag) {
           const first = lit[0] as HTMLElement | undefined;
@@ -160,26 +199,34 @@
         }
       }
       if (meters.length !== p.tracks.length) meters = [...rows.querySelectorAll<HTMLElement>('.meter i')];
+      // the little level bars move on every other frame, taking turns with the mixer's
+      if (frameNo & 1) return;
       for (let t = 0; t < meters.length; t++) {
-        const next = Math.max(audio.peaks[t], levels[t] * 0.86);
+        const next = Math.max(audio.peaks[t], levels[t] * 0.74);
         if (next === levels[t]) continue;
         levels[t] = next < 0.001 ? 0 : next;
-        meters[t].style.transform = `scaleX(${Math.min(1, Math.sqrt(levels[t])).toFixed(3)})`;
+        meterScale(meters[t], Math.sqrt(levels[t]), 'X');
       }
     });
-    const offFlash = onFlash((t) => {
-      rows.querySelector(`.row[data-row="${t}"] .chip`)?.animate(
-        [{ transform: 'scale(1.25)', filter: 'brightness(1.5)' }, { transform: 'scale(1)', filter: 'brightness(1)' }],
-        { duration: 220, easing: 'ease-out' },
-      );
+    const bounces = new Map<Element, Animation>();
+    const offFlash = onFlash((t, _vel, sequenced) => {
+      // a hit from the pattern already flashes its step; the chip bounces for what you play yourself
+      if (sequenced || !lively()) return;
+      const chip = rows.querySelector(`.row[data-row="${t}"] .chip`);
+      if (!chip) return;
+      const anim = bounces.get(chip);
+      if (anim) { anim.cancel(); anim.play(); }
+      else bounces.set(chip, chip.animate([{ transform: 'scale(1.28)' }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' }));
     });
-    return () => { offFrame(); offFlash(); };
+    return () => { offFrame(); offFlash(); ro.disconnect(); pops.clear(); };
   });
 </script>
 
 <div class="scroller" bind:this={scroller}>
   <div class="rows" class:wide={p.steps === 32} bind:this={rows} style:--steps={p.steps}
     onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} oncontextmenu={menu} role="grid" tabindex="-1" aria-label="Step sequencer">
+    <i class="headcol" bind:this={headcol}></i>
+    {#each p.tracks as t, ti (ti)}<i class="pop" data-pop={ti} style:--c="var(--t{t.color})"><b></b></i>{/each}
     <div class="row ruler">
       <div class="head rhead">
         <span class="label">{app.range ? `Loop ${app.range.from + 1}–${app.range.to}` : 'Loop'}</span>
@@ -237,7 +284,7 @@
 
 <style>
   .scroller { overflow-x: auto; overflow-y: hidden; padding: 14px 18px; scrollbar-width: thin; }
-  .rows { display: flex; flex-direction: column; gap: 6px; min-width: calc(var(--headw) + var(--steps) * 22px); --headw: 172px; outline: none; }
+  .rows { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: calc(var(--headw) + var(--steps) * 22px); --headw: 172px; outline: none; }
   .row { display: flex; align-items: stretch; gap: 10px; height: 36px; }
   .row.off .cells { opacity: 0.45; }
   .head {
@@ -249,7 +296,7 @@
   }
   .row.sel .head { background: var(--inset); box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12); }
   .chip {
-    flex: none; width: 26px; height: 26px; border-radius: 8px; border: 0;
+    flex: none; width: 26px; height: 26px; border-radius: 8px; border: 0; will-change: transform;
     background: var(--c);
     box-shadow: 0 2px 0 color-mix(in srgb, var(--c) 60%, #000), inset 0 1px 0 rgb(255 255 255 / 0.35);
     touch-action: none;
@@ -264,7 +311,7 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .meter { height: 3px; border-radius: 2px; background: var(--well); overflow: hidden; }
-  .meter i { display: block; height: 100%; background: var(--c); transform-origin: left; transform: scaleX(0); }
+  .meter i { display: block; height: 100%; background: var(--c); transform-origin: left; transform: scaleX(0); will-change: transform; }
   .locked { color: var(--dim); display: grid; place-items: center; }
   .warn {
     width: 16px; height: 16px; border-radius: 50%; background: var(--rec); color: #fff;
@@ -310,10 +357,14 @@
     background: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--panel) 55%, transparent) 3px 5px);
   }
   .cell.pick { outline: 2px dashed var(--ink); outline-offset: -2px; }
-  :global(.cell.ph) { outline: 2px solid var(--ink); outline-offset: -2px; }
-  :global(.cell.ph:not(.on)) { background: color-mix(in srgb, var(--ink) 16%, var(--well)); }
-  :global(.cell.on.ph) { animation: hit 0.24s cubic-bezier(.2,.8,.3,1); z-index: 1; overflow: visible; }
-  @keyframes hit { 0% { transform: scale(1.22); filter: brightness(1.6); } 100% { transform: scale(1); filter: brightness(1); } }
+  /* the playhead: one column laid over the step that is sounding */
+  .headcol {
+    position: absolute; left: 0; top: 0; z-index: 1; opacity: 0; pointer-events: none; will-change: transform;
+    border-radius: 8px; box-shadow: inset 0 0 0 2px var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent);
+  }
+  /* and a flash over each step as it hits, one per row */
+  .pop { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; will-change: transform; }
+  .pop b { display: block; width: 100%; height: 100%; border-radius: 7px; background: color-mix(in srgb, var(--c) 55%, #fff); opacity: 0; will-change: transform, opacity; }
 
   .row.ruler { height: 16px; }
   .rhead { background: none; gap: 4px; }
