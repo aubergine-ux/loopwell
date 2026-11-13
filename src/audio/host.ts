@@ -50,6 +50,10 @@ export class AudioHost {
   playing = false;
   /** Called for every step as the audio thread fires it (ahead of the speakers). */
   onStepFired: ((s: Playhead, frame: number) => void) | null = null;
+  /** Called when the clip launcher's tracks change what they play: the pattern on each (or -2 for silent), and the step count it happened on. */
+  onLaunched: ((tracks: Int8Array, count: number) => void) | null = null;
+  /** Steps the engine has played since play was pressed, as of the last one it reported. */
+  count = 0;
 
   private node: AudioWorkletNode | null = null;
   private starting: Promise<void> | null = null;
@@ -113,11 +117,14 @@ export class AudioHost {
   private receive(m: FromWorklet): void {
     if (m.t === 'step') {
       const ctx = this.ctx!;
+      this.count = m.count;
       this.onStepFired?.(m, m.frame);
       if (!this.playing) return;
       const latency = Math.min(0.25, ctx.outputLatency || ctx.baseLatency || 0);
       this.queue.push({ step: m.step, pattern: m.pattern, song: m.song, time: m.frame / ctx.sampleRate + latency });
       if (this.queue.length > 256) this.queue.splice(0, 128); // tab hidden: nobody is reading these
+    } else if (m.t === 'launched') {
+      this.onLaunched?.(m.tracks, m.count);
     } else {
       this.peaks.set(m.peaks);
       this.masterL = m.l;
@@ -316,6 +323,16 @@ export class AudioHost {
 
   setPattern(pattern: number): void {
     this.send({ t: 'pattern', pattern });
+  }
+
+  /** Clip launcher: put a pattern (or -2 silence, -1 follow the selected pattern) on a track, on the next `quant` steps. */
+  launch(track: number, pattern: number, quant: number): void {
+    this.send({ t: 'launch', track, pattern, quant });
+  }
+
+  /** Performance effect: which one, whether a finger is down, and where on the pad it is (0..1 each way). */
+  perf(fx: number, on: boolean, x: number, y: number): void {
+    this.send({ t: 'perf', fx, on, x, y });
   }
 
   /** Play a sample on its own, straight to the output. Loads it first if need be; '' stops the preview. */

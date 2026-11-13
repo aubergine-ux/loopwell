@@ -31,8 +31,9 @@
   });
 
   function midiClick(): void {
-    if (app.midi.state === 'on') app.modal = 'help';
-    else void connectMidi().then(() => { if (app.midi.state !== 'on') app.modal = 'help'; });
+    // the first press just connects; after that the button opens the mappings
+    if (app.midi.state === 'on') app.modal = 'midi';
+    else void connectMidi().then(() => { if (app.midi.state !== 'on') app.modal = 'midi'; });
   }
   const themeName = $derived(THEMES.find((t) => t.id === app.theme)?.name ?? '');
 </script>
@@ -60,7 +61,7 @@
       <button class="btn on share" onclick={() => (app.modal = 'share')} aria-label="Share"><Icon name="share" /><span>Share</span></button>
     </div>
   </div>
-  <div class="deck" class:perform={app.perform}>
+  <div class="deck" class:perform={app.perform || app.stage}>
     <div class="transport">
       <button class="tbtn play" class:on={app.playing} onclick={togglePlay} aria-label={app.playing ? 'Stop' : 'Play'} title="Play / stop (Space)">
         <Icon name={app.playing ? 'stop' : 'play'} size={20} fill />
@@ -99,11 +100,13 @@
     <div class="group">
       <span class="label">View</span>
       <div class="seg view">
-        <button class:on={!p.songMode && !app.perform} onclick={() => { app.perform = false; setView(false); }} aria-pressed={!p.songMode && !app.perform}
+        <button class:on={!p.songMode && !app.perform && !app.stage} onclick={() => { app.perform = app.stage = false; setView(false); }} aria-pressed={!p.songMode && !app.perform && !app.stage}
           title="Build loops: the pattern on screen plays round and round (V)">Pattern</button>
-        <button class:on={p.songMode && !app.perform} onclick={() => { app.perform = false; setView(true); }} aria-pressed={p.songMode && !app.perform}
+        <button class:on={p.songMode && !app.perform && !app.stage} onclick={() => { app.perform = app.stage = false; setView(true); }} aria-pressed={p.songMode && !app.perform && !app.stage}
           title="Arrange patterns on the timeline and play the song (V)">Song</button>
-        <button class:on={app.perform} onclick={() => (app.perform = !app.perform)} aria-pressed={app.perform} title="Big pads for playing live (P)">Pads</button>
+        <button class:on={app.perform} onclick={() => { app.stage = false; app.perform = !app.perform; }} aria-pressed={app.perform} title="Big pads for playing live (P)">Pads</button>
+        <button class:on={app.stage} onclick={() => { app.perform = false; app.stage = !app.stage; if (app.stage) setView(false); }} aria-pressed={app.stage}
+          title="Launch clips and scenes in time, and play effects on the whole mix (Shift+P)">Live</button>
       </div>
     </div>
   </div>

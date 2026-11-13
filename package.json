@@ -19,6 +19,7 @@
     "test:live": "vite build && tsx tests/e2e/live.ts",
     "test:tools": "vite build && tsx tests/e2e/creative.ts",
     "test:sounds": "vite build && tsx tests/e2e/instruments.ts",
+    "test:stage": "vite build && tsx tests/e2e/stage.ts",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri"

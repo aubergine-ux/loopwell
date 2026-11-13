@@ -23,13 +23,16 @@ export type ToWorklet =
   | { t: 'pattern'; pattern: number }
   | { t: 'fill'; on: boolean }
   | { t: 'preview'; id: string }
+  | { t: 'launch'; track: number; pattern: number; quant: number }
+  | { t: 'perf'; fx: number; on: boolean; x: number; y: number }
   | { t: 'forget'; id: string }
   | { t: 'trig'; track: number; vel: number; pitch?: number }
   | { t: 'on'; track: number; pitch: number; vel: number }
   | { t: 'off'; track: number; pitch: number };
 
 export type FromWorklet =
-  | { t: 'step'; step: number; pattern: number; song: number; frame: number }
+  | { t: 'step'; step: number; pattern: number; song: number; frame: number; count: number }
+  | { t: 'launched'; tracks: Int8Array; count: number }
   | { t: 'meter'; peaks: Float32Array; l: number; r: number; gr: number; load: number };
 
 const METER_BLOCKS = 6;
@@ -47,7 +50,8 @@ class LoopwellProcessor extends AudioWorkletProcessor {
     this.engine.buildTables = false; // computed on the main thread and sent over, so audio never waits for one
     this.port.onmessage = (e: MessageEvent<ToWorklet>) => this.handle(e.data);
     this.engine.onStep = (i) =>
-      this.post({ t: 'step', step: i.step, pattern: i.pattern, song: i.song, frame: currentFrame + i.offset });
+      this.post({ t: 'step', step: i.step, pattern: i.pattern, song: i.song, frame: currentFrame + i.offset, count: i.count });
+    this.engine.onLaunch = (tracks, count) => this.post({ t: 'launched', tracks: tracks.slice(), count });
   }
 
   private post(m: FromWorklet): void {
@@ -67,6 +71,8 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       case 'pattern': e.setPattern(m.pattern); break;
       case 'fill': e.fill = m.on; break;
       case 'preview': e.preview(m.id); break;
+      case 'launch': e.launchClip(m.track, m.pattern, m.quant); break;
+      case 'perf': e.perf.fx = m.fx; e.perf.on = m.on; e.perf.x = m.x; e.perf.y = m.y; break;
       case 'forget': e.dropSample(m.id); break;
       case 'trig': e.trigger(m.track, m.vel, m.pitch); break;
       case 'on': e.noteOn(m.track, m.pitch, m.vel); break;

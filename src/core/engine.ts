@@ -7,6 +7,7 @@ import { StepClock, samplesPerStep } from './clock';
 import { ARP_RATES, CHANCES, GROOVES, arpIndex, condPass, modChance, modCond, modRatchet } from './creative';
 import { Compressor, DjFilter, PingPongDelay, Reverb, softClip } from './dsp/fx';
 import { createInsert, type Insert } from './dsp/inserts';
+import { PerfFx } from './dsp/perf';
 import { BassVoice, DrumVoice, emptyBassPatch, emptyDrumPatch, type BassPatch, type DrumPatch } from './dsp/instruments';
 import { SampleVoice, SynthVoice, emptyPatch, type SampleData, type SynthPatch } from './dsp/voices';
 import { wavetable, type Wavetable } from './dsp/wavetable';
@@ -51,7 +52,15 @@ export interface StepInfo {
   song: number;
   /** Frame offset of this step inside the block being processed. */
   offset: number;
+  /** Steps played since play() was pressed. */
+  count: number;
 }
+
+/** A track of the clip launcher is silent. */
+export const LAUNCH_OFF = -2;
+/** A track of the clip launcher plays whatever pattern is selected, as it always did. */
+export const LAUNCH_FOLLOW = -1;
+const LAUNCH_NONE = -3;
 
 class Channel {
   l = new Float32Array(BLOCK);
@@ -102,6 +111,15 @@ export class Engine {
   /** While true, "fill only" steps play and "not in fill" steps rest. */
   fill = false;
   onStep: ((info: StepInfo) => void) | null = null;
+  /** Called when what the tracks of a looping pattern are playing changes: a launched clip came in, or the pattern switched. */
+  onLaunch: ((tracks: Int8Array, count: number) => void) | null = null;
+  /** The clip launcher: which pattern each track loops, LAUNCH_FOLLOW or LAUNCH_OFF. Live only; a render never uses it. */
+  readonly launch = new Int8Array(MAX_TRACKS).fill(LAUNCH_FOLLOW);
+  private launchNext = new Int8Array(MAX_TRACKS).fill(LAUNCH_NONE);
+  private launchQuant = new Uint8Array(MAX_TRACKS);
+  private launched = new Int8Array(MAX_TRACKS);
+  private count = 0;
+  readonly perf: PerfFx;
   /**
    * Wavetables take tens of milliseconds to compute. Offline that is fine and they are
    * built when first needed; the audio thread turns this off and is handed them ready-made.
@@ -131,7 +149,7 @@ export class Engine {
   private loop = true;
   private from = 0;
   private nt = 0;
-  private info: StepInfo = { step: 0, pattern: 0, song: -1, offset: 0 };
+  private info: StepInfo = { step: 0, pattern: 0, song: -1, offset: 0, count: 0 };
   /** Effective knob values: [track * NP + param] and, for master params, [MAX_TRACKS * NP + param]. */
   private val = new Float32Array((MAX_TRACKS + 1) * NP);
   private curves: Curve[] = [];
@@ -162,6 +180,7 @@ export class Engine {
     this.delay = new PingPongDelay(sampleRate);
     this.masterFilter = new DjFilter(sampleRate);
     this.comp = new Compressor(sampleRate);
+    this.perf = new PerfFx(sampleRate);
     this.setProject(this.project);
   }
 
@@ -317,6 +336,7 @@ export class Engine {
     this.curStep = this.cue;
     this.sinceStep = 0;
     this.loops = 0;
+    this.count = this.stepIdx; // so the count and the pattern stay in step when joining part-way through
     this.seed = 0x2f6e2b1; // the same dice every time, so a render can be repeated exactly
     this.pn = 0;
     if (this.inSong) this.clock.phase = (this.cue - barStart(this.project, this.cue)) & 1;
@@ -351,6 +371,29 @@ export class Engine {
       for (const v of c.drums) if (v.active) v.kill();
       if (c.bass.active) c.bass.kill();
     }
+  }
+
+  /**
+   * The clip launcher. Put `pattern` (or LAUNCH_OFF, or LAUNCH_FOLLOW) on a track of the looping pattern.
+   * While playing it comes in on the next multiple of `quant` steps (0 = right now), so launches land in time.
+   */
+  launchClip(track: number, pattern: number, quant: number): void {
+    if (track < 0 || track >= MAX_TRACKS) return;
+    if (!this.playing || this.inSong || quant <= 0) {
+      this.launch[track] = pattern;
+      this.launchNext[track] = LAUNCH_NONE;
+      this.tellLaunch();
+    } else {
+      this.launchNext[track] = pattern;
+      this.launchQuant[track] = quant;
+    }
+  }
+
+  private tellLaunch(): void {
+    if (!this.onLaunch) return;
+    const out = this.launched;
+    for (let t = 0; t < MAX_TRACKS; t++) out[t] = this.launch[t] === LAUNCH_FOLLOW ? this.pattern : this.launch[t];
+    this.onLaunch(out, this.count);
   }
 
   /** Switch pattern: immediately when stopped, on the next bar line when playing. */
@@ -616,7 +659,7 @@ export class Engine {
     }
     if (this.onStep) {
       const info = this.info;
-      info.step = s; info.pattern = this.pattern; info.song = s; info.offset = offset;
+      info.step = s; info.pattern = this.pattern; info.song = s; info.offset = offset; info.count = this.count++;
       this.onStep(info);
     }
     return true;
@@ -659,18 +702,32 @@ export class Engine {
         this.loops = 0;
       } else this.loops++;
     }
+    const first = !this.started;
     this.started = true;
     const step = this.stepIdx++;
-    const pat = p.patterns[this.pattern];
-    if (pat) {
-      const sps = samplesPerStep(p.bpm, this.sampleRate);
-      for (let t = 0; t < p.tracks.length; t++) this.stepTrack(t, p.tracks[t], pat, step, this.loops, step, Infinity, sps, offset);
+    // launched clips come in when the count reaches their quantize line
+    let changed = first || this.pattern !== this.info.pattern;
+    for (let t = 0; t < MAX_TRACKS; t++) {
+      if (this.launchNext[t] === LAUNCH_NONE || this.count % this.launchQuant[t]) continue;
+      this.launch[t] = this.launchNext[t];
+      this.launchNext[t] = LAUNCH_NONE;
+      changed = true;
+    }
+    this.info.pattern = this.pattern;
+    if (changed) this.tellLaunch();
+    const sps = samplesPerStep(p.bpm, this.sampleRate);
+    for (let t = 0; t < p.tracks.length; t++) {
+      const which = this.launch[t];
+      if (which === LAUNCH_OFF) continue;
+      const pat = p.patterns[which === LAUNCH_FOLLOW ? this.pattern : which];
+      if (pat) this.stepTrack(t, p.tracks[t], pat, step, this.loops, step, Infinity, sps, offset);
     }
     if (this.onStep) {
       const info = this.info; // reused: nothing on the audio path allocates
-      info.step = step; info.pattern = this.pattern; info.song = -1; info.offset = offset;
+      info.step = step; info.pattern = this.pattern; info.song = -1; info.offset = offset; info.count = this.count;
       this.onStep(info);
     }
+    this.count++;
   };
 
   /** Render `frames` of stereo audio. Any length; split into 128-frame blocks inside. */
@@ -741,9 +798,13 @@ export class Engine {
 
     const fx = p.fx;
     const sps = samplesPerStep(this.clock.bpm, this.sampleRate);
+    const room = this.perf.throwSend(mixL, mixR, revIn, n);
     this.delay.process(dlyIn, mixL, mixR, n, DELAY_DIVS[fx.dlyTime] * sps, (val[mo + P_DLYFB] / 127) * 0.85, send(val[mo + P_DLYLVL]) * 1.2);
-    this.reverb.process(revIn, mixL, mixR, n, val[mo + P_REVSIZE] / 127, fx.revDamp / 127, send(val[mo + P_REVLVL]) * 1.6);
+    // a throw wants a big, loud room whatever the reverb knobs say
+    const size = val[mo + P_REVSIZE] / 127, level = send(val[mo + P_REVLVL]) * 1.6;
+    this.reverb.process(revIn, mixL, mixR, n, room > 0 ? Math.max(size, 0.6 + room * 0.4) : size, fx.revDamp / 127, room > 0 ? Math.max(level, 1.2) : level);
     this.masterFilter.process(mixL, mixR, n, val[mo + P_MFILTER] / 64, val[mo + P_MRES] / 127);
+    this.perf.process(mixL, mixR, n, sps);
     if (fx.compOn && this.stem < 0) {
       this.comp.process(mixL, mixR, n, -(fx.compThresh / 127) * 36, 1 + (fx.compRatio / 127) * 11, (fx.compMakeup / 127) * 18);
     } else {

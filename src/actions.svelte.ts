@@ -129,6 +129,9 @@ export function fixSelection(): void {
   if (app.step && (app.step.t >= app.project.tracks.length || app.step.s >= app.project.steps)) app.step = null;
 }
 
+/** Called once a different beat is in place, to put anything that plays live back to how a beat normally starts. */
+export const resetHooks: (() => void)[] = [];
+
 /** Called whenever a different beat is loaded, so things tied to the old one can let go. */
 export const loadHooks: (() => void)[] = [];
 
@@ -144,6 +147,7 @@ export function loadProject(p: Project): void {
   app.clip = null;
   app.step = null;
   app.locks = [];
+  for (const hook of resetHooks) hook();
   fixSelection();
   commit();
 }

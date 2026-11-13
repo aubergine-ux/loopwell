@@ -139,3 +139,6 @@ select.pick {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* MIDI learn: everything that can be tied to a controller shows it */
+:root[data-learn] .knob, :root[data-learn] .fader { outline: 2px dashed var(--accent); outline-offset: 1px; cursor: pointer; }

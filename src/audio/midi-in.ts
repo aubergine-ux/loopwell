@@ -4,6 +4,7 @@
 import { noteDown, noteUp, padDown, padUp, play, stop } from '../actions.svelte';
 import { snapToScale } from '../core/scales';
 import { usesNotes } from '../core/types';
+import { midiControl } from '../midimap.svelte';
 import { app } from '../state.svelte';
 
 const PAD_BASE = 36; // C1, where pad controllers start by default
@@ -28,6 +29,9 @@ function onMessage(e: MIDIMessageEvent): void {
   if (status === 0xfc) { stop(); return; }
   const type = status & 0xf0, ch = status & 15;
   const key = (ch << 7) | d[1];
+  const device = (e.target as MIDIInput | null)?.name ?? '';
+  // a note that has been tied to a control (or is being learned) is a button, not a pad
+  if ((type === 0x90 || type === 0x80) && midiControl('note', ch, d[1], type === 0x90 ? d[2] : 0, device)) return;
   if (type === 0x90 && d[2] > 0) {
     const p = app.project;
     const sel = p.tracks[app.sel];
@@ -55,6 +59,7 @@ function onMessage(e: MIDIMessageEvent): void {
     if (h.pad) padUp(h.track);
     else noteUp(h.track, h.pitch);
   } else if (type === 0xb0) {
+    if (midiControl('cc', ch, d[1], d[2], device)) return;
     if (d[1] === 7) app.project.master = d[2];
     else if (d[1] === 1) app.project.fx.filter = d[2] - 64;
     else if (d[1] === 74 && app.project.tracks[app.sel]?.kind === 'synth') app.project.tracks[app.sel].synth.cutoff = d[2];

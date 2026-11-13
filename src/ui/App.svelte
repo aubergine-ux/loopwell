@@ -24,7 +24,10 @@
   import RackPanel from './RackPanel.svelte';
   import Pads from './Pads.svelte';
   import RollPanel from './RollPanel.svelte';
+  import { midimap, setLearning } from '../midimap.svelte';
+  import MidiModal from './MidiModal.svelte';
   import ShareModal from './ShareModal.svelte';
+  import StageView from './StageView.svelte';
   import SampleBrowser from './SampleBrowser.svelte';
   import SongPanel from './SongPanel.svelte';
   import SoundPanel from './SoundPanel.svelte';
@@ -84,6 +87,8 @@
     <Transport />
     {#if app.perform}
       <PerformView />
+    {:else if app.stage}
+      <StageView />
     {:else}
     {#if app.project.songMode}<Timeline />{:else}<Grid />{/if}
     <section class="lower">
@@ -132,6 +137,7 @@
 {:else if app.modal === 'join'}<JoinModal />
 {:else if app.modal === 'folders'}<FoldersModal />
 {:else if app.modal === 'samples'}<SampleBrowser />
+{:else if app.modal === 'midi'}<MidiModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
 
 {#if app.needsTap}
@@ -144,6 +150,14 @@
 
 {#if dropping}
   <div class="drop"><div><Icon name="download" size={30} /><b>Drop audio to use it as a sample</b><span>or a .loopwell project file to open it</span></div></div>
+{/if}
+
+{#if midimap.learning}
+  <div class="learnbar" role="status">
+    <b>MIDI learn</b>
+    <span>{midimap.target ? `Now move a control on your controller for: ${midimap.target.label}` : 'Click a knob or fader (or, on the Live screen, a Learn button under the pad).'}</span>
+    <button class="btn" onclick={() => setLearning(false)}>Done</button>
+  </div>
 {/if}
 
 {#if app.busy}
@@ -210,6 +224,13 @@
   }
   .drop b { font-size: 22px; }
 
+  .learnbar {
+    position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px;
+    padding: 8px 8px 8px 16px; border-radius: 14px; background: var(--ink); color: var(--panel); font-size: 13px;
+    box-shadow: 0 16px 40px -10px rgb(0 0 0 / 0.6); max-width: min(94vw, 640px);
+  }
+  .learnbar b { font: 700 11px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+  .learnbar .btn { height: 28px; }
   .busy, .toast {
     position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 90;
     padding: 12px 18px; border-radius: 14px; background: var(--ink); color: var(--panel);

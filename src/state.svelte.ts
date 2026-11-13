@@ -1,7 +1,7 @@
 import { emptyProject, type Project } from './core/types';
 
 export type Tab = 'sound' | 'keys' | 'tools' | 'rack' | 'mix' | 'fx' | 'song' | 'live';
-export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders' | 'samples';
+export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders' | 'samples' | 'midi';
 
 export const THEMES = [
   { id: 'cream', name: 'Cream' },
@@ -28,6 +28,8 @@ export const app = $state({
   tab: 'sound' as Tab,
   /** Pads-first performance screen instead of the editor. */
   perform: false,
+  /** The live screen: clip launcher and performance effects. */
+  stage: false,
   playing: false,
   rec: false,
   queued: -1, // pattern waiting for the bar line

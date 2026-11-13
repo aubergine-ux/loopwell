@@ -1,5 +1,6 @@
 <script lang="ts">
   import { clamp } from '../core/types';
+  import { isLearning, learnKnob } from '../midimap.svelte';
 
   let { value = $bindable(), min = 0, max = 127, def = 100, label, color = 'var(--accent)', height = 112 }:
     { value: number; min?: number; max?: number; def?: number; label: string; color?: string; height?: number } = $props();
@@ -13,6 +14,7 @@
   }
   function down(e: PointerEvent): void {
     if (e.button) return;
+    if (isLearning()) { learnKnob(label, min, max, value, (v) => { value = v; }); return; }
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     startY = e.clientY;
     startV = value;
