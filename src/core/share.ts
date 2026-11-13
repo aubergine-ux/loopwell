@@ -19,7 +19,7 @@ import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, defaultMastering, newTrack, sanit
 
 const VERSION = 2;
 const V1_PATTERNS = 4;
-const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7, Mix = 8, Lyrics = 9, Master = 10 }
+const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7, Mix = 8, Lyrics = 9, Master = 10, Plugins = 11 }
 const ALL_TRACKS = 255;
 export const HASH_KEY = 'b';
 
@@ -45,6 +45,12 @@ class Writer {
   chunk(tag: number, body: Writer): void {
     const b = body.bytes();
     this.u8(tag);
+    this.vu(b.length);
+    for (const c of b) this.u8(c);
+  }
+  /** A string of any length. */
+  text(s: string): void {
+    const b = new TextEncoder().encode(s);
     this.vu(b.length);
     for (const c of b) this.u8(c);
   }
@@ -88,6 +94,13 @@ class Reader {
     this.n += len;
     return r;
   }
+  text(): string {
+    const len = this.vu();
+    if (this.n + len > this.buf.length) throw new Error('truncated');
+    const s = new TextDecoder().decode(this.buf.subarray(this.n, this.n + len));
+    this.n += len;
+    return s;
+  }
   str(): string {
     const len = this.u8();
     if (this.n + len > this.buf.length) throw new Error('truncated');
@@ -129,8 +142,8 @@ function writeTracks(w: Writer, p: Project): void {
   w.u8(p.tracks.length);
   for (const t of p.tracks) {
     // the 808 and the drum synth go in as a synth and a drum, which is what a reader from before they existed will play them as;
-    // the Instruments chunk then says what they really are
-    const synth = t.kind === 'synth' || t.kind === 'bass';
+    // the Instruments chunk then says what they really are. A plugin track is a synth to them too, so its notes still play.
+    const synth = t.kind === 'synth' || t.kind === 'bass' || t.kind === 'plugin';
     const builtin = isBuiltin(t.sample);
     w.u8((synth ? 1 : 0) | (t.mute ? 2 : 0) | (t.solo ? 4 : 0) | ((t.color & 7) << 3) | (!synth && !builtin ? 64 : 0) | (t.kind === 'slice' ? 128 : 0));
     w.str(t.name);
@@ -515,6 +528,29 @@ function readInstruments(r: Reader, raw: any): void {
   }
 }
 
+// The Plugins chunk: which tracks are played by a Web Audio Module, where its code is, and its settings.
+/** Settings bigger than this stay out of a link (the plugin then starts as it comes); a project file keeps them. */
+const LINK_PLUGIN_STATE = 1500;
+
+function writePlugins(w: Writer, p: Project): void {
+  for (const t of p.tracks) {
+    const list = t.kind === 'plugin' ? t.plugins : [];
+    w.u8(t.kind === 'plugin' ? list.length + 1 : 0);
+    for (const x of list) { w.text(x.url); w.str(x.name); w.text(x.state.length <= LINK_PLUGIN_STATE ? x.state : ''); }
+  }
+}
+
+function readPlugins(r: Reader, raw: any): void {
+  for (const t of raw.tracks) {
+    if (!r.more) return;
+    const n = r.u8();
+    if (!n) continue;
+    t.kind = 'plugin';
+    t.plugins = [];
+    for (let i = 1; i < n; i++) t.plugins.push({ url: r.text(), name: r.str(), state: r.text() });
+  }
+}
+
 export function packProject(p: Project): Uint8Array {
   const w = new Writer();
   w.u8(VERSION);
@@ -534,6 +570,7 @@ export function packProject(p: Project): Uint8Array {
   if (JSON.stringify(p.mastering) !== JSON.stringify(defaultMastering())) part(Chunk.Master, writeMaster);
   // last, because it changes what kind a track is and the patterns are read by kind
   if (p.tracks.some((t) => t.kind === 'bass' || t.kind === 'dsyn')) part(Chunk.Instruments, writeInstruments);
+  if (p.tracks.some((t) => t.kind === 'plugin')) part(Chunk.Plugins, writePlugins);
   return w.bytes();
 }
 
@@ -578,6 +615,9 @@ export function unpackProject(bytes: Uint8Array): Project {
     } else if (tag === Chunk.Instruments) {
       if (!raw.patterns) throw new Error('instruments before patterns');
       readInstruments(c, raw);
+    } else if (tag === Chunk.Plugins) {
+      if (!raw.patterns) throw new Error('plugins before patterns');
+      readPlugins(c, raw);
     } else if (tag === Chunk.Creative) {
       if (!raw.tracks) throw new Error('extras before tracks');
       readCreative(c, raw);

@@ -3,7 +3,7 @@
 // receives step/meter notifications for the lights.
 
 import { Engine, METER_CHANNELS } from '../core/engine';
-import type { Project } from '../core/types';
+import { MAX_TRACKS, type Project } from '../core/types';
 
 declare const sampleRate: number;
 declare const currentFrame: number;
@@ -33,11 +33,15 @@ export type ToWorklet =
   | { t: 'resetLoudness' }
   | { t: 'trig'; track: number; vel: number; pitch?: number }
   | { t: 'on'; track: number; pitch: number; vel: number }
-  | { t: 'off'; track: number; pitch: number };
+  | { t: 'off'; track: number; pitch: number }
+  /** Which plugin plays a track (null: none). The three strings are how the audio thread finds it. */
+  | { t: 'plug'; track: number; wam: { group: string; key: string; id: string } | null };
 
 export type FromWorklet =
   | { t: 'step'; step: number; pattern: number; song: number; frame: number; count: number }
   | { t: 'launched'; tracks: Int8Array; count: number }
+  /** A MIDI message for a plugin that can't be reached on the audio thread, for the main thread to pass on. */
+  | { t: 'plugnote'; track: number; bytes: [number, number, number]; time: number }
   | { t: 'meter'; peaks: Float32Array; buses: Float32Array; returns: Float32Array; l: number; r: number; gr: number; load: number; lufs: Float32Array | null; mastering: Float32Array };
 
 const METER_BLOCKS = 6;
@@ -50,6 +54,10 @@ class LoopwellProcessor extends AudioWorkletProcessor {
   private busy = 0;
   private idle = true;
   private lufs = new Float32Array(METER_CHANNELS + 2);
+  // plugins: who plays each track, where their sound arrives, and which of their notes are down
+  private wams: ({ group: string; key: string; id: string } | null)[] = [];
+  private ins = Array.from({ length: MAX_TRACKS }, (): { l: Float32Array; r: Float32Array } => ({ l: this.scratch, r: this.scratch }));
+  private down = Array.from({ length: MAX_TRACKS }, () => new Uint8Array(128));
 
   constructor() {
     super();
@@ -58,10 +66,38 @@ class LoopwellProcessor extends AudioWorkletProcessor {
     this.engine.onStep = (i) =>
       this.post({ t: 'step', step: i.step, pattern: i.pattern, song: i.song, frame: currentFrame + i.offset, count: i.count });
     this.engine.onLaunch = (tracks, count) => this.post({ t: 'launched', tracks: tracks.slice(), count });
+    this.engine.onPlug = (track, on, pitch, vel, offset) => this.plug(track, on, pitch, vel, offset);
   }
 
   private post(m: FromWorklet): void {
     this.port.postMessage(m);
+  }
+
+  /** Pass a note to the plugin on a track, as MIDI. */
+  private plug(track: number, on: boolean, pitch: number, vel: number, offset: number): void {
+    const w = this.wams[track];
+    if (!w) return;
+    // The plugin has already made this block (its sound is what is on our input), so the note is placed at the
+    // same spot in the next one: plugin tracks sound one block (3 ms) late, always by exactly that.
+    const time = (currentFrame + offset + 128) / sampleRate;
+    // every plugin made with the standard kit registers itself on the audio thread, where it can be handed the note
+    // on its exact frame; one that doesn't gets it through the main thread, a little less exactly
+    let proc: { scheduleEvents(...e: unknown[]): void } | undefined;
+    try {
+      proc = (globalThis as unknown as { webAudioModules?: { getGroup(g: string, k: string): { processors: Map<string, typeof proc> } } })
+        .webAudioModules?.getGroup(w.group, w.key).processors.get(w.id);
+    } catch { /* no such group: the main thread it is */ }
+    const send = (a: number, b: number, c: number) => {
+      if (proc) proc.scheduleEvents({ type: 'wam-midi', time, data: { bytes: [a, b, c] } });
+      else this.post({ t: 'plugnote', track, bytes: [a, b, c], time });
+    };
+    const down = this.down[track];
+    if (pitch < 0) {
+      // "all notes off" is something not every plugin listens to, so each note that is down is ended by name too
+      for (let p = 0; p < 128; p++) if (down[p]) { send(0x80, p, 0); down[p] = 0; }
+      send(0xb0, 123, 0);
+    } else if (on) { down[pitch & 127] = 1; send(0x90, pitch & 127, Math.max(1, Math.min(127, vel))); }
+    else { down[pitch & 127] = 0; send(0x80, pitch & 127, 0); }
   }
 
   private handle(m: ToWorklet): void {
@@ -88,10 +124,15 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       case 'trig': e.trigger(m.track, m.vel, m.pitch); break;
       case 'on': e.noteOn(m.track, m.pitch, m.vel); break;
       case 'off': e.noteOff(m.track, m.pitch); break;
+      case 'plug':
+        // whatever the old plugin was holding ends with it
+        if (this.wams[m.track]) this.plug(m.track, false, -1, 0, 0);
+        this.wams[m.track] = m.wam;
+        break;
     }
   }
 
-  process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const out = outputs[0];
     const l = out[0];
     if (!l) return true;
@@ -99,6 +140,12 @@ class LoopwellProcessor extends AudioWorkletProcessor {
     if (this.scratch.length < n) this.scratch = new Float32Array(n);
     const t0 = now();
     const e = this.engine;
+    // what the plugins played: each one is wired to the input with its track's number
+    for (let t = 0; t < MAX_TRACKS; t++) {
+      const a = inputs[t]?.[0];
+      if (a && this.wams[t]) { const io = this.ins[t]; io.l = a; io.r = inputs[t][1] ?? a; e.ext[t] = io; }
+      else e.ext[t] = undefined;
+    }
     e.process(l, out[1] ?? this.scratch, n);
     this.busy += now() - t0;
     if (++this.blocks >= METER_BLOCKS) {

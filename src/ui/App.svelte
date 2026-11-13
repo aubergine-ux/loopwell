@@ -167,6 +167,8 @@
 {:else if app.modal === 'midi'}<MidiModal />
 {:else if app.modal === 'history'}<HistoryModal />
 {:else if app.modal === 'video'}{#await import('./VideoModal.svelte') then m}<m.default />{/await}
+{:else if app.modal === 'plugins'}{#await import('./PluginsModal.svelte') then m}<m.default />{/await}
+{:else if app.modal === 'plugin'}{#await import('./PluginWindow.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'stems'}{#await import('./StemsModal.svelte') then m}<m.default />{/await}
 {:else if app.modal === 'palette'}<PaletteModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}

@@ -2,7 +2,7 @@
 // the limiter so a song comes out at the loudness asked for.
 
 import { integratedLoudness, samplePeak } from './loudness';
-import { renderProject, type SampleBank } from './render';
+import { renderProject, type RenderOptions, type SampleBank } from './render';
 import type { Mastering, Project } from './types';
 
 export interface MasterPreset {
@@ -45,9 +45,10 @@ const gainFor = (db: number) => Math.max(0, Math.min(127, Math.round(64 + (db / 
  */
 export async function findMasterGain(
   project: Project, bank: SampleBank, sampleRate: number, chain: number[] | undefined, onProgress?: (done: number) => void | Promise<void>,
+  ext?: RenderOptions['ext'],
 ): Promise<MasterReport> {
   const render = async (m: Mastering, part: number, of: number) => {
-    const r = await renderProject({ ...project, mastering: m }, bank, { sampleRate, chain, maxTail: 2, onProgress: (d) => onProgress?.((part + d) / of) });
+    const r = await renderProject({ ...project, mastering: m }, bank, { sampleRate, chain, ext, maxTail: 2, onProgress: (d) => onProgress?.((part + d) / of) });
     return { lufs: integratedLoudness(r.l, r.r, sampleRate), peak: samplePeak(r.l, r.r) };
   };
   const target = -project.mastering.target;

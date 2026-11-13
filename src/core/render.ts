@@ -17,6 +17,10 @@ export interface RenderOptions {
   stem?: number;
   /** Longest reverb/delay tail to keep after the last step, seconds. */
   maxTail?: number;
+  /** What plugins played, already rendered: a stereo pair for each track a plugin plays, starting at the first frame. */
+  ext?: { [track: number]: { l: Float32Array; r: Float32Array } };
+  /** Called with every note meant for a plugin, at its frame from the start. Used to find out what plugins must play. */
+  onPlug?: (track: number, on: boolean, pitch: number, vel: number, frame: number) => void;
   /** Called every ~1s of rendered audio; await it to keep a UI alive. */
   onProgress?: (done: number) => void | Promise<void>;
 }
@@ -33,6 +37,9 @@ export async function renderProject(project: Project, bank: SampleBank, opts: Re
   for (const id in bank) eng.setSample(id, bank[id].l, bank[id].r);
   eng.setProject(project);
   eng.stem = opts.stem ?? -1;
+  if (opts.ext) for (const t in opts.ext) eng.ext[+t] = opts.ext[t];
+  let pos = 0;
+  if (opts.onPlug) { const tell = opts.onPlug; eng.onPlug = (track, on, pitch, vel, offset) => tell(track, on, pitch, vel, pos + eng.blockAt + offset); }
 
   const body = opts.chain
     ? Math.ceil(opts.chain.length * project.steps * samplesPerStep(project.bpm, sr))
@@ -43,7 +50,7 @@ export async function renderProject(project: Project, bank: SampleBank, opts: Re
 
   const CHUNK = 128 * 64;
   const quietFrames = Math.round(sr * 0.25);
-  let pos = 0, quiet = 0, sinceYield = 0;
+  let quiet = 0, sinceYield = 0;
   if (opts.chain) eng.play({ chain: opts.chain, loop: false });
   else {
     eng.setProject({ ...project, songMode: true });
@@ -51,7 +58,7 @@ export async function renderProject(project: Project, bank: SampleBank, opts: Re
   }
   while (pos < total) {
     const n = Math.min(CHUNK, total - pos);
-    eng.process(l, r, n, pos);
+    eng.process(l, r, n, pos, pos);
     if (eng.ended) {
       let peak = 0;
       for (let i = pos; i < pos + n; i++) {

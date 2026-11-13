@@ -22,6 +22,7 @@ import { prefs, setPref } from './prefs.svelte';
 import { createProject, library, openAsNew, openProject, saveVersion } from './projects.svelte';
 import { applyPreset } from './sound.svelte';
 import { deleteClip, duplicateClip } from './song.svelte';
+import { plug } from './plugins.svelte';
 import { TABS, THEMES, app, type ModalName, type Tab } from './state.svelte';
 import { startTour } from './tour.svelte';
 import { loadText, saveText } from './storage';
@@ -80,6 +81,7 @@ export const COMMANDS: Command[] = [
   { id: 'add-drum', title: 'Add a drum track', group: 'Tracks', when: () => app.project.tracks.length < MAX_TRACKS, run: () => addTrack('drum') },
   { id: 'add-synth', title: 'Add a synth track', group: 'Tracks', when: () => app.project.tracks.length < MAX_TRACKS, run: () => addTrack('synth') },
   { id: 'add-808', title: 'Add an 808 bass track', group: 'Tracks', when: () => app.project.tracks.length < MAX_TRACKS, run: () => addTrack('bass') },
+  { id: 'plugin', title: 'Plugins: put a WAM instrument on the selected track', group: 'Sounds', words: 'wam vst web audio modules instrument effect browser', run: () => { plug.pick = { track: app.sel, index: app.project.tracks[app.sel].kind === 'plugin' ? app.project.tracks[app.sel].plugins.length : 0 }; app.modal = 'plugins'; } },
   { id: 'add-dsyn', title: 'Add a drum synth track', group: 'Tracks', words: 'knobs', when: () => app.project.tracks.length < MAX_TRACKS, run: () => addTrack('dsyn') },
   { id: 'remove-track', title: 'Delete the selected track', group: 'Tracks', when: () => app.project.tracks.length > 1, run: () => removeTrack(app.sel) },
   { id: 'add-group', title: 'Add a mixer group', group: 'Tracks', words: 'bus', run: () => { addBus(); app.tab = 'mix'; } },

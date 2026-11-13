@@ -6,6 +6,8 @@
   import Icon from './Icon.svelte';
   import Knob from './Knob.svelte';
   import { usesSample } from '../core/types';
+  import { plug } from '../plugins.svelte';
+  import PluginEditor from './PluginEditor.svelte';
   import InstrumentEditor from './InstrumentEditor.svelte';
   import SamplerEditor from './SamplerEditor.svelte';
   import SynthEditor from './SynthEditor.svelte';
@@ -13,6 +15,13 @@
   const p = $derived(app.project);
   const t = $derived(p.tracks[app.sel]);
   const color = $derived(`var(--t${t.color})`);
+  // a track only becomes a plugin track once a plugin has been chosen for it
+  function choosePlugin(): void {
+    if (t.kind === 'plugin') return;
+    if (t.plugins.length) { setKind(app.sel, 'plugin'); return; }
+    plug.pick = { track: app.sel, index: 0 };
+    app.modal = 'plugins';
+  }
 </script>
 
 <div class="sound" style:--c={color}>
@@ -28,6 +37,7 @@
       <button class:on={t.kind === 'synth'} onclick={() => setKind(app.sel, 'synth')}>Synth</button>
       <button class:on={t.kind === 'bass'} onclick={() => setKind(app.sel, 'bass')} title="808 bass: one sliding, saturated voice that follows the song's key">808</button>
       <button class:on={t.kind === 'dsyn'} onclick={() => setKind(app.sel, 'dsyn')} title="Drum synth: kicks, snares, hats and claps made from knobs instead of samples">Knobs</button>
+      <button class:on={t.kind === 'plugin'} onclick={choosePlugin} title="Plugin: an instrument made by someone else, in the Web Audio Modules format">Plugin</button>
     </div>
     <div class="idbtns">
       <button class="btn ghost" onclick={() => clearTrack(app.sel)} title="Clear this track in the current pattern (Shift+Backspace)">Clear</button>
@@ -36,7 +46,7 @@
   </div>
 
   <div class="source">
-    {#if t.kind === 'synth'}<SynthEditor />{:else if usesSample(t.kind)}<SamplerEditor />{:else}<InstrumentEditor />{/if}
+    {#if t.kind === 'synth'}<SynthEditor />{:else if t.kind === 'plugin'}<PluginEditor />{:else if usesSample(t.kind)}<SamplerEditor />{:else}<InstrumentEditor />{/if}
   </div>
 
   <div class="strip">

@@ -8,6 +8,7 @@ import { exportMidi, importMidi, midiToProject } from './core/midi';
 import { describeChange } from './live/ydoc';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
 import { renderProject } from './core/render';
+import { pluginAudio, syncPlugins } from './plugins.svelte';
 import { beatFromHash, beatUrl, HASH_KEY } from './core/share';
 import { isDefaultArrangement, tempoAt, trackStepAt } from './core/arrange';
 import {
@@ -114,6 +115,7 @@ export const hooks = {
 export function projectChanged(snap: Project): void {
   if (hooks.changed && !hooks.changed(snap)) return;
   audio.setProject(snap);
+  syncPlugins(snap);
   clearTimeout(commitTimer);
   commitTimer = window.setTimeout(commit, 350);
 }
@@ -323,7 +325,7 @@ export function addTrack(kind: TrackKind): void {
   while (used.has(color) && color < 7) color++;
   const kit = p.tracks.find((t) => t.kind === 'drum' && isBuiltin(t.sample))?.sample.split('/')[0] ?? KITS[0].id;
   const untouched = isDefaultArrangement(p);
-  const name = { drum: 'RIM', synth: 'SYNTH', slice: 'CHOP', bass: '808', dsyn: 'DRUM' }[kind];
+  const name = { drum: 'RIM', synth: 'SYNTH', slice: 'CHOP', bass: '808', dsyn: 'DRUM', plugin: 'PLUGIN' }[kind];
   const tr = newTrack(kind, color, name, `${kit}/rim`);
   tr.bass.key = p.scaleRoot;
   if (kind === 'bass') tr.note = 36 + ((p.scaleRoot + 6) % 12) - 6;
@@ -658,6 +660,9 @@ async function loadAllSamples(p: Project): Promise<void> {
   await Promise.all(p.tracks.filter((t) => usesSample(t.kind)).map((t) => audio.ensure(t.sample)));
 }
 
+/** What the plugins play in an export of `p`, if it has any. */
+const played = (p: Project, chain: number[] | undefined) => pluginAudio(p, audio.bank, { sampleRate: audio.sampleRate, chain });
+
 /** What the mastering assistant found the last time it ran. */
 export const mastered = $state({ report: null as MasterReport | null });
 
@@ -666,7 +671,7 @@ export function autoMaster(): Promise<void> {
   return withBusy('Measuring the song', async (progress) => {
     const p = snapshot();
     await loadAllSamples(p);
-    const rep = await findMasterGain(p, audio.bank, audio.sampleRate, exportChain(), progress);
+    const rep = await findMasterGain(p, audio.bank, audio.sampleRate, exportChain(), progress, await played(p, exportChain()));
     mastered.report = rep;
     if (rep.after <= -69) { toast('There is nothing playing to measure yet.'); return; }
     checkpoint();
@@ -692,7 +697,7 @@ export async function renderMix(onProgress?: (done: number) => void | Promise<vo
   const project = snapshot();
   await loadAllSamples(project);
   const chain = exportChain();
-  const out = await renderProject(project, audio.bank, { sampleRate: audio.sampleRate, chain, onProgress, maxTail: 3 });
+  const out = await renderProject(project, audio.bank, { sampleRate: audio.sampleRate, chain, ext: await played(project, chain), onProgress, maxTail: 3 });
   const n = seconds ? Math.min(out.l.length, Math.round(seconds * out.sampleRate)) : out.l.length;
   return { project, chain, l: out.l.subarray(0, n), r: out.r.subarray(0, n), sampleRate: out.sampleRate };
 }
@@ -711,7 +716,7 @@ export function exportAudio(format: AudioFormat = 'wav', loudness: LoudnessTarge
     const p = snapshot();
     await loadAllSamples(p);
     const encoding = format !== 'wav';
-    const r = await renderProject(p, audio.bank, { sampleRate: audio.sampleRate, chain: exportChain(), onProgress: (d) => progress(encoding ? d * 0.6 : d) });
+    const r = await renderProject(p, audio.bank, { sampleRate: audio.sampleRate, chain: exportChain(), ext: await played(p, exportChain()), onProgress: (d) => progress(encoding ? d * 0.6 : d) });
     const n = normalize(r.l, r.r, r.sampleRate, loudness);
     let bytes: Uint8Array<ArrayBuffer>;
     if (format === 'wav') bytes = encodeWav([r.l, r.r], r.sampleRate, 24);
@@ -737,10 +742,11 @@ export function exportStems(): Promise<void> {
     const active = p.tracks.map((t, i) => i).filter((i) => trackHasNotes(p, i, chain));
     if (!active.length) throw new Error(`Nothing to export yet: the ${chain ? 'pattern' : 'song'} is empty.`);
     const files: Record<string, Uint8Array> = {};
+    const ext = await played(p, chain);
     for (let k = 0; k < active.length; k++) {
       const i = active[k];
       const r = await renderProject(p, audio.bank, {
-        sampleRate: audio.sampleRate, chain, stem: i,
+        sampleRate: audio.sampleRate, chain, stem: i, ext,
         onProgress: (d) => progress((k + d) / active.length),
       });
       const name = p.tracks[i].name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'track';

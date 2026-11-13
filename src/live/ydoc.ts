@@ -65,6 +65,7 @@ function writeTrack(yt: Y.Map<unknown>, p: Project, t: Track, ti: number): void 
   for (const k in knobs) if (yt.get(k) !== knobs[k]) yt.set(k, knobs[k]);
   if (!same(yt.get('slices'), t.slices)) yt.set('slices', [...t.slices]);
   if (!same(yt.get('fx'), t.fx)) yt.set('fx', JSON.parse(JSON.stringify(t.fx)));
+  if (!same(yt.get('plugins') ?? [], t.plugins)) yt.set('plugins', JSON.parse(JSON.stringify(t.plugins)));
   syncMap(child(yt, 'synth', () => new Y.Map()), t.synth as unknown as Json);
   if (yt.has('bass') || t.kind === 'bass') syncMap(child(yt, 'bass', () => new Y.Map()), t.bass as unknown as Json);
   if (yt.has('dsyn') || t.kind === 'dsyn') syncMap(child(yt, 'dsyn', () => new Y.Map()), t.dsyn as unknown as Json);
@@ -151,6 +152,7 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
     for (const k of TRACK_KNOBS) t[k] = yt.get(k);
     t.slices = yt.get('slices');
     t.fx = yt.get('fx');
+    t.plugins = yt.get('plugins');
     t.synth = (yt.get('synth') as Y.Map<unknown> | undefined)?.toJSON() ?? {};
     t.bass = (yt.get('bass') as Y.Map<unknown> | undefined)?.toJSON();
     t.dsyn = (yt.get('dsyn') as Y.Map<unknown> | undefined)?.toJSON();

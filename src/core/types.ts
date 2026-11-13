@@ -26,8 +26,19 @@ export const MAX_LYRICS = 200;
  * drum: a one-shot sample on steps. synth: notes. slice: a chopped sample, played by notes whose pitch is the slice number.
  * bass: the 808, one voice played by notes. dsyn: a drum made from knobs instead of a sample, on steps.
  */
-export type TrackKind = 'drum' | 'synth' | 'slice' | 'bass' | 'dsyn';
-export const TRACK_KINDS: TrackKind[] = ['drum', 'synth', 'slice', 'bass', 'dsyn'];
+export type TrackKind = 'drum' | 'synth' | 'slice' | 'bass' | 'dsyn' | 'plugin';
+export const TRACK_KINDS: TrackKind[] = ['drum', 'synth', 'slice', 'bass', 'dsyn', 'plugin'];
+
+/** A Web Audio Module on a track. The first one on a track is the instrument; any after it are effects on its sound. */
+export interface PluginRef {
+  /** Where its code is: an address, or a path inside the app for the ones that come with it. */
+  url: string;
+  name: string;
+  /** Its settings, as the JSON the plugin itself hands over. '' = as it comes. */
+  state: string;
+}
+export const MAX_PLUGINS = 4;
+export const MAX_PLUGIN_STATE = 32768;
 export const MAX_INSERTS = 5;
 export const MAX_BUSES = 4;
 /** Classic shapes, then one entry per wavetable. */
@@ -116,6 +127,7 @@ export interface Track {
   synth: SynthParams;
   bass: BassParams;
   dsyn: DrumSynthParams;
+  plugins: PluginRef[]; // only played when the track's kind is 'plugin'
   note: number; // MIDI pitch used when a synth track is toggled from the step grid / pads
   vol: number; // 100 = unity
   pan: number; // -64..63
@@ -292,13 +304,17 @@ export const usesNotes = (kind: TrackKind) => kind !== 'drum' && kind !== 'dsyn'
 /** Does this kind of track play a sample? */
 export const usesSample = (kind: TrackKind) => kind === 'drum' || kind === 'slice';
 /** Is it played by pitched notes (so scales, chords and keyboards make sense)? */
-export const isPitched = (kind: TrackKind) => kind === 'synth' || kind === 'bass';
+export const isPitched = (kind: TrackKind) => kind === 'synth' || kind === 'bass' || kind === 'plugin';
+
+/** Is this somewhere a plugin may be loaded from? Web addresses, and the app's own plugins folder. */
+export const pluginUrlOk = (url: unknown): url is string =>
+  typeof url === 'string' && url.length <= 400 && (/^https?:\/\/[^\s"'<>]+$/.test(url) || /^plugins\/[\w./-]+$/.test(url)) && !url.includes('..');
 
 export function newTrack(kind: TrackKind, color: number, name: string, sample = 'boom/kick'): Track {
   return {
     name, kind, color, sample,
     tune: 0, decay: 127, reverse: false, stretch: 64, slices: [], fx: [],
-    synth: defaultSynth(), bass: defaultBass(), dsyn: defaultDsyn(), note: kind === 'bass' ? 36 : 48,
+    synth: defaultSynth(), bass: defaultBass(), dsyn: defaultDsyn(), plugins: [], note: kind === 'bass' ? 36 : 48,
     vol: 100, pan: 0, mute: false, solo: false,
     filter: 0, rev: 0, dly: 0,
     groove: 0, grooveAmt: 50, arpMode: 0, arpRate: 2, arpOct: 1, arpGate: 100, bus: 0,
@@ -451,6 +467,11 @@ export function sanitize(raw: any): Project {
         model, tune: int(ds2.tune, -24, 24, dd.tune), decay: int(ds2.decay, 0, 127, dd.decay),
         tone: int(ds2.tone, 0, 127, dd.tone), snap: int(ds2.snap, 0, 127, dd.snap),
       },
+      plugins: (Array.isArray(t?.plugins) ? t.plugins : []).filter((x: any) => pluginUrlOk(x?.url)).slice(0, MAX_PLUGINS).map((x: any) => ({
+        url: x.url as string,
+        name: typeof x.name === 'string' && x.name ? x.name.slice(0, 40) : 'Plugin',
+        state: typeof x.state === 'string' && x.state.length <= MAX_PLUGIN_STATE ? x.state : '',
+      })),
       note: int(t?.note, 0, 127, d.note),
       vol: int(t?.vol, 0, 127, 100),
       pan: int(t?.pan, -64, 63, 0),

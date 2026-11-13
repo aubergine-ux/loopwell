@@ -45,6 +45,7 @@ const DRUM_VOICES = 3;
 /** Hits waiting for their frame: ratchets, grooved steps and arpeggios. */
 const MAX_PENDING = 256;
 const MAX_HELD = 16;
+const MAX_OFFS = 128;
 
 export interface StepInfo {
   /** Step of the pattern (pattern mode) or of the song (song mode). */
@@ -129,6 +130,22 @@ export class Engine {
   onStep: ((info: StepInfo) => void) | null = null;
   /** Called when what the tracks of a looping pattern are playing changes: a launched clip came in, or the pattern switched. */
   onLaunch: ((tracks: Int8Array, count: number) => void) | null = null;
+  /**
+   * Notes for tracks that a plugin plays: (track, on, pitch, velocity, frames into the block being made).
+   * A pitch of -1 with `on` false means every note on that track should stop.
+   */
+  onPlug: ((track: number, on: boolean, pitch: number, vel: number, offset: number) => void) | null = null;
+  /** The sound plugins send back, a stereo pair per track. It joins the track before its effects, like a voice. */
+  ext: ({ l: Float32Array; r: Float32Array } | undefined)[] = [];
+  private extPos = 0;
+  /** Where the block being made starts, counted from the start of the `process` call: add it to an `onPlug` offset. */
+  blockAt = 0;
+  private inBlock = false;
+  // when the notes sent to plugins should end
+  private offN = 0;
+  private offAt = new Float64Array(MAX_OFFS);
+  private offTrack = new Int8Array(MAX_OFFS);
+  private offPitch = new Int16Array(MAX_OFFS);
   /** The clip launcher: which pattern each track loops, LAUNCH_FOLLOW or LAUNCH_OFF. Live only; a render never uses it. */
   readonly launch = new Int8Array(MAX_TRACKS).fill(LAUNCH_FOLLOW);
   private launchNext = new Int8Array(MAX_TRACKS).fill(LAUNCH_NONE);
@@ -428,6 +445,7 @@ export class Engine {
     this.queued = -1;
     this.pn = 0;
     this.pre = 0;
+    this.plugQuiet();
     for (const c of this.ch) {
       for (const v of c.synths) if (v.active && !v.held) v.release();
       if (c.bass.active && !c.bass.held) c.bass.release();
@@ -436,6 +454,7 @@ export class Engine {
 
   /** Silence everything right now. */
   panic(): void {
+    this.plugQuiet();
     for (const c of this.ch) {
       for (const v of c.samples) if (v.active) v.kill();
       for (const v of c.synths) if (v.active) v.kill();
@@ -495,6 +514,43 @@ export class Engine {
     else this.noteOn(track, pitch ?? t.note, vel, this.sampleRate * 0.2);
   }
 
+  /** Stop every note a plugin is holding. */
+  private plugQuiet(): void {
+    this.offN = 0;
+    if (!this.onPlug) return;
+    const tr = this.project.tracks;
+    for (let t = 0; t < tr.length && t < MAX_TRACKS; t++) if (tr[t].kind === 'plugin') this.onPlug(t, false, -1, 0, 0);
+  }
+
+  /** Hand a note to the plugin on a track, and remember when it should end. */
+  private plugOn(track: number, pitch: number, vel: number, gate: number): void {
+    const at = this.inBlock ? this.from : 0;
+    if (this.onPlug) this.onPlug(track, true, pitch, vel, at);
+    if (gate === Infinity) return;
+    if (this.offN === MAX_OFFS) {
+      // more notes ringing than there is room to remember: end the oldest now
+      if (this.onPlug) this.onPlug(this.offTrack[0], false, this.offPitch[0], 0, at);
+      this.offAt.copyWithin(0, 1); this.offTrack.copyWithin(0, 1); this.offPitch.copyWithin(0, 1);
+      this.offN--;
+    }
+    const k = this.offN++;
+    this.offAt[k] = at + gate; this.offTrack[k] = track; this.offPitch[k] = pitch;
+  }
+
+  /** End the plugin notes that are due within the `n` frames just made. */
+  private plugOffs(n: number): void {
+    let keep = 0;
+    for (let i = 0; i < this.offN; i++) {
+      if (this.offAt[i] < n) {
+        if (this.onPlug) this.onPlug(this.offTrack[i], false, this.offPitch[i], 0, Math.max(0, Math.floor(this.offAt[i])));
+        continue;
+      }
+      this.offAt[keep] = this.offAt[i] - n; this.offTrack[keep] = this.offTrack[i]; this.offPitch[keep] = this.offPitch[i];
+      keep++;
+    }
+    this.offN = keep;
+  }
+
   noteOn(track: number, pitch: number, vel: number, gateFrames = Infinity): void {
     const c = this.ch[track];
     const tr = this.project.tracks[track];
@@ -502,6 +558,7 @@ export class Engine {
     if (tr.kind !== 'synth') {
       // on a sliced sample the "pitch" is the slice number, and it plays for as long as the note
       if (tr.kind === 'slice') this.hit(track, tr, vel, pitch, gateFrames);
+      else if (tr.kind === 'plugin') this.plugOn(track, pitch, vel, gateFrames);
       else if (tr.kind === 'bass') {
         // a part written in one key moves with the song when the key changes
         const shift = tr.bass.follow ? ((this.project.scaleRoot - tr.bass.key + 18) % 12) - 6 : 0;
@@ -525,6 +582,7 @@ export class Engine {
   noteOff(track: number, pitch: number): void {
     const c = this.ch[track];
     if (!c) return;
+    if (this.project.tracks[track]?.kind === 'plugin') { if (this.onPlug) this.onPlug(track, false, pitch, 0, this.inBlock ? this.from : 0); return; }
     for (const v of c.synths) if (v.active && v.held && v.pitch === pitch) v.release();
     if (c.bass.active && c.bass.held && c.bassNote === pitch) c.bass.release();
   }
@@ -818,9 +876,11 @@ export class Engine {
   };
 
   /** Render `frames` of stereo audio. Any length; split into 128-frame blocks inside. */
-  process(outL: Float32Array, outR: Float32Array, frames: number, start = 0): void {
+  process(outL: Float32Array, outR: Float32Array, frames: number, start = 0, extAt = 0): void {
     for (let done = 0; done < frames; done += BLOCK) {
       const n = Math.min(BLOCK, frames - done);
+      this.extPos = extAt + done;
+      this.blockAt = done;
       this.block(n);
       outL.set(n === BLOCK ? this.mixL : this.mixL.subarray(0, n), start + done);
       outR.set(n === BLOCK ? this.mixR : this.mixR.subarray(0, n), start + done);
@@ -836,9 +896,12 @@ export class Engine {
     // block, so a hit starts on its exact frame.
     this.from = 0;
     this.nt = nt;
+    this.inBlock = true;
     if (this.playing) this.clock.advance(n, this.fire);
     this.runTo(n);
+    this.inBlock = false;
     for (let i = 0; i < this.pn; i++) this.pAt[i] -= n;
+    if (this.offN) this.plugOffs(n);
     if (this.automated) { this.sinceStep += n; this.automate(); }
     const val = this.val, mo = MAX_TRACKS * NP;
 
@@ -852,6 +915,11 @@ export class Engine {
 
     for (let t = 0; t < nt; t++) {
       const tr = p.tracks[t], c = this.ch[t], o = t * NP;
+      const ex = this.ext[t];
+      if (ex && tr.kind === 'plugin') {
+        const at = this.extPos, m = Math.min(n, ex.l.length - at);
+        for (let i = 0; i < m; i++) { c.l[i] += ex.l[at + i]; c.r[i] += ex.r[at + i]; }
+      }
       const rack = c.rack;
       for (let k = 0; k < rack.length; k++) {
         const fx = rack[k], ins = c.inserts[k];

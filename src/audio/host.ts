@@ -5,7 +5,7 @@
 import { isBuiltin, sampleUrl } from '../core/kits';
 import { wavetable } from '../core/dsp/wavetable';
 import type { SampleBank } from '../core/render';
-import { usesSample, type Project } from '../core/types';
+import { MAX_TRACKS, usesSample, type Project } from '../core/types';
 import type { FromRecorder, FromWorklet, ToWorklet } from './worklet';
 import workletUrl from './worklet.ts?worker&url';
 
@@ -84,7 +84,8 @@ export class AudioHost {
   private async start(): Promise<void> {
     const ctx = new AudioContext({ latencyHint: LATENCY_HINTS[latencySetting()] });
     await ctx.audioWorklet.addModule(workletUrl);
-    const node = new AudioWorkletNode(ctx, 'loopwell', { numberOfInputs: 0, outputChannelCount: [2] });
+    // an input for each track: where a plugin playing that track sends its sound, to go through the track's mixer strip
+    const node = new AudioWorkletNode(ctx, 'loopwell', { numberOfInputs: MAX_TRACKS, outputChannelCount: [2] });
     node.port.onmessage = (e: MessageEvent<FromWorklet>) => this.receive(e.data);
     // worklet -> mix gain -> analyser -> speakers, with the reference track joining at the analyser,
     // so the scope and spectrum show whichever of the two is being listened to
@@ -131,7 +132,17 @@ export class AudioHost {
     else this.backlog.push(m);
   }
 
+  /** A plugin now plays `track`: `out` is the end of its chain, and `wam` how the audio thread reaches it. null takes it off. */
+  plug(track: number, out: AudioNode | null, wam: { group: string; key: string; id: string } | null): void {
+    if (out && this.node) out.connect(this.node, 0, track);
+    this.send({ t: 'plug', track, wam });
+  }
+
+  /** Notes for plugins the audio thread couldn't hand over itself. */
+  onPlugNote: ((track: number, bytes: [number, number, number], time: number) => void) | null = null;
+
   private receive(m: FromWorklet): void {
+    if (m.t === 'plugnote') { this.onPlugNote?.(m.track, m.bytes, m.time); return; }
     if (m.t === 'step') {
       const ctx = this.ctx!;
       // a negative count is the count-in: that many steps to go before the beat starts
