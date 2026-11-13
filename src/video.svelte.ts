@@ -2,7 +2,6 @@
 // is only loaded when a video is made.
 
 import { renderMix, saveAs, toast } from './actions.svelte';
-import { hitTimeline } from './core/hits';
 import { app } from './state.svelte';
 import { loadText, saveText } from './storage';
 import { envelopes, type Palette, type Scene, type VideoSize, type VideoStyle } from './video/draw';
@@ -64,7 +63,8 @@ export function sceneFor(mix: Awaited<ReturnType<typeof renderMix>>): Scene {
   const { level, bass } = envelopes(mix.l, mix.r, mix.sampleRate);
   return {
     l: mix.l, r: mix.r, sampleRate: mix.sampleRate, seconds: mix.l.length / mix.sampleRate,
-    hits: hitTimeline(p, mix.chain), trackNames: p.tracks.map((t) => t.name), trackColors: p.tracks.map((t) => t.color),
+    // what the engine really played, so the pads light for rolls, arpeggios and live code too
+    hits: mix.played.filter((n) => !p.tracks[n.track]?.mute).map((n) => ({ t: n.time, track: n.track, vel: n.vel })), trackNames: p.tracks.map((t) => t.name), trackColors: p.tracks.map((t) => t.color),
     palette: palette(), style: video.style, title: video.showTitle ? video.title.trim() : '', tag: video.tag.trim(), cover, level, bass,
   };
 }

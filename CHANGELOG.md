@@ -31,6 +31,7 @@ The biggest release so far: Loopwell grows from a beat sketchpad into a place to
 - **MP3 and OGG** export with loudness normalisation, alongside WAV.
 - **Video export**: an MP4 with a waveform, spectrum, pads or cover-art visualiser, sized for TikTok/Reels, YouTube or a square post.
 - **DAW project export** (`.dawproject`, for Bitwig Studio, Studio One, Cubase) and **MIDI plus stems** in one zip.
+- MIDI and DAW-project exports are written from what the engine actually plays, so rolls, steps that play by chance, grooves and swing, arpeggios and live code are all in them, each note where it sounds.
 - **Lyrics pad** that scrolls with the song.
 
 ### Playing live

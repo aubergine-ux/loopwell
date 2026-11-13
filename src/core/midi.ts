@@ -3,6 +3,7 @@
 
 import { barsUpTo, songEnd } from './arrange';
 import { GM_NOTE, type Slot } from './kits';
+import type { Played } from './played';
 import {
   MAX_STEPS, MAX_TRACKS, NUM_PATTERNS, chainToClips, emptyArrangement, emptyProject, newPattern, newTrack, sanitize, synth, usesNotes, type Project,
 } from './types';
@@ -51,7 +52,11 @@ const sigEv = (tick: number, num: number, den: number): Ev =>
  * Write a .mid file. With `chain`, those patterns in order at the project
  * tempo; without it, the whole timeline with its tempo and time-signature changes.
  */
-export function exportMidi(p: Project, chain?: number[]): Uint8Array<ArrayBuffer> {
+/**
+ * With `played` (see played.ts) the file holds what the engine really plays: rolls, chance, grooves, arpeggios and
+ * live code included, each note where it sounds. Without it, the grid as written, with swing.
+ */
+export function exportMidi(p: Project, chain?: number[], played?: Played[]): Uint8Array<ArrayBuffer> {
   const swingAmt = Math.round((p.swing / 100) * 0.5 * STEP);
   // every clip to play: [track, pattern, first step, length, pattern offset]
   const parts: [number, number, number, number, number][] = chain
@@ -87,6 +92,18 @@ export function exportMidi(p: Project, chain?: number[]): Uint8Array<ArrayBuffer
     let ch = 9;
     if (!drum) { ch = melodic++; if (ch >= 9) ch++; }
     const drumNote = t.kind === 'dsyn' ? [36, 38, 42, 39][t.dsyn.model] : GM_NOTE[t.sample.split('/')[1] as Slot] ?? 60 + ti;
+    if (played) {
+      for (const n of played) {
+        if (n.track !== ti) continue;
+        const on = Math.round(n.step * STEP);
+        const key = drum ? drumNote : t.kind === 'slice' ? Math.min(127, 36 + n.pitch) : n.pitch;
+        const off = drum || !n.len ? on + STEP / 2 : Math.max(on + 1, Math.round((n.step + n.len) * STEP) - 1);
+        evs.push({ tick: on, order: 1, data: [0x90 | ch, key & 127, Math.max(1, Math.min(127, n.vel))] });
+        evs.push({ tick: Math.min(off, total), order: 0, data: [0x80 | ch, key & 127, 0] });
+      }
+      if (evs.length) tracks.push(track(t.name, evs, total));
+      return;
+    }
     for (const [track_, pi, start, len, offset] of parts) {
       if (track_ !== ti) continue;
       const pat = p.patterns[pi];

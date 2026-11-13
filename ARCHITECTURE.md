@@ -51,6 +51,8 @@ Three rules hold the design together:
 3. Voices render in segments split at every event, so a hit that starts mid-block starts mid-block.
 4. Each track goes through its strip: inserts, filter, level and pan, sends; then groups, the reverb and delay returns, the master filter and compressor, performance effects and the mastering chain.
 
+Because the engine is the one place a hit is decided, exports that need notes rather than sound (MIDI, DAW project, the video's pads) don't re-read the grid: `core/played.ts` runs the beat through the engine and writes down every hit it starts.
+
 Nothing on that path allocates. Things that would (parsing live code, building wavetables) happen in `setProject`, only when what they depend on changes.
 
 Three things enter the engine from outside it:

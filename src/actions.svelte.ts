@@ -8,6 +8,7 @@ import { codeInfo, compileCode } from './core/mini';
 import { NOTE_NAMES, SCALES } from './core/scales';
 import { describeChange } from './core/describe';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
+import { playedNotes, type Played } from './core/played';
 import { renderProject } from './core/render';
 import { pluginAudio, syncPlugins } from './plugins.svelte';
 import { beatFromHash, beatUrl, HASH_KEY } from './core/share';
@@ -695,13 +696,13 @@ export function useMasterPreset(id: string): void {
 }
 
 /** Render what an export would (the song, or the pattern on screen once through), for anything that needs the audio itself. */
-export async function renderMix(onProgress?: (done: number) => void | Promise<void>, seconds?: number): Promise<{ project: Project; chain: number[] | undefined; l: Float32Array; r: Float32Array; sampleRate: number }> {
+export async function renderMix(onProgress?: (done: number) => void | Promise<void>, seconds?: number): Promise<{ project: Project; chain: number[] | undefined; l: Float32Array; r: Float32Array; sampleRate: number; played: Played[] }> {
   const project = snapshot();
   await loadAllSamples(project);
   const chain = exportChain();
   const out = await renderProject(project, audio.bank, { sampleRate: audio.sampleRate, chain, ext: await played(project, chain), onProgress, maxTail: 3 });
   const n = seconds ? Math.min(out.l.length, Math.round(seconds * out.sampleRate)) : out.l.length;
-  return { project, chain, l: out.l.subarray(0, n), r: out.r.subarray(0, n), sampleRate: out.sampleRate };
+  return { project, chain, l: out.l.subarray(0, n), r: out.r.subarray(0, n), sampleRate: out.sampleRate, played: await playedNotes(project, chain) };
 }
 
 /** Hand a finished file to the person: a download in the browser, a save dialog in the desktop app. */
@@ -778,8 +779,9 @@ export function exportBundle(): Promise<void> {
     const stems = await renderStems(p, chain, progress);
     const pitched = p.tracks.some((t) => isPitched(t.kind));
     const { exportMidi } = await import('./core/midi');
+    const played = await playedNotes(p, chain);
     const files: Record<string, Uint8Array> = {
-      [`${slug()}.mid`]: exportMidi(p, chain),
+      [`${slug()}.mid`]: exportMidi(p, chain, played),
       'readme.txt': strToU8([
         p.name && p.name !== 'untitled' ? p.name : 'Untitled beat', '',
         `Tempo: ${p.bpm} BPM${!chain && p.arr.tempo.length ? ' at the start (it changes; the MIDI file has every change)' : ''}`,
@@ -804,7 +806,7 @@ export function exportDawproject(): Promise<void> {
     const chain = exportChain();
     const stems = await renderStems(p, chain, progress);
     const { dawproject } = await import('./core/dawproject');
-    const xml = dawproject(p, chain, stems.map((s) => ({ track: s.track, path: `audio/${s.file}`, seconds: s.seconds, sampleRate: s.sampleRate })), __APP_VERSION__);
+    const xml = dawproject(p, chain, stems.map((s) => ({ track: s.track, path: `audio/${s.file}`, seconds: s.seconds, sampleRate: s.sampleRate })), __APP_VERSION__, await playedNotes(p, chain));
     const files: Record<string, Uint8Array> = { 'project.xml': strToU8(xml.project), 'metadata.xml': strToU8(xml.metadata) };
     for (const s of stems) files[`audio/${s.file}`] = s.wav;
     download(zipSync(files, { level: 0 }) as Uint8Array<ArrayBuffer>, `${slug()}.dawproject`, 'application/zip');
@@ -814,7 +816,8 @@ export function exportDawproject(): Promise<void> {
 
 export async function exportMidiFile(): Promise<void> {
   const { exportMidi } = await import('./core/midi');
-  download(exportMidi(snapshot(), exportChain()), `${slug()}.mid`, 'audio/midi');
+  const p = snapshot(), chain = exportChain();
+  download(exportMidi(p, chain, await playedNotes(p, chain)), `${slug()}.mid`, 'audio/midi');
   toast('MIDI exported');
 }
 

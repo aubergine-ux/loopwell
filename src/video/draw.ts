@@ -1,7 +1,6 @@
 // One frame of a beat video. Everything is drawn from the audio itself and the
 // times the tracks hit, so the picture moves with exactly what is heard.
 
-import type { Hit } from '../core/hits';
 
 export const VIDEO_SIZES = {
   vertical: { w: 1080, h: 1920, label: 'TikTok / Reels', ratio: '9:16' },
@@ -28,6 +27,14 @@ export interface Palette {
   dim: string;
   accent: string;
   tracks: string[];
+}
+
+/** Something a track played, for lighting its pad. */
+export interface Hit {
+  /** Seconds from the start. */
+  t: number;
+  track: number;
+  vel: number;
 }
 
 export interface Scene {

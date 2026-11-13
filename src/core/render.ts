@@ -21,6 +21,8 @@ export interface RenderOptions {
   ext?: { [track: number]: { l: Float32Array; r: Float32Array } };
   /** Called with every note meant for a plugin, at its frame from the start. Used to find out what plugins must play. */
   onPlug?: (track: number, on: boolean, pitch: number, vel: number, frame: number) => void;
+  /** Called with every hit and note the sequencer starts, at its frame from the start: what was really played, rolls and all. */
+  onEmit?: (track: number, pitch: number, vel: number, gateFrames: number, frame: number) => void;
   /** Called every ~1s of rendered audio; await it to keep a UI alive. */
   onProgress?: (done: number) => void | Promise<void>;
 }
@@ -39,6 +41,7 @@ export async function renderProject(project: Project, bank: SampleBank, opts: Re
   eng.stem = opts.stem ?? -1;
   if (opts.ext) for (const t in opts.ext) eng.ext[+t] = opts.ext[t];
   let pos = 0;
+  if (opts.onEmit) { const tell = opts.onEmit; eng.onEmit = (track, pitch, vel, gate, offset) => tell(track, pitch, vel, gate, pos + eng.blockAt + offset); }
   if (opts.onPlug) { const tell = opts.onPlug; eng.onPlug = (track, on, pitch, vel, offset) => tell(track, on, pitch, vel, pos + eng.blockAt + offset); }
 
   const body = opts.chain

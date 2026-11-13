@@ -136,6 +136,8 @@ export class Engine {
    * A pitch of -1 with `on` false means every note on that track should stop.
    */
   onPlug: ((track: number, on: boolean, pitch: number, vel: number, offset: number) => void) | null = null;
+  /** Every hit and note the sequencer starts, whatever plays it: (track, pitch, velocity, length in frames, frames into the block). */
+  onEmit: ((track: number, pitch: number, vel: number, gate: number, offset: number) => void) | null = null;
   /** The sound plugins send back, a stereo pair per track. It joins the track before its effects, like a voice. */
   ext: ({ l: Float32Array; r: Float32Array } | undefined)[] = [];
   private extPos = 0;
@@ -677,6 +679,7 @@ export class Engine {
   private emit(track: number, vel: number, pitch: number, gate: number): void {
     const tr = this.project.tracks[track];
     if (!tr) return;
+    if (this.onEmit) this.onEmit(track, pitch, vel, gate, this.inBlock ? this.from : 0);
     if (tr.kind === 'drum') this.hit(track, tr, vel);
     else if (tr.kind === 'dsyn') this.drum(track, vel);
     else this.noteOn(track, pitch, vel, gate);

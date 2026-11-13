@@ -8,6 +8,7 @@
 
 import { barsUpTo, songEnd, stepToSeconds, tempoAt } from './arrange';
 import { GM_NOTE, type Slot } from './kits';
+import type { Played } from './played';
 import { NOTE_NAMES, SCALES } from './scales';
 import { usesNotes, type Project, type Track } from './types';
 
@@ -44,7 +45,7 @@ function stepsFor(p: Project, seconds: number, chain: boolean): number {
  * The two XML files of a .dawproject. With `chain`, those patterns one after another; without, the song.
  * `stems` are the audio files that will sit beside them in the zip.
  */
-export function dawproject(p: Project, chain: number[] | undefined, stems: DawStem[], appVersion: string): { project: string; metadata: string } {
+export function dawproject(p: Project, chain: number[] | undefined, stems: DawStem[], appVersion: string, played?: Played[]): { project: string; metadata: string } {
   let ids = 0;
   const id = () => `id${ids++}`;
   const total = chain ? chain.length * p.steps : songEnd(p.arr) || p.steps;
@@ -87,6 +88,21 @@ export function dawproject(p: Project, chain: number[] | undefined, stems: DawSt
   p.tracks.forEach((t, ti) => {
     const drum = !usesNotes(t.kind);
     let clips = '';
+    if (played) {
+      // what the engine really played (rolls, grooves, arpeggios, live code), sorted into the clips it falls in;
+      // whatever falls in none, as live code can, gets a clip of its own over the whole length
+      const mine = played.filter((n) => n.track === ti);
+      const used = new Set<Played>();
+      const note = (n: Played, from: number, end: number) => `              <Note time="${num((n.step - from) / 4)}" duration="${num(drum || !n.len ? 0.125 : Math.max(0.01, Math.min(n.len, end - n.step) / 4))}" channel="0" key="${drum ? drumKey(t, ti) : t.kind === 'slice' ? Math.min(127, 36 + n.pitch) : n.pitch & 127}" vel="${num(Math.max(1, Math.min(127, n.vel)) / 127)}" rel="0.5"/>\n`;
+      for (const part of partsOf(ti)) {
+        let notes = '';
+        // a little before the clip counts as in it: a groove can pull a hit ahead of its step
+        for (const n of mine) if (!used.has(n) && n.step >= part.start - 0.001 && n.step < part.start + part.len - 0.001) { used.add(n); notes += note(n, part.start, part.start + part.len); }
+        if (notes) clips += `          <Clip time="${beats(part.start)}" duration="${beats(part.len)}" playStart="0" name="${esc(`${t.name} ${String.fromCharCode(65 + part.pattern)}`)}">\n            <Notes id="${id()}">\n${notes}            </Notes>\n          </Clip>\n`;
+      }
+      // clips on one track shouldn't overlap, so if anything was left over the track gets a single clip with all of it
+      if (mine.some((n) => !used.has(n))) clips = `          <Clip time="0" duration="${beats(total)}" playStart="0" name="${esc(t.name)}">\n            <Notes id="${id()}">\n${mine.map((n) => note(n, 0, total)).join('')}            </Notes>\n          </Clip>\n`;
+    } else
     for (const part of partsOf(ti)) {
       const pat = p.patterns[part.pattern];
       if (!pat) continue;
