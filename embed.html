@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <title>Loopwell player</title>
+  </head>
+  <body>
+    <main id="player" class="player" data-state="idle">
+      <button id="play" class="play" type="button" aria-label="Play" disabled>
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+        <span class="spin" aria-hidden="true"></span>
+      </button>
+      <div class="body">
+        <div class="head">
+          <b id="title">Loopwell</b>
+          <span id="meta" class="meta"></span>
+        </div>
+        <div id="wave" class="wave" role="slider" tabindex="0" aria-label="Position in the beat" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00">
+          <canvas id="canvas"></canvas>
+        </div>
+        <div class="foot">
+          <span id="time" class="time" aria-hidden="true">0:00</span>
+          <span id="status" class="status" role="status" aria-live="polite"></span>
+          <a id="open" class="open" target="_blank" rel="noopener">
+            <svg viewBox="0 0 512 512" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-width="56"><circle cx="256" cy="256" r="170" stroke="currentColor" opacity=".35" /><path d="M256 86a170 170 0 0 1 170 170" stroke="currentColor" /></g><rect x="206" y="206" width="100" height="100" rx="26" fill="currentColor" /></svg>
+            Open in Loopwell
+          </a>
+        </div>
+      </div>
+    </main>
+    <noscript>This player needs JavaScript to make sound.</noscript>
+    <script type="module" src="/src/embed/main.ts"></script>
+  </body>
+</html>

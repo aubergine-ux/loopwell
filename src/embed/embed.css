@@ -1,0 +1,65 @@
+/* The embedded player. It carries its own few colours rather than the app's whole stylesheet, to stay small. */
+:root {
+  --font: 'Space Grotesk Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: light;
+  --panel: #f0ebe1; --inset: #e3ddcf; --ink: #1d1b18; --dim: #756e5f; --line: #cdc6b6; --accent: #ff4f1a; --accent-ink: #fff; --wave: #b9b1a0;
+}
+:root[data-theme='night'] { color-scheme: dark; --panel: #17191f; --inset: #101216; --ink: #f2f3f7; --dim: #8b91a3; --line: #2b2f3a; --accent: #7dff6a; --accent-ink: #06210a; --wave: #3a3f4d; }
+:root[data-theme='slate'] { color-scheme: dark; --panel: #262b33; --inset: #1c2027; --ink: #eef1f5; --dim: #94a0b0; --line: #3a414c; --accent: #5ab0ff; --accent-ink: #04203a; --wave: #4a5361; }
+:root[data-theme='arcade'] { color-scheme: dark; --panel: #1b1033; --inset: #120a24; --ink: #fdf4ff; --dim: #a892d4; --line: #3a2466; --accent: #ff3df0; --accent-ink: #fff; --wave: #4a3285; }
+:root[data-theme='contrast'] { color-scheme: dark; --panel: #000; --inset: #000; --ink: #fff; --dim: #d0d0d0; --line: #fff; --accent: #ffe600; --accent-ink: #000; --wave: #8a8a8a; }
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; }
+body { font-family: var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.player {
+  height: 100%; min-height: 120px; display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+}
+.play {
+  flex: none; position: relative; width: 56px; height: 56px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; transition: transform 80ms;
+}
+.play:active { transform: scale(0.94); }
+.play:disabled { cursor: default; opacity: 0.55; }
+.play svg { width: 26px; height: 26px; fill: currentColor; grid-area: 1 / 1; }
+.i-pause, .spin { display: none; }
+[data-state='playing'] .i-play { display: none; }
+[data-state='playing'] .i-pause { display: block; }
+[data-state='loading'] .play svg { display: none; }
+[data-state='loading'] .spin {
+  display: block; grid-area: 1 / 1; width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; animation: turn 0.8s linear infinite;
+}
+@keyframes turn { to { transform: rotate(360deg); } }
+
+.body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.head b { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.meta, .time, .status { font: 600 10.5px var(--mono); letter-spacing: 0.06em; color: var(--dim); white-space: nowrap; }
+.meta { text-transform: uppercase; flex: none; }
+.wave { position: relative; height: 48px; border-radius: 8px; background: var(--inset); cursor: pointer; touch-action: none; overflow: hidden; }
+.wave canvas { width: 100%; height: 100%; display: block; }
+[data-state='idle'] .wave, [data-state='loading'] .wave, [data-state='error'] .wave { cursor: default; }
+.foot { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.status { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.open {
+  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 8px; border-radius: 13px;
+  border: 1px solid var(--line); color: var(--ink); text-decoration: none; font: 600 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.open:hover { border-color: var(--accent); }
+.open svg { width: 14px; height: 14px; color: var(--accent); }
+
+@media (max-width: 340px) {
+  .player { gap: 10px; padding: 10px; }
+  .play { width: 44px; height: 44px; }
+  .meta, .time { display: none; }
+  .open { padding: 0 8px 0 6px; letter-spacing: 0.03em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation-duration: 2.4s; }
+  .play { transition: none; }
+}

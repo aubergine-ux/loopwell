@@ -19,6 +19,8 @@ export default defineConfig({
         // The neural-network runtime for stem separation is 29 MB and most people never open it, so it is not
         // fetched up front. It is kept the first time it is used, and after that works offline like the rest.
         globIgnores: ['**/ort-wasm*.wasm'],
+        // the player is its own page, not a route of the app
+        navigateFallbackDenylist: [/embed\.html/],
         runtimeCaching: [{ urlPattern: /ort-wasm.*\.wasm$/, handler: 'CacheFirst', options: { cacheName: 'loopwell-stems-runtime' } }],
       },
       manifest: {
@@ -41,7 +43,11 @@ export default defineConfig({
     }),
   ],
   // WebKit on macOS and Linux is the desktop app's browser
-  build: { target: desktop ? ['es2022', 'safari15'] : 'es2022' },
+  build: {
+    target: desktop ? ['es2022', 'safari15'] : 'es2022',
+    // two pages: the app, and the small player that other sites embed
+    rolldownOptions: { input: desktop ? ['index.html'] : ['index.html', 'embed.html'] },
+  },
   clearScreen: false,
   test: { include: ['tests/**/*.test.ts'] },
 });

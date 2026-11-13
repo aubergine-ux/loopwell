@@ -14,6 +14,7 @@
     x: 'M6 6l12 12M18 6 6 18',
     open: 'M3 7v11h18V9h-9l-2-2z',
     copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+    code: 'm8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
     check: 'm5 12 5 5 9-10',
     grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
     up: 'm6 15 6-6 6 6',
