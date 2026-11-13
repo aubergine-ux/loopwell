@@ -244,7 +244,9 @@ try {
   const seen = new Set<string>();
   for (let i = 0; i < 30; i++) { seen.add(await pos(page)); await page.waitForTimeout(40); }
   check('and playback stays inside it', [...seen].every((p) => p.startsWith('1.2.')) && seen.size >= 3, [...seen].join(' '));
-  await page.keyboard.press('Shift'); // the keyboard is in use again, as it would be for someone tabbing here
+  // come back to the ruler the way someone on the keyboard would: from somewhere else, with a key
+  await page.keyboard.press('Shift');
+  await page.locator('.tbtn.rec').focus();
   await page.locator('.ticks').focus();
   await page.keyboard.press('ArrowRight');
   check('the region moves with the arrow keys', (await page.locator('.rhead .label').textContent()) === 'Loop 9–12');
