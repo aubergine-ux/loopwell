@@ -3,6 +3,7 @@
   import { connectMidi } from '../audio/midi-in';
   import { COMMANDS, combo, keyLabel, keymap, keysFor, rebind, resetKeys, type Command } from '../commands.svelte';
   import { prefs, setPref } from '../prefs.svelte';
+  import { startTour } from '../tour.svelte';
   import { app } from '../state.svelte';
   import Modal from './Modal.svelte';
 
@@ -94,7 +95,7 @@
       <h3>Settings</h3>
       <label class="check"><input type="checkbox" checked={prefs.tips} onchange={(e) => setPref('tips', e.currentTarget.checked)} /> Tooltips that explain each control</label>
       <label class="check"><input type="checkbox" checked={prefs.calm} onchange={(e) => setPref('calm', e.currentTarget.checked)} /> Reduce motion</label>
-      <button class="btn" onclick={() => { app.modal = null; setPref('toured', false); app.tour = 0; }}>Show the walkthrough</button>
+      <button class="btn" onclick={() => void startTour()}>Show the walkthrough</button>
       <h3>Audio</h3>
       <div class="seg" role="radiogroup" aria-label="Audio latency">
         {#each LATENCY_MODES as m}

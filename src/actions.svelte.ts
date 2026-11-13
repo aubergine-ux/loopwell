@@ -708,6 +708,7 @@ function checkHash(): void {
 export function boot(): void {
   setTheme(loadTheme() ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'cream'));
   const saved = loadSaved();
+  app.firstRun = !saved;
   app.project = saved ? sanitize(saved) : starter();
   fixSelection();
   commit('Where you left off');

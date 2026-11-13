@@ -144,3 +144,39 @@ describe('WAV', () => {
     expect(w.channels[0][1]).toBeLessThan(-0.99);
   });
 });
+
+describe('genre templates', () => {
+  it('are valid beats that survive a link and a save untouched', async () => {
+    const { TEMPLATES } = await import('../src/core/templates');
+    const { decodeBeat, encodeBeat } = await import('../src/core/share');
+    const { plain } = await import('./helpers');
+    expect(TEMPLATES.map((t) => t.id)).toEqual(['trap', 'house', 'boombap', 'lofi', 'drill']);
+    for (const t of TEMPLATES) {
+      const p = t.make();
+      expect(plain(sanitize(JSON.parse(JSON.stringify(p)))), t.name).toEqual(plain(p));
+      expect(plain(decodeBeat(encodeBeat(p))!), t.name).toEqual(plain(p));
+      expect(p.bpm).toBe(t.bpm);
+      // the kit it says it uses is the one on its drum tracks
+      expect(p.tracks.filter((x) => x.kind === 'drum').every((x) => x.sample.startsWith(`${t.kit}/`)), t.name).toBe(true);
+      // two patterns to work with, and every note in the key it sets
+      expect(p.patterns[0].steps[0].some((v) => v > 0) && p.patterns[1].steps[0].some((v) => v > 0)).toBe(true);
+      for (const pat of p.patterns) for (const n of [...pat.notes[6], ...pat.notes[7]]) expect(inScale(n.p, p.scaleRoot, p.scaleType), `${t.name}: note ${n.p}`).toBe(true);
+    }
+  });
+
+  it('render without clipping or silence', async () => {
+    const { TEMPLATES } = await import('../src/core/templates');
+    const { renderProject } = await import('../src/core/render');
+    for (const t of TEMPLATES) {
+      const p = t.make();
+      const bank: Record<string, { l: Float32Array }> = {};
+      const hit = Float32Array.from({ length: 2400 }, (_, i) => Math.sin(i * 0.05) * Math.exp(-i / 500));
+      for (const tr of p.tracks) bank[tr.sample] = { l: hit };
+      const out = await renderProject(p, bank, { sampleRate: 44100, chain: [0, 1], maxTail: 0.5 });
+      let peak = 0, sum = 0;
+      for (let i = 0; i < out.l.length; i++) { peak = Math.max(peak, Math.abs(out.l[i])); sum += out.l[i] * out.l[i]; }
+      expect(peak, t.name).toBeLessThanOrEqual(1);
+      expect(Math.sqrt(sum / out.l.length), t.name).toBeGreaterThan(0.02);
+    }
+  });
+});

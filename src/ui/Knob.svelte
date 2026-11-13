@@ -1,6 +1,7 @@
 <script lang="ts">
   import { clamp } from '../core/types';
   import { isLearning, learnKnob } from '../midimap.svelte';
+  import { knobTip } from './tips';
 
   interface Props {
     value: number;
@@ -12,10 +13,12 @@
     bipolar?: boolean;
     color?: string;
     format?: (v: number) => string;
+    /** What the knob does, for its tooltip. Left out, it is looked up by the label. */
+    tip?: string;
   }
   let {
     value = $bindable(), min = 0, max = 127, def = 0, label, size = 46, bipolar = false,
-    color = 'var(--accent)', format = (v: number) => String(v),
+    color = 'var(--accent)', format = (v: number) => String(v), tip,
   }: Props = $props();
 
   let active = $state(false);
@@ -87,7 +90,7 @@
 </script>
 
 <div class="knob" class:active role="slider" tabindex="0" aria-label={label} aria-valuemin={min} aria-valuemax={max}
-  aria-valuenow={value} aria-valuetext={format(value)} title="Drag up or down. Double-click to reset."
+  aria-valuenow={value} aria-valuetext={format(value)} title={tip ?? knobTip(label)}
   onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}
   ondblclick={() => { set(def); show(); }} onkeydown={key} use:wheel>
   <svg viewBox="0 0 48 48" width={size} height={size}>

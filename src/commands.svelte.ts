@@ -22,6 +22,7 @@ import { createProject, library, openAsNew, openProject, saveVersion } from './p
 import { applyPreset } from './sound.svelte';
 import { deleteClip, duplicateClip } from './song.svelte';
 import { TABS, THEMES, app, type ModalName, type Tab } from './state.svelte';
+import { startTour } from './tour.svelte';
 import { loadText, saveText } from './storage';
 
 export interface Command {
@@ -108,6 +109,7 @@ export const COMMANDS: Command[] = [
 
   { id: 'palette', title: 'Find anything: actions, sounds, settings', group: 'Loopwell', keys: 'Mod+KeyK', run: open('palette') },
   { id: 'help', title: 'Shortcuts and help', group: 'Loopwell', keys: 'Shift+Slash', words: 'cheat sheet keys', run: open('help') },
+  { id: 'templates', title: 'Start from a template: trap, house, boom bap, lo-fi, drill', group: 'Loopwell', words: 'genre starter', run: () => { app.beats = 'templates'; app.modal = 'demos'; } },
   { id: 'beats', title: 'Your beats, demos and templates', group: 'Loopwell', keys: 'Mod+KeyO', words: 'projects open browser', run: open('demos') },
   { id: 'new', title: 'New beat', group: 'Loopwell', run: () => void createProject() },
   { id: 'save-version', title: 'Save a version of this beat', group: 'Loopwell', keys: 'Mod+KeyS', words: 'snapshot', run: () => void saveVersion() },
@@ -125,7 +127,7 @@ export const COMMANDS: Command[] = [
   { id: 'export-project', title: 'Save a project file', group: 'Export', run: saveProjectFile },
   { id: 'tips', title: 'Tooltips on / off', group: 'Settings', words: 'hints help', run: () => { setPref('tips', !prefs.tips); toast(prefs.tips ? 'Tooltips on' : 'Tooltips off'); } },
   { id: 'calm', title: 'Reduce motion on / off', group: 'Settings', words: 'animation', run: () => { setPref('calm', !prefs.calm); toast(prefs.calm ? 'Less motion' : 'Full motion'); } },
-  { id: 'tour', title: 'Show the walkthrough again', group: 'Settings', words: 'tutorial onboarding', run: () => { app.modal = null; setPref('toured', false); app.tour = 0; } },
+  { id: 'tour', title: 'Show the walkthrough again', group: 'Settings', words: 'tutorial onboarding', run: () => void startTour() },
 ];
 
 function stepTab(d: number): void {

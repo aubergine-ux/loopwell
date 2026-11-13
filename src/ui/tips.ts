@@ -1,0 +1,61 @@
+// What each knob does, in a sentence, by the label printed under it. Buttons
+// carry their own explanation; knobs are everywhere and mostly share names, so
+// theirs live here in one place.
+
+export const KNOB_TIPS: Record<string, string> = {
+  Swing: 'Pushes every other 16th note late for a looser, bouncier feel.',
+  Volume: 'How loud the whole beat is.',
+  Level: 'How loud this is in the mix.',
+  Pan: 'Where it sits between the left and right speakers.',
+  Tune: 'Pitch, in semitones.',
+  Decay: 'How long the sound takes to die away.',
+  Filter: 'Left takes the highs off, right takes the lows off, the middle leaves it alone.',
+  Reverb: 'How much of this is sent to the reverb.',
+  Rev: 'How much of this is sent to the reverb.',
+  Delay: 'How much of this is sent to the echo.',
+  Dly: 'How much of this is sent to the echo.',
+  Stretch: 'Makes the sample longer or shorter without changing its pitch.',
+  Sens: 'How easily Auto finds a hit to slice at.',
+  Shape: 'Where along the wavetable the oscillator reads.',
+  Semi: 'Oscillator 2 pitch, in semitones away from the note.',
+  Fine: 'Oscillator 2 pitch, in cents, for a slow beating between the two.',
+  '1 ↔ 2': 'The balance between the two oscillators.',
+  Noise: 'Mixes in hiss, for breath and grit.',
+  Detune: 'How far apart the stacked voices are tuned. More is thicker.',
+  Width: 'Spreads the stacked voices across left and right.',
+  Cutoff: 'How bright the sound is: lower is darker.',
+  Reso: 'Emphasises the frequencies right at the cutoff, for a sharper, whistling edge.',
+  Env: 'How far each note opens the filter as it starts.',
+  Attack: 'How long a note takes to reach full level.',
+  Sustain: 'The level a held note settles at.',
+  Release: 'How long a note rings on after it ends.',
+  Rate: 'How fast the LFO moves.',
+  Amount: 'How far this moves its target.',
+  Glide: 'How slowly the pitch slides when one note overlaps the next. All the way down switches sliding off.',
+  Drive: 'Saturation: pushes the sound into distortion, adding harmonics that small speakers can hear.',
+  Tone: 'How bright the added harmonics are.',
+  Punch: 'A quick drop in pitch at the start of each note, for a harder hit.',
+  Size: 'How big the reverb\'s room is.',
+  Damp: 'How quickly the highs die away in the reverb.',
+  Feedback: 'How many times the echo repeats.',
+  Fdbk: 'How many times the echo repeats.',
+  Sweep: 'Left sweeps a low-pass down, right a high-pass up.',
+  Thresh: 'The level above which the compressor starts turning things down.',
+  Ratio: 'How hard the compressor turns down what goes over the threshold.',
+  Makeup: 'Turns everything back up after the compressor has evened it out.',
+  Steps: 'How many steps the rhythm repeats over.',
+  Hits: 'How many hits to spread evenly over those steps.',
+  Turn: 'Rotates the rhythm so it starts on a different step.',
+  'Song amt': 'How strongly the song\'s groove is applied.',
+  'Track amt': 'How strongly this track\'s own groove is applied.',
+  Bright: 'How bright the drum is.',
+  Wires: 'How much of the snare is the rattle of its wires.',
+  Hiss: 'How much of the hat is plain hiss rather than ringing metal.',
+  Spread: 'How far apart the claps land.',
+  Pitch: 'How high the clap is.',
+};
+
+const HOW = 'Drag up or down, or use the arrow keys. Double-click to reset.';
+
+/** The tooltip for a knob: what it does, if that is known, then how to turn it. */
+export const knobTip = (label: string): string => (KNOB_TIPS[label] ? `${KNOB_TIPS[label]} ${HOW}` : HOW);

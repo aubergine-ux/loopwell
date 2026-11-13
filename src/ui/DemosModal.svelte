@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { play } from '../actions.svelte';
   import { DEMOS } from '../core/demos';
+  import { KITS } from '../core/kits';
+  import { TEMPLATES } from '../core/templates';
   import {
     createProject, duplicateProject, library, openAsNew, openProject, removeProject, removeVersion, renameProject, restoreVersion, saveVersion,
   } from '../projects.svelte';
@@ -9,7 +12,8 @@
   import Modal from './Modal.svelte';
 
   // someone with only the one beat is most likely here for a demo; someone with a library, for their own
-  let view = $state<'mine' | 'demos'>(library.list.length > 1 ? 'mine' : 'demos');
+  let view = $state<'mine' | 'templates' | 'demos'>(app.beats ?? (library.list.length > 1 ? 'mine' : 'demos'));
+  onMount(() => { app.beats = null; }); // a request for a particular list is used once
   let renaming = $state<string | null>(null);
   let confirming = $state<string | null>(null);
   let label = $state('');
@@ -21,6 +25,11 @@
     app.modal = null;
     void openAsNew(DEMOS[i].make()).then(() => play());
   }
+  function template(i: number): void {
+    app.modal = null;
+    void openAsNew(TEMPLATES[i].make()).then(() => play());
+  }
+  const kitName = (id: string) => KITS.find((k) => k.id === id)?.name ?? id;
   async function open(id: string): Promise<void> {
     if (await openProject(id)) app.modal = null;
   }
@@ -53,6 +62,7 @@
   <div class="top">
     <div class="seg" role="radiogroup" aria-label="Which beats">
       <button class:on={view === 'mine'} role="radio" aria-checked={view === 'mine'} onclick={() => (view = 'mine')}>My beats</button>
+      <button class:on={view === 'templates'} role="radio" aria-checked={view === 'templates'} onclick={() => (view = 'templates')}>Templates</button>
       <button class:on={view === 'demos'} role="radio" aria-checked={view === 'demos'} onclick={() => (view = 'demos')}>Demos</button>
     </div>
     <button class="btn new" onclick={fresh}><Icon name="plus" />New beat</button>
@@ -65,6 +75,16 @@
         <button onclick={() => demo(i)} style:--c="var(--t{[0, 2, 4, 7][i % 4]})">
           <i><Icon name="play" size={16} fill /></i>
           <span><b>{d.name}</b><small>{d.blurb}</small></span>
+        </button>
+      {/each}
+    </div>
+  {:else if view === 'templates'}
+    <p>A starting point in the style you want: the tempo, kit and sounds are set up, with two patterns to change into your own.</p>
+    <div class="list">
+      {#each TEMPLATES as t, i}
+        <button onclick={() => template(i)} style:--c="var(--t{[0, 5, 2, 6, 3][i % 5]})">
+          <i><Icon name="play" size={16} fill /></i>
+          <span><b>{t.name}</b><small>{t.blurb}</small><small class="meta">{t.bpm} bpm · {kitName(t.kit)} kit</small></span>
         </button>
       {/each}
     </div>
@@ -142,6 +162,7 @@
   .list span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .list b { font-size: 15px; }
   .list small { font-size: 12px; color: var(--dim); }
+  .list .meta { font: 600 10px var(--mono); }
   ul { list-style: none; margin: 0; padding: 4px; border-radius: 12px; background: var(--inset); display: flex; flex-direction: column; gap: 2px; }
   .beats { max-height: 34vh; overflow-y: auto; scrollbar-width: thin; }
   li { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 2px 4px 2px 0; border-radius: 9px; }

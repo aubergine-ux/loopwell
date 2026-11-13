@@ -17,7 +17,7 @@ type N = [number, number | number[], number?, number?];
 const notes = (list: N[]): Note[] =>
   list.flatMap(([s, p, l = 1, v = 100]) => (Array.isArray(p) ? p : [p]).map((pitch) => ({ s, l, p: pitch, v })));
 
-interface Pat {
+export interface Pat {
   kick?: string; snare?: string; clap?: string; hat?: string; open?: string; perc?: string;
   bass?: N[]; lead?: N[];
 }
@@ -30,7 +30,7 @@ function pattern(p: Pat): Pattern {
   return out;
 }
 
-function beat(name: string, kit: string, pats: Pat[], edit: (p: Project) => void): Project {
+export function beat(name: string, kit: string, pats: Pat[], edit: (p: Project) => void): Project {
   const p = emptyProject();
   p.name = name;
   p.tracks = defaultTracks(kit);

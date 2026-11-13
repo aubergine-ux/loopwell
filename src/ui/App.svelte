@@ -34,7 +34,11 @@
   import SampleBrowser from './SampleBrowser.svelte';
   import SongPanel from './SongPanel.svelte';
   import SoundPanel from './SoundPanel.svelte';
+  import { prefs, setPref } from '../prefs.svelte';
+  import { startTour } from '../tour.svelte';
   import Timeline from './Timeline.svelte';
+  import Tips from './Tips.svelte';
+  import Tour from './Tour.svelte';
   import ToolsPanel from './ToolsPanel.svelte';
   import Transport from './Transport.svelte';
 
@@ -128,6 +132,13 @@
     </section>
     {/if}
   </main>
+  {#if app.firstRun && !prefs.toured && app.tour < 0 && !app.needsTap}
+    <div class="invite">
+      <b>New here?</b><span>Make your first beat in two minutes.</span>
+      <button class="btn on" onclick={startTour}>Show me how</button>
+      <button class="btn ghost" onclick={() => setPref('toured', true)}>No thanks</button>
+    </div>
+  {/if}
   <footer>
     <span>Loopwell</span>
     <a href="https://github.com/aubergine-ux/loopwell" target="_blank" rel="noreferrer">GitHub</a>
@@ -148,6 +159,9 @@
 {:else if app.modal === 'history'}<HistoryModal />
 {:else if app.modal === 'palette'}<PaletteModal />
 {:else if app.modal === 'help'}<HelpModal />{/if}
+
+<Tour />
+<Tips />
 
 {#if app.needsTap}
   <button class="gate" onclick={play}>
@@ -208,6 +222,11 @@
   @keyframes wait { 50% { opacity: 0.3; } }
   .content { min-height: 252px; }
 
+  .invite {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 8px 10px 8px 16px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 14px;
+  }
+  .invite .btn { height: 30px; }
   footer { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; font: 600 11px var(--mono); color: var(--dim); opacity: 0.85; padding: 4px 0 8px; }
   footer a { color: inherit; }
   footer kbd { font: inherit; padding: 1px 5px; border: 1px solid currentColor; border-radius: 4px; }

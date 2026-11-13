@@ -59,6 +59,10 @@ export const app = $state({
   range: null as { from: number; to: number } | null,
   /** Step of the first-run walkthrough being shown, or -1 when it isn't. */
   tour: -1,
+  /** Nothing was saved in this browser when the app opened: a first visit. */
+  firstRun: false,
+  /** Which list the Beats dialog should open on, when something asks for one in particular. */
+  beats: null as 'mine' | 'templates' | 'demos' | null,
   /** A fill is being held. */
   fill: false,
   canUndo: false,
