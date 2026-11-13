@@ -2,7 +2,7 @@
 // audio thread, counted in frames. The main thread only sends edits and
 // receives step/meter notifications for the lights.
 
-import { Engine } from '../core/engine';
+import { Engine, METER_CHANNELS } from '../core/engine';
 import type { Project } from '../core/types';
 
 declare const sampleRate: number;
@@ -26,6 +26,8 @@ export type ToWorklet =
   | { t: 'launch'; track: number; pattern: number; quant: number }
   | { t: 'perf'; fx: number; on: boolean; x: number; y: number }
   | { t: 'forget'; id: string }
+  | { t: 'metering'; on: boolean }
+  | { t: 'resetLoudness' }
   | { t: 'trig'; track: number; vel: number; pitch?: number }
   | { t: 'on'; track: number; pitch: number; vel: number }
   | { t: 'off'; track: number; pitch: number };
@@ -33,7 +35,7 @@ export type ToWorklet =
 export type FromWorklet =
   | { t: 'step'; step: number; pattern: number; song: number; frame: number; count: number }
   | { t: 'launched'; tracks: Int8Array; count: number }
-  | { t: 'meter'; peaks: Float32Array; l: number; r: number; gr: number; load: number };
+  | { t: 'meter'; peaks: Float32Array; buses: Float32Array; returns: Float32Array; l: number; r: number; gr: number; load: number; lufs: Float32Array | null };
 
 const METER_BLOCKS = 6;
 const now = typeof performance !== 'undefined' ? () => performance.now() : () => Date.now();
@@ -44,6 +46,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
   private blocks = 0;
   private busy = 0;
   private idle = true;
+  private lufs = new Float32Array(METER_CHANNELS + 2);
 
   constructor() {
     super();
@@ -74,6 +77,8 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       case 'launch': e.launchClip(m.track, m.pattern, m.quant); break;
       case 'perf': e.perf.fx = m.fx; e.perf.on = m.on; e.perf.x = m.x; e.perf.y = m.y; break;
       case 'forget': e.dropSample(m.id); break;
+      case 'metering': e.setMetering(m.on); break;
+      case 'resetLoudness': e.resetLoudness(); break;
       case 'trig': e.trigger(m.track, m.vel, m.pitch); break;
       case 'on': e.noteOn(m.track, m.pitch, m.vel); break;
       case 'off': e.noteOff(m.track, m.pitch); break;
@@ -95,7 +100,8 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       // keep quiet while nothing is happening, but always send the frame that zeroes the meters
       if (!silent || !this.idle) {
         const load = this.busy / (((this.blocks * n) / sampleRate) * 1000);
-        this.post({ t: 'meter', peaks: e.peaks.slice(), l: e.masterPeakL, r: e.masterPeakR, gr: e.compReduction, load });
+        const lufs = e.readLoudness(this.lufs) ? this.lufs.slice() : null;
+        this.post({ t: 'meter', peaks: e.peaks.slice(), buses: e.busPeaks.slice(), returns: e.retPeaks.slice(), l: e.masterPeakL, r: e.masterPeakR, gr: e.compReduction, load, lufs });
       }
       this.idle = silent;
       e.resetMeters();

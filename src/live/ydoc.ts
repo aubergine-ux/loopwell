@@ -24,7 +24,7 @@ import { MAX_STEPS, MAX_TRACKS, NUM_PATTERNS, type AutoLane, type Clip, type Not
 
 const SETTINGS = ['name', 'bpm', 'swing', 'groove', 'grooveAmt', 'steps', 'scaleRoot', 'scaleType', 'scaleLock', 'master'] as const;
 const TRACK_KNOBS = ['name', 'kind', 'color', 'sample', 'tune', 'decay', 'reverse', 'stretch', 'note', 'vol', 'pan', 'mute', 'solo', 'filter', 'rev', 'dly',
-  'groove', 'grooveAmt', 'arpMode', 'arpRate', 'arpOct', 'arpGate'] as const;
+  'groove', 'grooveAmt', 'arpMode', 'arpRate', 'arpOct', 'arpGate', 'bus'] as const;
 
 type Json = Record<string, unknown>;
 /** Deep equality that doesn't care what order an object's keys are in. */
@@ -103,6 +103,8 @@ export function toY(doc: Y.Doc, p: Project, trackIds: string[], origin: unknown 
     const a = p.arr;
     syncMap(child(root, 'loop', () => new Y.Map()), { on: a.loopOn, start: a.loopStart, end: a.loopEnd });
     for (const k of ['tempo', 'sigs', 'markers'] as const) if (!same(root.get(k), a[k])) root.set(k, JSON.parse(JSON.stringify(a[k])));
+    // groups are few and small, so the list is replaced whole; left out until a beat has one
+    if ((root.has('buses') || p.buses.length) && !same(root.get('buses'), p.buses)) root.set('buses', JSON.parse(JSON.stringify(p.buses)));
     const mlanes: Json = {};
     for (const l of a.lanes) if (l.track < 0) mlanes[l.param] = laneValue(l);
     syncMap(child(root, 'mlanes', () => new Y.Map()), mlanes);
@@ -128,6 +130,7 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
   const project: Json = { v: 2 };
   for (const k of SETTINGS) project[k] = root.get(k);
   project.fx = (root.get('fx') as Y.Map<unknown> | undefined)?.toJSON() ?? {};
+  project.buses = root.get('buses') ?? [];
   const loop = ((root.get('loop') as Y.Map<unknown> | undefined)?.toJSON() ?? {}) as Json;
   const clips: Partial<Clip>[] = [], lanes: Json[] = [];
   const points = (v: any) => (Array.isArray(v?.pts) ? v.pts.map((pt: number[]) => ({ t: pt[0], v: pt[1] })) : []);
@@ -216,6 +219,7 @@ export function describeChange(before: Project, after: Project): string {
   if (before.master !== after.master) say('master volume');
   if (before.scaleRoot !== after.scaleRoot || before.scaleType !== after.scaleType || before.scaleLock !== after.scaleLock) say('the key');
   if (!same(before.fx, after.fx)) say('master effects');
+  if (!same(before.buses, after.buses)) say('groups');
   if (after.tracks.length > before.tracks.length) say(`added ${after.tracks[after.tracks.length - 1].name}`);
   if (after.tracks.length < before.tracks.length) say('removed a track');
   const n = Math.min(before.tracks.length, after.tracks.length);
@@ -228,6 +232,7 @@ export function describeChange(before: Project, after: Project): string {
     if (a.solo !== b.solo) say(`${b.solo ? 'soloed' : 'unsoloed'} ${name}`);
     if (a.groove !== b.groove || a.grooveAmt !== b.grooveAmt) say(`${name}: groove`);
     if (a.arpMode !== b.arpMode || a.arpRate !== b.arpRate || a.arpOct !== b.arpOct || a.arpGate !== b.arpGate) say(`${name}: arpeggiator`);
+    if (a.bus !== b.bus) say(`${name}: routing`);
     if (a.vol !== b.vol || a.pan !== b.pan || a.filter !== b.filter || a.rev !== b.rev || a.dly !== b.dly) say(`${name}: mix`);
     if (a.name !== b.name) say(`renamed ${a.name} to ${name}`);
     for (let pi = 0; pi < NUM_PATTERNS; pi++) {

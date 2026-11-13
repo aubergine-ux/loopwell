@@ -13,7 +13,8 @@ import { SampleVoice, SynthVoice, emptyPatch, type SampleData, type SynthPatch }
 import { wavetable, type Wavetable } from './dsp/wavetable';
 import { PARAMS, paramIndex } from './params';
 import { toFrame } from './slicer';
-import { DELAY_DIVS, LFO_DIVS, MAX_INSERTS, MAX_TRACKS, emptyProject, type Clip, type InsertFx, type Pattern, type Project, type Track } from './types';
+import { LoudnessMeter } from './loudness';
+import { DELAY_DIVS, LFO_DIVS, MAX_BUSES, MAX_INSERTS, MAX_TRACKS, emptyProject, type Clip, type InsertFx, type Pattern, type Project, type Track } from './types';
 
 // Effective knob values live in flat arrays, so automation can move them
 // without touching the project. Indices follow PARAMS.
@@ -89,6 +90,18 @@ class Channel {
   }
 }
 
+/** A group's own buffer and effects. */
+class BusChannel {
+  l = new Float32Array(BLOCK);
+  r = new Float32Array(BLOCK);
+  inserts: (Insert | null)[] = [];
+  kinds: string[] = [];
+  g = -1;
+}
+
+/** How many channels have a loudness meter: the tracks, the groups, the two returns, and the master. */
+export const METER_CHANNELS = MAX_TRACKS + MAX_BUSES + 3;
+
 const volGain = (v: number) => (v / 100) * (v / 100);
 const send = (v: number) => (v / 127) * (v / 127);
 
@@ -131,6 +144,15 @@ export class Engine {
   readonly peaks = new Float32Array(MAX_TRACKS);
   masterPeakL = 0;
   masterPeakR = 0;
+  /** Peaks of the groups, and of the reverb and delay returns. */
+  readonly busPeaks = new Float32Array(MAX_BUSES);
+  readonly retPeaks = new Float32Array(2);
+  /** Loudness meters, made the first time metering is switched on (they cost a little, so a render does without). */
+  private meters: LoudnessMeter[] | null = null;
+  private bus: BusChannel[] = [];
+  private tmpL = new Float32Array(BLOCK);
+  private tmpR = new Float32Array(BLOCK);
+  private retGain = new Float32Array(2).fill(-1);
 
   private samples = new Map<string, SampleData>();
   private ch: Channel[] = [];
@@ -176,6 +198,7 @@ export class Engine {
   constructor(readonly sampleRate: number) {
     this.clock = new StepClock(sampleRate);
     for (let i = 0; i < MAX_TRACKS; i++) this.ch.push(new Channel(sampleRate));
+    for (let i = 0; i < MAX_BUSES; i++) this.bus.push(new BusChannel());
     this.reverb = new Reverb(sampleRate);
     this.delay = new PingPongDelay(sampleRate);
     this.masterFilter = new DjFilter(sampleRate);
@@ -221,6 +244,14 @@ export class Engine {
       patch.decayCoef = Math.exp(-1 / ((0.02 * Math.pow(200, s.decay / 127) * sr) / 3));
       patch.sustain = s.sustain / 127;
       patch.releaseCoef = Math.exp(-1 / ((0.02 * Math.pow(200, s.release / 127) * sr) / 3));
+    }
+    for (let k = 0; k < MAX_BUSES; k++) {
+      const c = this.bus[k], rack = p.buses[k]?.fx ?? [];
+      for (let j = 0; j < MAX_INSERTS; j++) {
+        const type = rack[j]?.type;
+        if (!type) { c.inserts[j] = null; c.kinds[j] = ''; }
+        else if (c.kinds[j] !== type) { c.inserts[j] = createInsert(type, sr); c.kinds[j] = type; }
+      }
     }
     // timeline lookups, built here so that playing a step allocates nothing
     const a = p.arr;
@@ -755,10 +786,13 @@ export class Engine {
     if (this.automated) { this.sinceStep += n; this.automate(); }
     const val = this.val, mo = MAX_TRACKS * NP;
 
-    const { mixL, mixR, revIn, dlyIn } = this;
+    const { mixL, mixR, revIn, dlyIn, tmpL, tmpR } = this;
     mixL.fill(0, 0, n); mixR.fill(0, 0, n); revIn.fill(0, 0, n); dlyIn.fill(0, 0, n);
     let anySolo = false;
     for (let t = 0; t < nt; t++) if (p.tracks[t].solo) anySolo = true;
+    const nb = Math.min(p.buses.length, MAX_BUSES);
+    for (let k = 0; k < nb; k++) { this.bus[k].l.fill(0, 0, n); this.bus[k].r.fill(0, 0, n); }
+    const meters = this.meters;
 
     for (let t = 0; t < nt; t++) {
       const tr = p.tracks[t], c = this.ch[t], o = t * NP;
@@ -782,10 +816,14 @@ export class Engine {
       const rs = send(val[o + P_REV]), ds = send(val[o + P_DLY]);
       let gl = c.gl, gr = c.gr, peak = 0;
       const L = c.l, R = c.r;
+      // a track goes to its group if it has one, otherwise straight to the mix
+      const to = tr.bus > 0 && tr.bus <= nb ? this.bus[tr.bus - 1] : null;
+      const outL = to ? to.l : mixL, outR = to ? to.r : mixR;
       for (let i = 0; i < n; i++) {
         gl += dl; gr += dr;
         const l = L[i] * gl, r = R[i] * gr;
-        mixL[i] += l; mixR[i] += r;
+        outL[i] += l; outR[i] += r;
+        tmpL[i] = l; tmpR[i] = r;
         const m = (l + r) * 0.5;
         revIn[i] += m * rs; dlyIn[i] += m * ds;
         const al = l < 0 ? -l : l, ar = r < 0 ? -r : r;
@@ -794,15 +832,53 @@ export class Engine {
       }
       c.gl = tl; c.gr = trr;
       if (peak > this.peaks[t]) this.peaks[t] = peak;
+      if (meters) meters[t].process(tmpL, tmpR, n);
+    }
+
+    // groups: everything sent to one goes through its effects together
+    for (let k = 0; k < nb; k++) {
+      const b = p.buses[k], c = this.bus[k];
+      for (let j = 0; j < b.fx.length; j++) {
+        const fx = b.fx[j], ins = c.inserts[j];
+        if (!ins || !fx.on) continue;
+        if (fx.type === 'duck') {
+          const src = fx.p[0] > 0 && fx.p[0] <= nt ? this.ch[fx.p[0] - 1] : c;
+          ins.process(c.l, c.r, n, fx.p, src.l, src.r);
+        } else ins.process(c.l, c.r, n, fx.p);
+      }
+      const target = b.mute ? 0 : volGain(b.vol);
+      if (c.g < 0) c.g = target;
+      const dg = (target - c.g) / n;
+      let g = c.g, peak = 0;
+      const L = c.l, R = c.r;
+      for (let i = 0; i < n; i++) {
+        g += dg;
+        const l = L[i] * g, r = R[i] * g;
+        L[i] = l; R[i] = r;
+        mixL[i] += l; mixR[i] += r;
+        const al = l < 0 ? -l : l, ar = r < 0 ? -r : r;
+        if (al > peak) peak = al;
+        if (ar > peak) peak = ar;
+      }
+      c.g = target;
+      if (peak > this.busPeaks[k]) this.busPeaks[k] = peak;
+      if (meters) meters[MAX_TRACKS + k].process(L, R, n);
     }
 
     const fx = p.fx;
     const sps = samplesPerStep(this.clock.bpm, this.sampleRate);
     const room = this.perf.throwSend(mixL, mixR, revIn, n);
-    this.delay.process(dlyIn, mixL, mixR, n, DELAY_DIVS[fx.dlyTime] * sps, (val[mo + P_DLYFB] / 127) * 0.85, send(val[mo + P_DLYLVL]) * 1.2);
+    // the two returns are channels of their own: each is made on its own, metered, and then joins the mix
+    tmpL.fill(0, 0, n); tmpR.fill(0, 0, n);
+    this.delay.process(dlyIn, tmpL, tmpR, n, DELAY_DIVS[fx.dlyTime] * sps, (val[mo + P_DLYFB] / 127) * 0.85, send(val[mo + P_DLYLVL]) * 1.2);
+    this.retPeaks[1] = Math.max(this.retPeaks[1], this.join(tmpL, tmpR, n, fx.dlyMute, 1));
+    if (meters) meters[MAX_TRACKS + MAX_BUSES + 1].process(tmpL, tmpR, n);
+    tmpL.fill(0, 0, n); tmpR.fill(0, 0, n);
     // a throw wants a big, loud room whatever the reverb knobs say
     const size = val[mo + P_REVSIZE] / 127, level = send(val[mo + P_REVLVL]) * 1.6;
-    this.reverb.process(revIn, mixL, mixR, n, room > 0 ? Math.max(size, 0.6 + room * 0.4) : size, fx.revDamp / 127, room > 0 ? Math.max(level, 1.2) : level);
+    this.reverb.process(revIn, tmpL, tmpR, n, room > 0 ? Math.max(size, 0.6 + room * 0.4) : size, fx.revDamp / 127, room > 0 ? Math.max(level, 1.2) : level);
+    this.retPeaks[0] = Math.max(this.retPeaks[0], this.join(tmpL, tmpR, n, fx.revMute, 0));
+    if (meters) meters[MAX_TRACKS + MAX_BUSES].process(tmpL, tmpR, n);
     this.masterFilter.process(mixL, mixR, n, val[mo + P_MFILTER] / 64, val[mo + P_MRES] / 127);
     this.perf.process(mixL, mixR, n, sps);
     if (fx.compOn && this.stem < 0) {
@@ -825,8 +901,52 @@ export class Engine {
       if (al > pl) pl = al;
       if (ar > pr) pr = ar;
     }
+    if (meters) meters[METER_CHANNELS - 1].process(mixL, mixR, n);
     if (pl > this.masterPeakL) this.masterPeakL = pl;
     if (pr > this.masterPeakR) this.masterPeakR = pr;
+  }
+
+  /** Add a return to the mix (or not, if it is muted), easing its level so a mute never clicks. Returns its peak. */
+  private join(L: Float32Array, R: Float32Array, n: number, mute: boolean, which: number): number {
+    const target = mute ? 0 : 1;
+    if (this.retGain[which] < 0) this.retGain[which] = target;
+    let g = this.retGain[which], peak = 0;
+    const dg = (target - g) / n;
+    const { mixL, mixR } = this;
+    for (let i = 0; i < n; i++) {
+      g += dg;
+      const l = L[i] * g, r = R[i] * g;
+      L[i] = l; R[i] = r;
+      mixL[i] += l; mixR[i] += r;
+      const al = l < 0 ? -l : l, ar = r < 0 ? -r : r;
+      if (al > peak) peak = al;
+      if (ar > peak) peak = ar;
+    }
+    this.retGain[which] = target;
+    return peak;
+  }
+
+  /** Switch the loudness meters on or off. They only run while something is looking at them. */
+  setMetering(on: boolean): void {
+    if (!on) { this.meters = null; return; }
+    if (this.meters) return;
+    this.meters = [];
+    for (let i = 0; i < METER_CHANNELS; i++) this.meters.push(new LoudnessMeter(this.sampleRate, i === METER_CHANNELS - 1));
+  }
+
+  /** Momentary loudness of every channel into `out` (tracks, groups, reverb, delay, master), then the master's short-term and integrated. */
+  readLoudness(out: Float32Array): boolean {
+    const m = this.meters;
+    if (!m) return false;
+    for (let i = 0; i < METER_CHANNELS; i++) out[i] = m[i].momentary;
+    out[METER_CHANNELS] = m[METER_CHANNELS - 1].shortTerm;
+    out[METER_CHANNELS + 1] = m[METER_CHANNELS - 1].integrated;
+    return true;
+  }
+
+  /** Start the master's integrated reading again (it otherwise runs from when metering was switched on). */
+  resetLoudness(): void {
+    this.meters?.[METER_CHANNELS - 1].reset();
   }
 
   private voices(from: number, to: number, nt: number): void {
@@ -843,6 +963,8 @@ export class Engine {
 
   resetMeters(): void {
     this.peaks.fill(0);
+    this.busPeaks.fill(0);
+    this.retPeaks.fill(0);
     this.masterPeakL = this.masterPeakR = 0;
   }
 }

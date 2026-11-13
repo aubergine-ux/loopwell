@@ -14,7 +14,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         // precache everything, drum kits included, so the app works fully offline
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2,wav}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,wav,wasm}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
       manifest: {

@@ -130,24 +130,27 @@ export const allPresets = (): Preset[] => [...PRESETS, ...userPresets()];
 
 // --- effect rack ---
 
+/** A rack to work on: a track's by its index, or a group's by -1 minus the group's index. */
+const rackOf = (t: number) => (t < 0 ? app.project.buses[-1 - t]?.fx : track(t)?.fx);
+
 export function addInsert(t: number, type: InsertType): void {
-  const tr = track(t);
-  if (!tr || tr.fx.length >= MAX_INSERTS) return;
+  const rack = rackOf(t);
+  if (!rack || rack.length >= MAX_INSERTS) return;
   const fx = newInsert(type);
   // a new sidechain listens to the first drum track that isn't this one (usually the kick)
   if (type === 'duck') {
     const src = app.project.tracks.findIndex((x, i) => i !== t && x.kind === 'drum');
     fx.p[0] = src >= 0 ? src + 1 : 0;
   }
-  tr.fx.push(fx);
+  rack.push(fx);
 }
 
 export function removeInsert(t: number, i: number): void {
-  track(t)?.fx.splice(i, 1);
+  rackOf(t)?.splice(i, 1);
 }
 
 export function moveInsert(t: number, from: number, to: number): void {
-  const fx = track(t)?.fx;
+  const fx = rackOf(t);
   if (!fx || from === to || from < 0 || to < 0 || from >= fx.length || to >= fx.length) return;
   fx.splice(to, 0, ...fx.splice(from, 1));
 }

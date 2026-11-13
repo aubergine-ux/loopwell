@@ -28,6 +28,7 @@ export const MAX_EVENTS = 64;
 export type TrackKind = 'drum' | 'synth' | 'slice' | 'bass' | 'dsyn';
 export const TRACK_KINDS: TrackKind[] = ['drum', 'synth', 'slice', 'bass', 'dsyn'];
 export const MAX_INSERTS = 5;
+export const MAX_BUSES = 4;
 /** Classic shapes, then one entry per wavetable. */
 export const NUM_WAVES = 4 + WAVETABLES.length;
 /** Tempo-synced LFO lengths, in 16th-note steps. */
@@ -70,6 +71,14 @@ export interface SynthParams {
   menvDecay: number;
   menvAmt: number; // -64..63
   menvDest: number;
+}
+
+/** A group: tracks sent to it are mixed together, go through its effects as one, and then on to the master. */
+export interface Bus {
+  name: string;
+  vol: number; // 100 = unity
+  mute: boolean;
+  fx: InsertFx[];
 }
 
 /** The 808 bass. */
@@ -120,6 +129,7 @@ export interface Track {
   arpRate: number; // index into ARP_RATES
   arpOct: number; // 1..3 octaves
   arpGate: number; // note length, 127 = the whole arp step
+  bus: number; // 0 = straight to the master, otherwise 1 + an index into project.buses
 }
 
 export interface Note {
@@ -148,6 +158,8 @@ export interface Fx {
   compThresh: number;
   compRatio: number;
   compMakeup: number;
+  revMute: boolean; // the reverb and delay returns can be silenced like any channel
+  dlyMute: boolean;
 }
 
 /** A pattern placed on a track of the timeline. All times are in 16th-note steps. */
@@ -198,6 +210,7 @@ export interface Project {
   grooveAmt: number; // 0..100
   steps: 16 | 32;
   tracks: Track[];
+  buses: Bus[];
   patterns: Pattern[];
   arr: Arrangement;
   /** false: loop the current pattern. true: play the timeline. */
@@ -268,7 +281,7 @@ export function newTrack(kind: TrackKind, color: number, name: string, sample = 
     synth: defaultSynth(), bass: defaultBass(), dsyn: defaultDsyn(), note: kind === 'bass' ? 36 : 48,
     vol: 100, pan: 0, mute: false, solo: false,
     filter: 0, rev: 0, dly: 0,
-    groove: 0, grooveAmt: 50, arpMode: 0, arpRate: 2, arpOct: 1, arpGate: 100,
+    groove: 0, grooveAmt: 50, arpMode: 0, arpRate: 2, arpOct: 1, arpGate: 100, bus: 0,
   };
 }
 
@@ -286,6 +299,7 @@ export function defaultFx(): Fx {
     dlyTime: 3, dlyFb: 50, dlyLevel: 90,
     filter: 0, filterRes: 30,
     compOn: true, compThresh: 40, compRatio: 40, compMakeup: 20,
+    revMute: false, dlyMute: false,
   };
 }
 
@@ -338,7 +352,7 @@ export function emptyProject(): Project {
   const tracks = defaultTracks();
   return {
     v: 2, name: 'untitled', bpm: 120, swing: 0, groove: 0, grooveAmt: 50, steps: 16,
-    tracks,
+    tracks, buses: [],
     patterns: Array.from({ length: NUM_PATTERNS }, () => newPattern(tracks.length)),
     arr: emptyArrangement(tracks.length, 16), songMode: false,
     scaleRoot: 0, scaleType: 1, scaleLock: true,
@@ -346,10 +360,26 @@ export function emptyProject(): Project {
   };
 }
 
+function sanitizeRack(list: unknown): InsertFx[] {
+  const fx: InsertFx[] = [];
+  for (const x of Array.isArray(list) ? list.slice(0, MAX_INSERTS) : []) {
+    if (!INSERT_TYPES.includes(x?.type)) continue;
+    const knobs = INSERTS[x.type as InsertType].knobs;
+    fx.push({ type: x.type, on: x.on !== false, p: knobs.map((k, j) => int(x.p?.[j], 0, 127, k.def)) });
+  }
+  return fx;
+}
+
+export const newBus = (n: number): Bus => ({ name: `GROUP ${n}`, vol: 100, mute: false, fx: [] });
+
 /** Coerce anything (a parsed project file, a decoded link) into a valid Project. */
 export function sanitize(raw: any): Project {
   const base = emptyProject();
   if (!raw || typeof raw !== 'object') return base;
+  const buses: Bus[] = (Array.isArray(raw.buses) ? raw.buses.slice(0, MAX_BUSES) : []).map((b: any, i: number) => ({
+    name: typeof b?.name === 'string' && b.name ? b.name.slice(0, 12) : `GROUP ${i + 1}`,
+    vol: int(b?.vol, 0, 127, 100), mute: !!b?.mute, fx: sanitizeRack(b?.fx),
+  }));
   const rt: any[] = Array.isArray(raw.tracks) ? raw.tracks.slice(0, MAX_TRACKS) : [];
   const tracks: Track[] = rt.map((t, i) => {
     const d = newTrack(TRACK_KINDS.includes(t?.kind) ? t.kind : 'drum', i, `TRACK ${i + 1}`);
@@ -367,12 +397,7 @@ export function sanitize(raw: any): Project {
       if (v >= 0 && !slices.includes(v)) slices.push(v);
     }
     slices.sort((a, b) => a - b);
-    const fx: InsertFx[] = [];
-    for (const x of Array.isArray(t?.fx) ? t.fx.slice(0, MAX_INSERTS) : []) {
-      if (!INSERT_TYPES.includes(x?.type)) continue;
-      const knobs = INSERTS[x.type as InsertType].knobs;
-      fx.push({ type: x.type, on: x.on !== false, p: knobs.map((k, j) => int(x.p?.[j], 0, 127, k.def)) });
-    }
+    const fx = sanitizeRack(t?.fx);
     return {
       name: typeof t?.name === 'string' ? t.name.slice(0, 16) : d.name,
       kind: d.kind,
@@ -415,6 +440,7 @@ export function sanitize(raw: any): Project {
       groove: int(t?.groove, 0, GROOVES.length - 1, 0), grooveAmt: int(t?.grooveAmt, 0, 100, 50),
       arpMode: int(t?.arpMode, 0, ARP_MODES.length - 1, 0), arpRate: int(t?.arpRate, 0, ARP_RATES.length - 1, 2),
       arpOct: int(t?.arpOct, 1, MAX_ARP_OCT, 1), arpGate: int(t?.arpGate, 1, 127, 100),
+      bus: int(t?.bus, 0, buses.length, 0),
     };
   });
   if (!tracks.length) tracks.push(...base.tracks);
@@ -450,7 +476,7 @@ export function sanitize(raw: any): Project {
     groove: int(raw.groove, 0, GROOVES.length - 1, 0),
     grooveAmt: int(raw.grooveAmt, 0, 100, 50),
     steps,
-    tracks, patterns,
+    tracks, buses, patterns,
     arr: sanitizeArrangement(raw, n, steps),
     songMode: !!raw.songMode,
     scaleRoot: int(raw.scaleRoot, 0, 11, 0),
@@ -465,6 +491,7 @@ export function sanitize(raw: any): Project {
       compOn: f.compOn !== false,
       compThresh: int(f.compThresh, 0, 127, df.compThresh), compRatio: int(f.compRatio, 0, 127, df.compRatio),
       compMakeup: int(f.compMakeup, 0, 127, df.compMakeup),
+      revMute: !!f.revMute, dlyMute: !!f.dlyMute,
     },
     master: int(raw.master, 0, 127, 100),
   };

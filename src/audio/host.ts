@@ -43,6 +43,11 @@ export class AudioHost {
   /** Decoded samples, kept on this side too for offline export. */
   readonly bank: SampleBank = {};
   readonly peaks = new Float32Array(8);
+  readonly busPeaks = new Float32Array(4);
+  /** Reverb, then delay. */
+  readonly returnPeaks = new Float32Array(2);
+  /** Loudness in LUFS while metering is on: tracks, groups, reverb, delay, master (momentary), then the master's short-term and integrated. */
+  loudness: Float32Array | null = null;
   masterL = 0;
   masterR = 0;
   reduction = 0;
@@ -77,11 +82,19 @@ export class AudioHost {
     await ctx.audioWorklet.addModule(workletUrl);
     const node = new AudioWorkletNode(ctx, 'loopwell', { numberOfInputs: 0, outputChannelCount: [2] });
     node.port.onmessage = (e: MessageEvent<FromWorklet>) => this.receive(e.data);
+    // worklet -> mix gain -> analyser -> speakers, with the reference track joining at the analyser,
+    // so the scope and spectrum show whichever of the two is being listened to
     const analyser = ctx.createAnalyser();
-    analyser.fftSize = 1024;
-    node.connect(analyser);
-    node.connect(ctx.destination);
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.7;
+    const mixGain = ctx.createGain();
+    const refGain = ctx.createGain();
+    refGain.gain.value = 0;
+    node.connect(mixGain).connect(analyser).connect(ctx.destination);
+    refGain.connect(analyser);
     this.analyser = analyser;
+    this.mixGain = mixGain;
+    this.refGain = refGain;
     this.ctx = ctx;
     this.node = node;
     for (const m of this.backlog) node.port.postMessage(m);
@@ -127,6 +140,9 @@ export class AudioHost {
       this.onLaunched?.(m.tracks, m.count);
     } else {
       this.peaks.set(m.peaks);
+      this.busPeaks.set(m.buses);
+      this.returnPeaks.set(m.returns);
+      this.loudness = m.lufs;
       this.masterL = m.l;
       this.masterR = m.r;
       this.reduction = m.gr;
@@ -156,6 +172,79 @@ export class AudioHost {
     const since = this.ctx.currentTime - this.headTime;
     const ahead = Math.max(0, Math.round(since / stepSeconds));
     return { step: head.step + ahead, pattern: head.pattern, song: head.song, wait: Math.max(0, ahead * stepSeconds - since) };
+  }
+
+  /** How loud each frequency is right now (0..255 per bin, bin i is i * sampleRate / 2048 Hz). Returns false while nothing is connected. */
+  spectrum(into: Uint8Array<ArrayBuffer>): boolean {
+    if (!this.analyser) return false;
+    this.analyser.getByteFrequencyData(into);
+    return true;
+  }
+
+  // --- reference track: a finished song to compare the mix against ---
+
+  private mixGain: GainNode | null = null;
+  private refGain: GainNode | null = null;
+  private refSource: AudioBufferSourceNode | null = null;
+  private refBuffer: AudioBuffer | null = null;
+  private refMatch = 1;
+  /** True while the reference, not the mix, is what comes out of the speakers. */
+  onRef = false;
+
+  /** Decode a song to compare against. Resolves with its channels (for measuring), or null if it isn't audio. */
+  async loadReference(file: ArrayBuffer): Promise<{ l: Float32Array; r: Float32Array | undefined; sampleRate: number; seconds: number } | null> {
+    await this.init();
+    try {
+      this.clearReference();
+      const buf = await this.ctx!.decodeAudioData(file.slice(0));
+      if (buf.length < 2) return null;
+      this.refBuffer = buf;
+      return { l: buf.getChannelData(0), r: buf.numberOfChannels > 1 ? buf.getChannelData(1) : undefined, sampleRate: buf.sampleRate, seconds: buf.duration };
+    } catch {
+      return null;
+    }
+  }
+
+  clearReference(): void {
+    this.listen(false, 1);
+    this.stopReference();
+    this.refBuffer = null;
+  }
+
+  get hasReference(): boolean {
+    return !!this.refBuffer;
+  }
+
+  /** Run the reference from `seconds` in, silently unless it is the one being listened to. It loops. */
+  startReference(seconds = 0): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.refBuffer || !this.refGain) return;
+    this.stopReference();
+    const src = ctx.createBufferSource();
+    src.buffer = this.refBuffer;
+    src.loop = true;
+    src.connect(this.refGain);
+    src.start(0, ((seconds % this.refBuffer.duration) + this.refBuffer.duration) % this.refBuffer.duration);
+    this.refSource = src;
+  }
+
+  stopReference(): void {
+    try { this.refSource?.stop(); } catch { /* it had not started */ }
+    this.refSource?.disconnect();
+    this.refSource = null;
+  }
+
+  /** Swap what is heard: the mix, or the reference turned up or down by `match` so the two are equally loud. */
+  listen(ref: boolean, match: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.mixGain || !this.refGain) return;
+    this.onRef = ref && !!this.refBuffer;
+    this.refMatch = match;
+    if (this.onRef && !this.refSource) this.startReference();
+    const t = ctx.currentTime;
+    // a short crossfade, so the switch is a comparison and not a click
+    this.mixGain.gain.setTargetAtTime(this.onRef ? 0 : 1, t, 0.012);
+    this.refGain.gain.setTargetAtTime(this.onRef ? match : 0, t, 0.012);
   }
 
   /** Waveform of the master output, for the scope. Returns false while nothing is connected. */
@@ -323,6 +412,17 @@ export class AudioHost {
 
   setPattern(pattern: number): void {
     this.send({ t: 'pattern', pattern });
+  }
+
+  /** Run the loudness meters (they cost a little CPU, so only while a mixer is on screen). */
+  setMetering(on: boolean): void {
+    if (!on) this.loudness = null;
+    this.send({ t: 'metering', on });
+  }
+
+  /** Start the master's integrated loudness reading again. */
+  resetLoudness(): void {
+    this.send({ t: 'resetLoudness' });
   }
 
   /** Clip launcher: put a pattern (or -2 silence, -1 follow the selected pattern) on a track, on the next `quant` steps. */

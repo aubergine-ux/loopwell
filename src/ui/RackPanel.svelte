@@ -8,7 +8,12 @@
 
   const p = $derived(app.project);
   const t = $derived(p.tracks[app.sel]);
-  const color = $derived(`var(--t${t.color})`);
+  // the rack on show is the selected track's, unless a group was picked in the mixer (or here)
+  const bus = $derived(app.rackBus >= 0 ? p.buses[app.rackBus] : undefined);
+  const target = $derived(bus ? -1 - app.rackBus : app.sel);
+  const rack = $derived(bus ? bus.fx : t.fx);
+  const name = $derived(bus ? bus.name : t.name);
+  const color = $derived(bus ? 'var(--ink)' : `var(--t${t.color})`);
   let dragging = $state(-1);
 
   /** How a knob reads while it is turned. Most are plain numbers. */
@@ -35,33 +40,39 @@
     if (!el) return;
     const to = +el.dataset.fx!;
     if (to === dragging) return;
-    moveInsert(app.sel, dragging, to);
+    moveInsert(target, dragging, to);
     dragging = to;
   }
 </script>
 
 <div class="rack" style:--c={color}>
   <div class="bar">
-    <span class="label">{t.name} effects</span>
+    {#if p.buses.length}
+      <div class="seg" role="radiogroup" aria-label="Whose effects">
+        <button class:on={!bus} role="radio" aria-checked={!bus} onclick={() => (app.rackBus = -1)}>{t.name}</button>
+        {#each p.buses as b, k}<button class:on={app.rackBus === k} role="radio" aria-checked={app.rackBus === k} onclick={() => (app.rackBus = k)}>{b.name}</button>{/each}
+      </div>
+    {/if}
+    <span class="label">{name} effects</span>
     {#each INSERT_TYPES as type}
-      <button class="btn ghost" disabled={t.fx.length >= MAX_INSERTS} onclick={() => addInsert(app.sel, type as InsertType)}
+      <button class="btn ghost" disabled={rack.length >= MAX_INSERTS} onclick={() => addInsert(target, type as InsertType)}
         aria-label="Add {INSERTS[type].name}"><Icon name="plus" size={12} />{INSERTS[type].name}</button>
     {/each}
   </div>
-  {#if !t.fx.length}
-    <p class="empty">No effects on this track yet. Add an EQ, drive, chorus, crusher or a sidechain; the sound runs through them from left to right, and you can drag them into a different order.</p>
+  {#if !rack.length}
+    <p class="empty">No effects on this {bus ? 'group' : 'track'} yet. Add an EQ, drive, chorus, crusher or a sidechain; the sound runs through them from left to right, and you can drag them into a different order.</p>
   {:else}
     <div class="chain">
-      {#each t.fx as fx, i (i)}
+      {#each rack as fx, i (i)}
         <div class="fx" class:off={!fx.on} class:moving={dragging === i} data-fx={i}>
           <header>
             <button class="grip" onpointerdown={(e) => grab(e, i)} onpointermove={drag} onpointerup={() => (dragging = -1)} onpointercancel={() => (dragging = -1)}
               aria-label="Drag to reorder {INSERTS[fx.type].name}" title="Drag to reorder">⋮⋮</button>
             <b>{INSERTS[fx.type].name}</b>
             <button class="pw" class:on={fx.on} onclick={() => (fx.on = !fx.on)} aria-pressed={fx.on} aria-label="{INSERTS[fx.type].name} on/off">{fx.on ? 'ON' : 'OFF'}</button>
-            <button class="arrow" disabled={i === 0} onclick={() => moveInsert(app.sel, i, i - 1)} aria-label="Move {INSERTS[fx.type].name} earlier">‹</button>
-            <button class="arrow" disabled={i === t.fx.length - 1} onclick={() => moveInsert(app.sel, i, i + 1)} aria-label="Move {INSERTS[fx.type].name} later">›</button>
-            <button class="arrow" onclick={() => removeInsert(app.sel, i)} aria-label="Remove {INSERTS[fx.type].name}">×</button>
+            <button class="arrow" disabled={i === 0} onclick={() => moveInsert(target, i, i - 1)} aria-label="Move {INSERTS[fx.type].name} earlier">‹</button>
+            <button class="arrow" disabled={i === rack.length - 1} onclick={() => moveInsert(target, i, i + 1)} aria-label="Move {INSERTS[fx.type].name} later">›</button>
+            <button class="arrow" onclick={() => removeInsert(target, i)} aria-label="Remove {INSERTS[fx.type].name}">×</button>
           </header>
           <div class="k">
             {#each INSERTS[fx.type].knobs as knob, k}
@@ -79,6 +90,8 @@
   .rack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .bar .label { margin-right: 8px; }
+  .bar .seg { margin-right: 8px; }
+  .bar .seg button { min-width: 0; padding: 0 8px; font-size: 10px; }
   .bar .btn { height: 28px; padding: 0 8px; font-size: 10px; gap: 3px; }
   .empty { margin: 6px 0; max-width: 560px; font-size: 13px; line-height: 1.45; color: var(--dim); }
   .chain { display: flex; flex-wrap: wrap; gap: 8px; }

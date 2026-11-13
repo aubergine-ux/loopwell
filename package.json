@@ -20,6 +20,7 @@
     "test:tools": "vite build && tsx tests/e2e/creative.ts",
     "test:sounds": "vite build && tsx tests/e2e/instruments.ts",
     "test:stage": "vite build && tsx tests/e2e/stage.ts",
+    "test:mix": "vite build && tsx tests/e2e/mix.ts",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri"
@@ -42,6 +43,7 @@
     "@fontsource-variable/space-grotesk": "^5.3.0",
     "@tauri-apps/api": "^2.12.4",
     "fflate": "^0.8.3",
+    "wasm-media-encoders": "^0.7.0",
     "yjs": "^13.6.33"
   },
   "allowScripts": {

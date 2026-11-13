@@ -13,6 +13,8 @@ import {
   DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyArrangement, emptyProject, newId, newTrack, sanitize, usesNotes, usesSample,
   type Project, type TrackKind,
 } from './core/types';
+import { CODECS, encodeAudio, type Codec } from './core/encode';
+import { normalize, type LoudnessTarget } from './core/loudness';
 import { encodeWav } from './core/wav';
 import { app, THEMES } from './state.svelte';
 import { deleteSample, getSamples, loadSaved, loadTheme, putSample, saveProject, saveTheme } from './storage';
@@ -127,7 +129,11 @@ export function fixSelection(): void {
   app.pat = clamp(app.pat, 0, app.project.patterns.length - 1);
   if (app.clip && !app.project.arr.clips.some((c) => c.id === app.clip)) app.clip = null;
   if (app.step && (app.step.t >= app.project.tracks.length || app.step.s >= app.project.steps)) app.step = null;
+  if (app.rackBus >= app.project.buses.length) app.rackBus = -1;
 }
+
+/** Called when playback starts (true) and stops (false), for things that run alongside the transport. */
+export const transportHooks: ((playing: boolean) => void)[] = [];
 
 /** Called once a different beat is in place, to put anything that plays live back to how a beat normally starts. */
 export const resetHooks: (() => void)[] = [];
@@ -195,6 +201,7 @@ export async function play(): Promise<void> {
 export function startPlaying(pattern: number, from: number, step = 0): void {
   audio.play(pattern, from, step);
   app.playing = true;
+  for (const hook of transportHooks) hook(true);
 }
 
 export function stop(): void {
@@ -206,6 +213,7 @@ export function stopPlaying(): void {
   audio.stop();
   app.playing = false;
   app.queued = -1;
+  for (const hook of transportHooks) hook(false);
 }
 
 export function togglePlay(): void {
@@ -596,15 +604,32 @@ async function loadAllSamples(p: Project): Promise<void> {
   await Promise.all(p.tracks.filter((t) => usesSample(t.kind)).map((t) => audio.ensure(t.sample)));
 }
 
-export function exportWav(): Promise<void> {
-  return withBusy('Rendering WAV', async (progress) => {
+export type AudioFormat = 'wav' | Codec;
+
+/** Render the mix and save it. `loudness` scales the whole file towards a target; nothing is compressed to get there. */
+export function exportAudio(format: AudioFormat = 'wav', loudness: LoudnessTarget = 'off', quality = 1): Promise<void> {
+  const label = format === 'wav' ? 'WAV' : CODECS[format].label;
+  return withBusy(`Rendering ${label}`, async (progress) => {
     const p = snapshot();
     await loadAllSamples(p);
-    const r = await renderProject(p, audio.bank, { sampleRate: audio.sampleRate, chain: exportChain(), onProgress: progress });
-    download(encodeWav([r.l, r.r], r.sampleRate, 24), `${slug()}.wav`, 'audio/wav');
-    toast('WAV exported');
+    const encoding = format !== 'wav';
+    const r = await renderProject(p, audio.bank, { sampleRate: audio.sampleRate, chain: exportChain(), onProgress: (d) => progress(encoding ? d * 0.6 : d) });
+    const n = normalize(r.l, r.r, r.sampleRate, loudness);
+    let bytes: Uint8Array<ArrayBuffer>;
+    if (format === 'wav') bytes = encodeWav([r.l, r.r], r.sampleRate, 24);
+    else {
+      if (app.busy) app.busy.label = `Encoding ${label}`;
+      // the encoder is WebAssembly, fetched the first time it is needed
+      const wasm = (format === 'mp3' ? await import('wasm-media-encoders/wasm/mp3?url') : await import('wasm-media-encoders/wasm/ogg?url')).default;
+      bytes = await encodeAudio(format, r.l, r.r, r.sampleRate, quality, new URL(wasm, location.href).href, (d) => progress(0.6 + d * 0.4));
+    }
+    download(bytes, `${slug()}.${format === 'wav' ? 'wav' : CODECS[format].ext}`, format === 'wav' ? 'audio/wav' : CODECS[format].mime);
+    const said = loudness === 'off' ? '' : n.gain === 1 && n.to <= -70 ? '' : ` at ${n.to.toFixed(1)} LUFS${n.limited ? ' (as loud as it goes without clipping)' : ''}`;
+    toast(`${label} exported${said}`);
   });
 }
+
+export const exportWav = (): Promise<void> => exportAudio('wav');
 
 export function exportStems(): Promise<void> {
   return withBusy('Rendering stems', async (progress) => {

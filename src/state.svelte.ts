@@ -53,6 +53,8 @@ export const app = $state({
   step: null as { t: number; s: number } | null,
   /** Tracks the dice leave alone, by index. */
   locks: [] as boolean[],
+  /** The group whose effects the Rack tab is showing, or -1 for the selected track's. */
+  rackBus: -1,
   /** A fill is being held. */
   fill: false,
   canUndo: false,
