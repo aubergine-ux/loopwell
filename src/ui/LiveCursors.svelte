@@ -61,7 +61,7 @@
   .cursor.away { opacity: 0.45; }
   .cursor path { fill: var(--c); stroke: #fff; stroke-width: 1; }
   .cursor span {
-    position: absolute; left: 12px; top: 13px; padding: 1px 6px; border-radius: 6px; background: var(--c); color: #fff;
+    position: absolute; left: 12px; top: 13px; padding: 1px 6px; border-radius: 6px; background: var(--c); color: var(--on-c);
     font: 700 10px var(--mono); white-space: nowrap; text-shadow: 0 1px 1px rgb(0 0 0 / 0.3);
   }
 </style>

@@ -79,7 +79,7 @@
   .times { align-self: flex-start; flex-wrap: wrap; }
   .times button { min-width: 0; padding: 0 6px; font-size: 10px; }
   .power { border: 0; border-radius: 6px; height: 20px; padding: 0 8px; font: 700 10px var(--mono); background: var(--well); color: var(--dim); }
-  .power.on { background: var(--c); color: #fff; }
+  .power.on { background: var(--c); color: var(--on-c); }
   .gr { position: relative; height: 12px; border-radius: 4px; background: var(--well); overflow: hidden; }
   .gr i { position: absolute; inset: 0; background: var(--c); transform-origin: right; transform: scaleX(0); }
   .gr .label { position: absolute; left: 6px; top: 1px; font-size: 8px; color: var(--ink); mix-blend-mode: normal; }

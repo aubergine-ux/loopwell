@@ -108,7 +108,7 @@
     height: 18px; min-width: 18px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line); background: var(--raise); color: var(--dim);
     font: 700 9px var(--mono);
   }
-  .pw.on { background: var(--c); color: #fff; border-color: transparent; }
+  .pw.on { background: var(--c); color: var(--on-c); border-color: transparent; }
   .arrow:disabled { opacity: 0.3; }
   .k { display: flex; }
   small { font: 600 9.5px var(--mono); color: var(--dim); }

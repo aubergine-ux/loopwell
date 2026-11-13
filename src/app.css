@@ -5,6 +5,8 @@
   --t0: #ff4f1a; --t1: #ff9a1f; --t2: #f0c22b; --t3: #35c47c;
   --t4: #1fb7c6; --t5: #3f7cff; --t6: #8b5cf6; --t7: #ee5aa6;
   --rec: #ff3b3b;
+  /* text drawn on top of a track colour, the accent or the record red */
+  --on-c: #fff;
 }
 
 :root[data-theme='cream'] {
@@ -56,6 +58,34 @@
   --t4: #5cf2ff; --t5: #6f8cff; --t6: #b57bff; --t7: #ff3ea5;
   --shadow: 0 30px 80px -20px #000, 0 1px 0 #55318c inset;
 }
+
+/* High contrast: white on black, every edge drawn, nothing told apart by a faint shade alone. */
+:root[data-theme='contrast'] {
+  color-scheme: dark;
+  --bg: #000; --bg2: #000;
+  --panel: #000; --inset: #000; --raise: #000;
+  --ink: #fff; --dim: #d6d6d6; --line: #fff; --edge: #fff; --hi: transparent;
+  --well: #262626; --well-alt: #3a3a3a;
+  --accent: #ffe600; --accent-ink: #000;
+  --lcd-bg: #000; --lcd-fg: #fff; --lcd-dim: #bdbdbd;
+  --t0: #ff7a5c; --t1: #ffb347; --t2: #ffe600; --t3: #5dff9a;
+  --t4: #5ce8ff; --t5: #8fb0ff; --t6: #c9a6ff; --t7: #ff8fd0;
+  --rec: #ff6b6b;
+  --on-c: #000;
+  --shadow: 0 0 0 2px #fff;
+}
+:root[data-theme='contrast'] :is(.num, .nm, .slot) { text-shadow: none; }
+/* pads carry black labels here, so they take their colour at full strength rather than toned down */
+:root[data-theme='contrast'] .pad:not(.empty) { background: var(--c); }
+:root[data-theme='contrast'] :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* panels and wells are all black here, so their outlines are what separate them */
+:root[data-theme='contrast'] :is(section, .ch, .scope, .list, .beats, .versions, .maps, .lcd, .pad, .cell, .tick, .clip, .knob svg .track, .screen, .wave, .scroller, .chain, .audio) { outline: 1px solid #8a8a8a; outline-offset: -1px; }
+:root[data-theme='contrast'] .cell.on, :root[data-theme='contrast'] .clip.has { outline-color: #fff; }
+:root[data-theme='contrast'] .knob svg .track { stroke: #6a6a6a; outline: none; }
+:root[data-theme='contrast'] .btn, :root[data-theme='contrast'] .seg, :root[data-theme='contrast'] select.pick { border: 1px solid #fff; }
+:root[data-theme='contrast'] .btn.ghost { border-color: transparent; color: #fff; }
+:root[data-theme='contrast'] .seg button.on { background: #fff; color: #000; }
+:root[data-theme='contrast'] ::placeholder { color: #bdbdbd; opacity: 1; }
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -143,6 +173,14 @@ select.pick {
 }
 :root[data-calm] *, :root[data-calm] *::before, :root[data-calm] *::after {
   animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important;
+}
+
+/* Touch screens: nothing to tap is smaller than 26 px either way. (Piano keys and the markers on the
+   waveform and timeline are placed by position, and each has a bigger way in beside it.) */
+@media (pointer: coarse) {
+  button:not(.keys .key):not(.mark):not(.flag):not(.unloop), select, a.btn { min-height: 26px; min-width: 26px; }
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']) { min-height: 26px; }
+  footer a { display: inline-block; padding: 6px 4px; margin: -6px -4px; }
 }
 
 /* MIDI learn: everything that can be tied to a controller shows it */

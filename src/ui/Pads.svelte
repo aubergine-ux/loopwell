@@ -47,6 +47,18 @@
     padUp(t);
   }
 
+  // from the keyboard: Enter plays a pad for as long as it is held
+  function key(e: KeyboardEvent, t: number, on: boolean): void {
+    if (e.key !== 'Enter' || e.repeat) return;
+    e.preventDefault();
+    if (on) { app.sel = t; padDown(t, 110); } else padUp(t);
+  }
+  function sliceKey(e: KeyboardEvent, i: number, on: boolean): void {
+    if (e.key !== 'Enter' || e.repeat) return;
+    e.preventDefault();
+    if (on) { cur.note = i; noteDown(app.sel, i, 110); } else noteUp(app.sel, i);
+  }
+
   onMount(() => onFlash((t, vel) => {
     const glow = root.querySelector(`.pad[data-pad="${t}"] .glow`);
     if (glow) fade(glow, 0.35 + (vel / 127) * 0.65);
@@ -57,7 +69,8 @@
   {#if slices}
     {#each { length: slices } as _, i}
       <button class="pad" class:sel={cur.note === i} data-slice={i} style:--c="var(--t{cur.color})" aria-label="Slice {i + 1} of {cur.name}"
-        onpointerdown={(e) => sliceDown(e, i)} onpointerup={(e) => sliceUp(e, i)} onpointercancel={(e) => sliceUp(e, i)} oncontextmenu={(e) => e.preventDefault()}>
+        onpointerdown={(e) => sliceDown(e, i)} onpointerup={(e) => sliceUp(e, i)} onpointercancel={(e) => sliceUp(e, i)} oncontextmenu={(e) => e.preventDefault()}
+        onkeydown={(e) => sliceKey(e, i, true)} onkeyup={(e) => sliceKey(e, i, false)}>
         <span class="num">{i + 1}</span>
       </button>
     {/each}
@@ -67,7 +80,8 @@
       {@const t = p.tracks[i]}
       {#if t}
         <button class="pad" class:sel={app.sel === i} data-pad={i} style:--c="var(--t{t.color})" aria-label="Pad {i + 1}: {t.name}"
-          onpointerdown={(e) => down(e, i)} onpointerup={up} onpointercancel={up} oncontextmenu={(e) => e.preventDefault()}>
+          onpointerdown={(e) => down(e, i)} onpointerup={up} onpointercancel={up} oncontextmenu={(e) => e.preventDefault()}
+          onkeydown={(e) => key(e, i, true)} onkeyup={(e) => key(e, i, false)}>
           <i class="glow"></i>
           <span class="num">{i + 1}</span>
           <span class="nm">{t.name}</span>
@@ -88,7 +102,7 @@
     background: color-mix(in srgb, var(--c) 82%, var(--panel));
     box-shadow: 0 5px 0 color-mix(in srgb, var(--c) 55%, #000), inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -10px 18px -10px rgb(0 0 0 / 0.25);
     display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
-    color: #fff; overflow: hidden;
+    color: var(--on-c); overflow: hidden;
     touch-action: none;
     transition: transform 50ms, box-shadow 50ms;
   }

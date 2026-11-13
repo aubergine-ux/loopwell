@@ -11,6 +11,7 @@
   } from '../song.svelte';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
+  import { byKeyboard } from './focus';
   import Icon from './Icon.svelte';
 
   const narrow = matchMedia('(max-width: 720px)');
@@ -150,6 +151,33 @@
       }
     }
     return d;
+  }
+
+  // --- keyboard: a clip that has focus can be moved, stretched and opened without a pointer ---
+  const unit = () => (snapTo === 'step' ? 1 : snapTo === 'beat' ? 4 : 16);
+  function clipKey(e: KeyboardEvent, c: Clip): void {
+    // only when the clip was reached by keyboard: after a click the usual shortcuts carry on working
+    if (!byKeyboard(e.currentTarget)) return;
+    const u = unit();
+    if (e.key === 'Enter') editClip(c.id);
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const d = e.key === 'ArrowLeft' ? -u : u;
+      if (e.shiftKey) c.len = clamp(c.len + d, u, MAX_SONG_STEPS - c.start); // Shift: longer or shorter
+      else c.start = clamp(c.start + d, 0, MAX_SONG_STEPS - c.len);
+      commitClip(c.id);
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function rulerKey(e: KeyboardEvent): void {
+    if (!byKeyboard(e.currentTarget)) return;
+    const u = unit();
+    if (e.key === 'ArrowLeft') seek(Math.max(0, app.cursor - u));
+    else if (e.key === 'ArrowRight') seek(Math.min(length - 1, app.cursor + u));
+    else if (e.key === 'Home') seek(0);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   // --- ruler: click to move the cursor, drag to set the loop ---
@@ -357,7 +385,8 @@
       <div class="row rule">
         <div class="head"><span class="label">Bars</span></div>
         <div class="lane ruler" onpointerdown={rulerDown} onpointermove={rulerMove} onpointerup={rulerUp} onpointercancel={() => (ruler = null)}
-          role="slider" tabindex="-1" aria-label="Song position" aria-valuenow={app.cursor} title="Click to move the cursor. Drag to loop a section.">
+          onkeydown={rulerKey} role="slider" tabindex="0" aria-label="Song position" aria-valuemin={0} aria-valuemax={length} aria-valuenow={app.cursor}
+          aria-valuetext="bar {Math.floor(app.cursor / 16) + 1}" title="Click to move the cursor. Drag to loop a section. Arrow keys move it too.">
           {#if a.loopEnd > a.loopStart}
             <span class="loop" class:off={!a.loopOn} style:left="{a.loopStart * px}px" style:width="{(a.loopEnd - a.loopStart) * px}px"></span>
           {/if}
@@ -399,7 +428,9 @@
             {#each a.clips.filter((c) => c.track === ti) as c (c.id)}
               <div class="clip" class:on={app.clip === c.id} style:left="{c.start * px}px" style:width="{c.len * px}px" data-clip={c.id}
                 onpointerdown={(e) => clipDown(e, c)} ondblclick={(e) => e.stopPropagation()}
-                role="button" tabindex="-1" aria-label="{t.name} pattern {PATTERN_NAMES[c.pattern]}, bar {Math.floor(c.start / 16) + 1}">
+                onkeydown={(e) => clipKey(e, c)} onfocus={() => { app.clip = c.id; app.sel = c.track; }}
+                role="button" tabindex="0"
+                aria-label="{t.name} pattern {PATTERN_NAMES[c.pattern]}, bar {Math.floor(c.start / 16) + 1}, {c.len} steps. Arrow keys move it, Shift and arrows change its length, Enter opens its pattern.">
                 <span class="pat">{PATTERN_NAMES[c.pattern]}</span>
                 <svg width={c.len * px} height={ROW - 16} aria-hidden="true"><path d={preview(c)} /></svg>
                 {#each { length: Math.max(0, Math.ceil((c.len + c.offset) / p.steps) - 1) } as _, k}

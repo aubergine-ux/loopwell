@@ -158,7 +158,7 @@
     transition: transform 60ms, box-shadow 60ms;
   }
   .list button:active { transform: translateY(3px); box-shadow: none; }
-  .list i { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--c); color: #fff; display: grid; place-items: center; }
+  .list i { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--c); color: var(--on-c); display: grid; place-items: center; }
   .list span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .list b { font-size: 15px; }
   .list small { font-size: 12px; color: var(--dim); }
@@ -183,7 +183,7 @@
   li .btn, .keep .btn { height: 32px; font-size: 11px; }
   li .btn.sq { width: 30px; }
   .ask { flex: 1; padding-left: 10px; font-size: 13px; }
-  .danger { background: var(--rec); color: #fff; border-color: transparent; }
+  .danger { background: var(--rec); color: var(--on-c); border-color: transparent; }
   .versions li { min-height: 36px; padding-left: 10px; gap: 8px; }
   .versions .btn { height: 26px; font-size: 10px; }
   .vl { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

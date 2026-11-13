@@ -64,7 +64,7 @@
     box-shadow: 0 2px 0 var(--edge), inset 0 1px 0 var(--hi); font: 600 12px var(--mono);
   }
   .load:active { transform: translateY(2px); box-shadow: none; }
-  .load.on { background: var(--c); color: #fff; border-color: transparent; }
+  .load.on { background: var(--c); color: var(--on-c); border-color: transparent; }
   .save { display: flex; gap: 8px; margin-top: 16px; }
   .save input {
     flex: 1; height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--inset);

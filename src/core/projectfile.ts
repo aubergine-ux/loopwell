@@ -5,6 +5,9 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { sanitize, usesSample, type Project } from './types';
 
+/** Version written into new project files. */
+export const FILE_VERSION = 3;
+
 export interface UserSample {
   id: string;
   name: string;
@@ -13,7 +16,9 @@ export interface UserSample {
 
 interface Manifest {
   format: 'loopwell';
-  version: 1 | 2;
+  // 1: beats with a pattern chain. 2: the song timeline. 3: step extras, grooves, the 808 and drum synth, mixer groups.
+  // Every version opens: the project inside is cleaned up by sanitize(), which fills in whatever an older file lacks.
+  version: 1 | 2 | 3;
   project: Project;
   samples: { id: string; name: string; file: string }[];
 }
@@ -21,7 +26,7 @@ interface Manifest {
 export function packProjectFile(project: Project, samples: UserSample[]): Uint8Array<ArrayBuffer> {
   const used = new Set(project.tracks.filter((t) => usesSample(t.kind)).map((t) => t.sample));
   const files: Record<string, Uint8Array> = {};
-  const manifest: Manifest = { format: 'loopwell', version: 2, project, samples: [] };
+  const manifest: Manifest = { format: 'loopwell', version: FILE_VERSION, project, samples: [] };
   samples.filter((s) => used.has(s.id)).forEach((s, i) => {
     const file = `samples/${i}.bin`;
     files[file] = s.bytes;

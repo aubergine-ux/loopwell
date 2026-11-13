@@ -9,6 +9,7 @@
   import { setKind } from '../sound.svelte';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
+  import { byKeyboard } from './focus';
   import Icon from './Icon.svelte';
 
   const ROW = 18;
@@ -102,6 +103,42 @@
       if (i >= 0) notes.splice(i, 1);
     }
     drag = null;
+  }
+
+  // Keyboard: Tab reaches the roll, the arrows move a cursor over it, and Enter puts a note there or takes it away.
+  let cur = $state({ step: 0, row: -1 });
+  let said = $state('');
+  const pitchName = (pitch: number) => (sliced ? `slice ${pitch + 1}` : noteName(pitch));
+  function laneKey(e: KeyboardEvent): void {
+    // only when the roll was reached by keyboard: after a click the usual shortcuts carry on working
+    if (!byKeyboard(lane ?? null)) return;
+    if (cur.row < 0 || cur.row >= rows.length) cur.row = Math.max(0, rowOf(notes[0]?.p ?? t.note));
+    const jump = e.ctrlKey || e.metaKey;
+    const pitch = rows[cur.row];
+    const at = notes.find((n) => n.p === pitch && cur.step >= n.s && cur.step < n.s + n.l);
+    if (e.key === 'Enter') {
+      if (at) notes.splice(notes.indexOf(at), 1);
+      else { notes.push({ s: cur.step, l: 1, p: pitch, v: DEFAULT_VEL }); auditionNote(app.sel, pitch); t.note = pitch; }
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && at) notes.splice(notes.indexOf(at), 1);
+    else if (e.shiftKey && e.key === 'ArrowRight' && at) at.l = clamp(at.l + 1, 1, p.steps - at.s);
+    else if (e.shiftKey && e.key === 'ArrowLeft' && at) at.l = clamp(at.l - 1, 1, p.steps - at.s);
+    else if ((e.key === '+' || e.key === '=') && at) at.v = clamp(at.v + 10, 1, 127);
+    else if ((e.key === '-' || e.key === '_') && at) at.v = clamp(at.v - 10, 1, 127);
+    else if (e.key === 'ArrowRight') cur.step = Math.min(p.steps - 1, cur.step + (jump ? 4 : 1));
+    else if (e.key === 'ArrowLeft') cur.step = Math.max(0, cur.step - (jump ? 4 : 1));
+    else if (e.key === 'ArrowUp') cur.row = Math.max(0, cur.row - (jump ? 7 : 1));
+    else if (e.key === 'ArrowDown') cur.row = Math.min(rows.length - 1, cur.row + (jump ? 7 : 1));
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+    // keep the cursor in sight, and say where it is for anyone who can't see it
+    if (scroller) {
+      const y = cur.row * ROW;
+      if (y < scroller.scrollTop) scroller.scrollTop = y;
+      else if (y + ROW > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = y + ROW - scroller.clientHeight;
+    }
+    const now = notes.find((n) => n.p === rows[cur.row] && cur.step >= n.s && cur.step < n.s + n.l);
+    said = `${pitchName(rows[cur.row])}, step ${cur.step + 1}${now ? `, note ${now.l} step${now.l > 1 ? 's' : ''} long, velocity ${now.v}` : ', empty'}`;
   }
 
   // velocity lane: drag across the bars to draw velocities
@@ -219,7 +256,8 @@
   {:else}
     <div class="scroller" bind:this={scroller} style:--c="var(--t{t.color})" style:--steps={p.steps} style:--row="{ROW}px">
       <div class="inner" style:height="{rows.length * ROW}px">
-        <div class="keys">
+        <!-- a picture of the keyboard to click on; the roll beside it is what a keyboard or screen reader uses -->
+        <div class="keys" aria-hidden="true">
           {#each rows as pitch}
             {@const pc = pitch % 12}
             {#if sliced}
@@ -232,8 +270,12 @@
             {/if}
           {/each}
         </div>
-        <div class="lane" bind:this={lane} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}
-          role="application" aria-label="Piano roll for {t.name}">
+        <!-- an editing surface with its own keys is what role="application" is for; the checker doesn't know that role takes focus -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <div class="lane" bind:this={lane} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onkeydown={laneKey}
+          role="application" tabindex="0"
+          aria-label="Piano roll for {t.name}. Arrow keys move, Enter adds or removes a note, Shift and left or right changes its length, plus and minus its velocity.">
+          {#if cur.row >= 0 && cur.row < rows.length}<i class="cursor" class:kb={said !== ''} style:left="{(cur.step / p.steps) * 100}%" style:top="{cur.row * ROW}px"></i>{/if}
           {#each rows as pitch, i}
             {#if sliced ? pitch % 2 === 1 : pitch % 12 === p.scaleRoot || !inScale(pitch, p.scaleRoot, p.scaleType)}
               <i class="band" class:out={!sliced && !inScale(pitch, p.scaleRoot, p.scaleType)} style:top="{i * ROW}px"></i>
@@ -249,6 +291,7 @@
         </div>
       </div>
     </div>
+    <span class="sr" aria-live="polite">{said}</span>
     <div class="velrow" style:--c="var(--t{t.color})">
       <span class="label vl">Vel</span>
       <div class="vel" onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); velAt(e); }} onpointermove={velAt}
@@ -276,7 +319,7 @@
   }
   .chord small { font: 600 8px var(--mono); color: var(--dim); }
   .chord:hover { background: color-mix(in srgb, var(--c) 45%, var(--well)); }
-  .chord:active { background: var(--c); color: #fff; }
+  .chord:active { background: var(--c); color: var(--on-c); }
   .none { font-size: 12px; color: var(--dim); }
   .scroller {
     height: 216px; overflow: auto; border-radius: 10px; background: var(--inset);
@@ -291,7 +334,7 @@
   }
   .key.black { background: var(--ink); color: var(--panel); border-bottom-color: transparent; }
   .key.root { color: var(--c); font-weight: 800; }
-  .key:active { background: var(--c); color: #fff; }
+  .key:active { background: var(--c); color: var(--on-c); }
   .lane {
     position: relative; flex: 1; cursor: crosshair; touch-action: none;
     background-image:
@@ -307,6 +350,10 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), inset -3px 0 0 rgb(0 0 0 / 0.22), 0 1px 2px rgb(0 0 0 / 0.3);
     cursor: grab;
   }
+  .lane:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cursor { display: none; position: absolute; width: calc(100% / var(--steps)); height: var(--row); box-shadow: inset 0 0 0 2px var(--accent); border-radius: 4px; pointer-events: none; z-index: 2; }
+  .lane:focus-visible .cursor.kb { display: block; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .line { position: absolute; top: 0; bottom: 0; width: calc(100% / var(--steps)); background: color-mix(in srgb, var(--ink) 14%, transparent); border-left: 2px solid var(--ink); opacity: 0; pointer-events: none; }
   .velrow { display: flex; align-items: stretch; height: 38px; }
   .vl { flex: 0 0 46px; align-self: center; }

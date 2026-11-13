@@ -40,7 +40,7 @@
     <input bind:value={app.project.name} maxlength="40" spellcheck="false" placeholder="untitled" />
   </label>
   <p>The whole beat lives inside this link. Anyone who opens it hears it straight away, with no account and nothing uploaded.</p>
-  <textarea id="share-url" readonly rows="4" value={url} onfocus={(e) => (e.currentTarget as HTMLTextAreaElement).select()}></textarea>
+  <textarea id="share-url" readonly rows="4" aria-label="Link to this beat" value={url} onfocus={(e) => (e.currentTarget as HTMLTextAreaElement).select()}></textarea>
   <div class="row">
     <button class="btn on big" onclick={copy}><Icon name={copied ? 'check' : 'copy'} />{copied ? 'Copied' : 'Copy link'}</button>
     {#if canShare}<button class="btn big" onclick={native}><Icon name="share" />Share…</button>{/if}

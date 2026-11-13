@@ -5,7 +5,22 @@
 
   let { title, children, wide = false }: { title: string; children: Snippet; wide?: boolean } = $props();
   const close = () => (app.modal = null);
-  const focus = (node: HTMLElement) => node.focus();
+  // Focus goes into the dialog, Tab stays inside it, and whatever had focus before gets it back when it closes.
+  function focus(node: HTMLElement) {
+    const before = document.activeElement as HTMLElement | null;
+    if (!node.contains(document.activeElement)) node.focus();
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const all = [...node.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
+      if (!all.length) { e.preventDefault(); return; }
+      const first = all[0], last = all[all.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === node)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    node.addEventListener('keydown', trap);
+    return { destroy: () => { node.removeEventListener('keydown', trap); if (before?.isConnected) before.focus({ preventScroll: true }); } };
+  }
 </script>
 
 <div class="back" onpointerdown={(e) => { if (e.target === e.currentTarget) close(); }} role="presentation">

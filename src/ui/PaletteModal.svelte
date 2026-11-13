@@ -26,7 +26,7 @@
 
 <div class="back" onpointerdown={(e) => { if (e.target === e.currentTarget) app.modal = null; }} role="presentation">
   <div class="palette" role="dialog" aria-modal="true" aria-label="Find anything">
-    <input bind:value={query} onkeydown={key} use:focus type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"
+    <input bind:value={query} onkeydown={key} use:focus type="text" role="combobox" aria-label="Find an action, a sound, a setting or a beat" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"
       aria-activedescendant={results[at] ? `palette-${at}` : undefined} placeholder="Find an action, a sound, a setting, a beat…" spellcheck="false" autocomplete="off" />
     <div class="list" id="palette-list" role="listbox" aria-label="Results" bind:this={list}>
       {#each results as c, i (c.id)}

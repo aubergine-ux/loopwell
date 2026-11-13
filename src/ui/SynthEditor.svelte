@@ -129,5 +129,5 @@
     height: 16px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line); background: var(--raise); color: var(--dim);
     font: 700 8.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
   }
-  .tiny.on { background: var(--c); color: #fff; border-color: transparent; }
+  .tiny.on { background: var(--c); color: var(--on-c); border-color: transparent; }
 </style>

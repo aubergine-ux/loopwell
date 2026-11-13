@@ -8,6 +8,7 @@
   import { addSlice, auditionSlice, autoSlice, listInputs, removeSlice, setKind, sliceEvenly, startRecording, stopRecording } from '../sound.svelte';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
+  import { byKeyboard } from './focus';
   import Icon from './Icon.svelte';
   import Knob from './Knob.svelte';
 
@@ -106,6 +107,21 @@
     s[i] = clamp(fractionAt(e), s[i - 1] + 64, (s[i + 1] ?? 65536) - 64);
   }
 
+  function markKey(e: KeyboardEvent, i: number): void {
+    if (!byKeyboard(e.currentTarget)) return;
+    const s = t.slices;
+    const step = e.shiftKey ? 2048 : 256;
+    if (e.key === 'Delete' || e.key === 'Backspace') removeSlice(app.sel, i);
+    else if (e.key === 'Enter') auditionSlice(app.sel, i);
+    else if (i > 0 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      // on a reversed sample the picture is flipped, so the keys follow what is seen
+      const d = (e.key === 'ArrowRight') !== t.reverse ? step : -step;
+      s[i] = clamp(s[i] + d, s[i - 1] + 64, (s[i + 1] ?? 65536) - 64);
+    } else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   async function auto(): Promise<void> {
     if (t.kind !== 'slice') { t.slices = [0]; setKind(app.sel, 'slice'); }
     await autoSlice(app.sel, sensitivity / 127);
@@ -179,7 +195,8 @@
     {#if t.kind === 'slice'}
       {#each t.slices as s, i}
         <button class="mark" class:cur={t.note === i} class:fixed={i === 0} style:left="{shown(s)}%" aria-label="Slice {i + 1}"
-          onpointerdown={(e) => markDown(e, i)} onpointermove={markMove} onpointerup={() => (dragging = -1)}
+          onpointerdown={(e) => markDown(e, i)} onpointermove={markMove} onpointerup={() => (dragging = -1)} onkeydown={(e) => markKey(e, i)}
+          title="Drag, or use the arrow keys, to move this slice. Enter plays it, Delete removes it."
           ondblclick={(e) => { e.stopPropagation(); removeSlice(app.sel, i); }}><b>{i + 1}</b></button>
       {/each}
     {/if}
@@ -206,7 +223,7 @@
   .kits .btn, .tools .btn { height: 30px; padding: 0 9px; font-size: 10px; }
   .kits .pick { max-width: 160px; }
   .rec i { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); }
-  .rec.on { background: var(--rec); color: #fff; }
+  .rec.on { background: var(--rec); color: var(--on-c); }
   .rec.on i { background: #fff; animation: blink 1s steps(2, jump-none) infinite; }
   @keyframes blink { 50% { opacity: 0.3; } }
   .level { width: 80px; height: 8px; border-radius: 4px; background: var(--well); overflow: hidden; }
@@ -220,7 +237,7 @@
     touch-action: manipulation;
   }
   .slot:active { transform: translateY(2px); box-shadow: none; }
-  .slot.on { background: var(--c); color: #fff; border-color: transparent; text-shadow: 0 1px 1px rgb(0 0 0 / 0.3); }
+  .slot.on { background: var(--c); color: var(--on-c); border-color: transparent; text-shadow: 0 1px 1px rgb(0 0 0 / 0.3); }
   .wave {
     position: relative; height: 74px; border-radius: 10px; background: var(--inset); box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.16);
     overflow: hidden; cursor: pointer; touch-action: manipulation;
@@ -240,7 +257,7 @@
     position: absolute; left: 7px; bottom: 2px; min-width: 14px; padding: 0 3px; border-radius: 0 4px 4px 0; background: var(--ink); color: var(--panel);
     font: 700 9px/13px var(--mono);
   }
-  .mark.cur b { background: var(--c); color: #fff; }
+  .mark.cur b { background: var(--c); color: var(--on-c); }
   .sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
   @media (max-width: 720px) { .slots { grid-template-columns: repeat(5, 1fr); } }
 </style>

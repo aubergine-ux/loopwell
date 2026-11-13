@@ -48,18 +48,18 @@
     <div class="tools">
       <button class="btn ghost sq" onclick={undo} disabled={!app.canUndo} aria-label="Undo" title="Undo (Ctrl+Z)"><Icon name="undo" /></button>
       <button class="btn ghost sq" onclick={redo} disabled={!app.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Icon name="redo" /></button>
-      <button class="btn ghost sq" onclick={() => (app.modal = 'history')} aria-label="History" title="History: every change, and back to any of them"><Icon name="clock" /></button>
+      <button class="btn ghost sq history" onclick={() => (app.modal = 'history')} aria-label="History" title="History: every change, and back to any of them"><Icon name="clock" /></button>
       <span class="sep"></span>
       <button class="btn ghost sq" onclick={() => (app.modal = 'palette')} aria-label="Find anything" title="Find any action, sound or setting (Ctrl+K)"><Icon name="search" /></button>
       <button class="btn ghost" onclick={() => (app.modal = 'demos')} aria-label="Beats" title="Your beats, demo beats and new beat"><Icon name="grid" /><span>Beats</span></button>
-      <button class="btn ghost" class:live={!!community.me} onclick={() => (app.modal = 'community')} aria-label="Community"
+      <button class="btn ghost community" class:live={!!community.me} onclick={() => (app.modal = 'community')} aria-label="Community"
         title={community.server ? 'Gallery, cloud saves and sample packs' : 'Connect to a Loopwell server for a gallery, cloud saves and sample packs'}><Icon name="note" /><span>Community</span></button>
       <button class="btn ghost" onclick={() => (app.modal = 'export')} aria-label="Export" title="Export WAV, stems, MIDI or a project file"><Icon name="download" /><span>Export</span></button>
       <button class="btn ghost sq midi" class:live={app.midi.state === 'on'} onclick={midiClick} aria-label="MIDI"
         title={app.midi.state === 'on' ? `MIDI: ${app.midi.inputs.join(', ') || 'no devices connected'}` : 'Connect MIDI controllers'}>
         <Icon name="midi" /><i bind:this={midiLed}></i>
       </button>
-      <button class="btn ghost sq" onclick={cycleTheme} aria-label="Change colour theme" title="Theme: {themeName} (Shift+C)"><Icon name="theme" /></button>
+      <button class="btn ghost sq theme" onclick={cycleTheme} aria-label="Change colour theme" title="Theme: {themeName} (Shift+C)"><Icon name="theme" /></button>
       <button class="btn ghost sq" onclick={() => (app.modal = 'help')} aria-label="Shortcuts and help" title="Shortcuts and help (?)"><Icon name="help" /></button>
       <button class="btn on share" onclick={() => (app.modal = 'share')} aria-label="Share"><Icon name="share" /><span>Share</span></button>
     </div>
@@ -188,6 +188,8 @@
     .sep { display: none; }
   }
   @media (max-width: 520px) {
+    /* a phone's top bar keeps what is used most; the rest is one tap away in Find anything */
+    .tools .midi, .tools .theme, .tools .community, .tools .history { display: none; }
     .word { display: none; }
     .tools .share span { display: none; }
     .share { margin-left: 2px; padding: 0 10px !important; }

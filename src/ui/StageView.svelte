@@ -127,7 +127,7 @@
   .grow { flex: 1; }
   .rec { gap: 8px; }
   .rec i { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); }
-  .rec.on { background: var(--rec); color: #fff; }
+  .rec.on { background: var(--rec); color: var(--on-c); }
   .rec.on i { background: #fff; animation: blink 1s steps(2, jump-none) infinite; }
   @keyframes blink { 50% { opacity: 0.3; } }
 

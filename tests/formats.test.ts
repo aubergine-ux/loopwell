@@ -180,3 +180,48 @@ describe('genre templates', () => {
     }
   });
 });
+
+describe('project file versions', () => {
+  it('writes version 3 and still opens a version 2 file as the beat it was', async () => {
+    const { zipSync, unzipSync, strToU8, strFromU8 } = await import('fflate');
+    const { FILE_VERSION } = await import('../src/core/projectfile');
+    const { plain } = await import('./helpers');
+    const p = emptyProject();
+    p.name = 'three';
+    p.tracks[6].kind = 'bass';
+    p.buses = [{ name: 'DRUMS', vol: 90, mute: false, fx: [] }];
+    p.tracks[0].bus = 1;
+    p.patterns[0].mods[0][0] = 99;
+    const file = packProjectFile(p, []);
+    const manifest = JSON.parse(strFromU8(unzipSync(file)['project.json']));
+    expect(FILE_VERSION).toBe(3);
+    expect(manifest.version).toBe(3);
+    expect(plain(unpackProjectFile(file).project)).toEqual(plain(p));
+
+    // a file as 2.0 wrote it: version 2, and none of the fields added since
+    const old: any = JSON.parse(JSON.stringify(emptyProject()));
+    old.name = 'two';
+    old.bpm = 101;
+    delete old.buses; delete old.groove; delete old.grooveAmt; delete old.fx.revMute; delete old.fx.dlyMute;
+    for (const t of old.tracks) for (const k of ['bass', 'dsyn', 'bus', 'groove', 'grooveAmt', 'arpMode', 'arpRate', 'arpOct', 'arpGate']) delete t[k];
+    for (const pat of old.patterns) delete pat.mods;
+    old.patterns[0].steps[0][0] = 100;
+    const v2 = zipSync({ 'project.json': strToU8(JSON.stringify({ format: 'loopwell', version: 2, project: old, samples: [] })) });
+    const want = emptyProject();
+    want.name = 'two'; want.bpm = 101; want.patterns[0].steps[0][0] = 100;
+    expect(plain(unpackProjectFile(v2).project)).toEqual(plain(want));
+  });
+
+  it('opens a file from a version that does not exist yet, keeping what it understands', async () => {
+    const { zipSync, strToU8 } = await import('fflate');
+    const future: any = JSON.parse(JSON.stringify(emptyProject()));
+    future.bpm = 133;
+    future.somethingNew = { a: 1 };
+    future.tracks[0].kind = 'hologram';
+    const file = zipSync({ 'project.json': strToU8(JSON.stringify({ format: 'loopwell', version: 9, project: future, samples: [] })) });
+    const p = unpackProjectFile(file).project;
+    expect(p.bpm).toBe(133);
+    expect(p.tracks[0].kind).toBe('drum');
+    expect('somethingNew' in p).toBe(false);
+  });
+});

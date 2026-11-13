@@ -512,7 +512,7 @@
   input.narrow { flex: 0 0 84px; min-width: 0; }
   .btn { height: 30px; font-size: 10px; padding: 0 10px; white-space: nowrap; }
   .btn.sq { padding: 0; width: 30px; }
-  .btn.danger { background: var(--rec); color: #fff; border-color: transparent; }
+  .btn.danger { background: var(--rec); color: var(--on-c); border-color: transparent; }
   small { font: 600 11px var(--mono); color: var(--dim); }
   .card { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 12px; border-radius: 14px; background: var(--inset); }
   .card input { background: var(--panel); flex: none; }

@@ -7,6 +7,7 @@
   import { isLocked } from '../live/session.svelte';
   import { app } from '../state.svelte';
   import { frameNo, lively, meterScale, onFlash, onFrame } from '../visual';
+  import { byKeyboard } from './focus';
   import Icon from './Icon.svelte';
 
   let rows: HTMLElement;
@@ -121,6 +122,7 @@
     anchor = -1;
   }
   function rulerKey(e: KeyboardEvent): void {
+    if (!byKeyboard(e.currentTarget)) return;
     const r = app.range;
     const beat = 4;
     // Space is left alone: it always means play / stop
@@ -136,12 +138,35 @@
   }
   const outside = (s: number) => !!app.range && (s < app.range.from || s >= app.range.to);
 
+  // Keyboard: Tab reaches one step of the grid, and from there the arrow keys walk it.
+  // Enter switches a step on or off, + and - change how hard it hits, Shift+Enter opens its extras.
+  let kc = $state({ t: 0, s: 0 });
+  $effect(() => {
+    if (kc.t >= p.tracks.length || kc.s >= p.steps) kc = { t: Math.min(kc.t, p.tracks.length - 1), s: Math.min(kc.s, p.steps - 1) };
+  });
   function cellKey(e: KeyboardEvent, t: number, s: number): void {
+    let nt = t, ns = s;
+    const v = stepVel(t, s);
     if (e.key === 'Enter' && e.shiftKey) pickStep(t, s);
-    else if (e.key === 'Enter') setStep(t, s, stepVel(t, s) ? 0 : DEFAULT_VEL);
+    else if (e.key === 'Enter') { setStep(t, s, v ? 0 : DEFAULT_VEL); if (!v && !app.playing) padTap(t); }
+    // A step that was clicked has focus too, but someone using the mouse expects the arrow keys to go on
+    // choosing tracks and patterns. The grid's own keys are for when focus got here by keyboard.
+    else if (!byKeyboard(e.currentTarget)) return;
+    else if ((e.key === '+' || e.key === '=') && v) setStep(t, s, clamp(v + 10, 1, 127));
+    else if ((e.key === '-' || e.key === '_') && v) setStep(t, s, clamp(v - 10, 1, 127));
+    else if (e.key === 'ArrowRight') ns = Math.min(p.steps - 1, s + (e.ctrlKey || e.metaKey ? 4 : 1));
+    else if (e.key === 'ArrowLeft') ns = Math.max(0, s - (e.ctrlKey || e.metaKey ? 4 : 1));
+    else if (e.key === 'ArrowDown') nt = Math.min(p.tracks.length - 1, t + 1);
+    else if (e.key === 'ArrowUp') nt = Math.max(0, t - 1);
+    else if (e.key === 'Home') ns = 0;
+    else if (e.key === 'End') ns = p.steps - 1;
     else return;
     e.preventDefault();
     e.stopPropagation();
+    if (nt === t && ns === s) return;
+    kc = { t: nt, s: ns };
+    app.sel = nt;
+    rows.querySelector<HTMLElement>(`.cell[data-t="${nt}"][data-s="${ns}"]`)?.focus();
   }
 
   // The playhead and the flash of each hit are a handful of overlay elements moved with transforms, which the
@@ -224,7 +249,7 @@
 
 <div class="scroller" bind:this={scroller}>
   <div class="rows" class:wide={p.steps === 32} bind:this={rows} style:--steps={p.steps}
-    onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} oncontextmenu={menu} role="grid" tabindex="-1" aria-label="Step sequencer">
+    onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} oncontextmenu={menu} role="grid" tabindex="-1" aria-label="Step sequencer. Arrow keys move, Enter switches a step on or off, plus and minus change how hard it hits.">
     <i class="headcol" bind:this={headcol}></i>
     {#each p.tracks as t, ti (ti)}<i class="pop" data-pop={ti} style:--c="var(--t{t.color})"><b></b></i>{/each}
     <div class="row ruler">
@@ -263,7 +288,7 @@
             <i class="cell" class:out={outside(s)} class:on={v > 0} class:hold={v === 0 && held(ti, s)} class:alt={(s >> 2) & 1} class:bar={s % 4 === 0}
               class:pick={app.step?.t === ti && app.step.s === s} class:maybe={v > 0 && (modChance(m) > 0 || modCond(m) > 0)}
               data-t={ti} data-s={s} data-roll={v > 0 && modRatchet(m) > 1 ? modRatchet(m) : null} style:--v={v ? (0.25 + (v / 127) * 0.75).toFixed(2) : null}
-              role="gridcell" tabindex="-1" aria-label="{t.name} step {s + 1}{v ? `, velocity ${v}` : ''}{v && m ? `, ${modLabel(m)}` : ''}" aria-selected={v > 0}
+              role="gridcell" tabindex={kc.t === ti && kc.s === s ? 0 : -1} onfocus={() => { kc = { t: ti, s }; }} aria-label="{t.name} step {s + 1}{v ? `, velocity ${v}` : ''}{v && m ? `, ${modLabel(m)}` : ''}" aria-selected={v > 0}
               title={v && m ? modLabel(m) : null}
               onkeydown={(e) => cellKey(e, ti, s)}></i>
           {/each}
@@ -314,7 +339,7 @@
   .meter i { display: block; height: 100%; background: var(--c); transform-origin: left; transform: scaleX(0); will-change: transform; }
   .locked { color: var(--dim); display: grid; place-items: center; }
   .warn {
-    width: 16px; height: 16px; border-radius: 50%; background: var(--rec); color: #fff;
+    width: 16px; height: 16px; border-radius: 50%; background: var(--rec); color: var(--on-c);
     font: 700 11px/16px var(--mono); text-align: center; cursor: help;
   }
   .ms {
@@ -357,6 +382,7 @@
     background: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--panel) 55%, transparent) 3px 5px);
   }
   .cell.pick { outline: 2px dashed var(--ink); outline-offset: -2px; }
+  .cell:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; z-index: 2; }
   /* the playhead: one column laid over the step that is sounding */
   .headcol {
     position: absolute; left: 0; top: 0; z-index: 1; opacity: 0; pointer-events: none; will-change: transform;
@@ -379,6 +405,7 @@
   .tick.bar:first-child { margin-left: 0; }
   .tick.in { background: var(--accent); color: var(--accent-ink); }
   .cell.out { opacity: 0.38; }
+  @media (pointer: coarse) { .row.ruler { height: 26px; } }
   .row.add { height: 30px; }
   .row.add .head { background: none; flex-basis: auto; padding: 0; }
   .row.add .btn { height: 26px; font-size: 10px; padding: 0 8px; gap: 3px; }

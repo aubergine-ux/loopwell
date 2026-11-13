@@ -706,7 +706,8 @@ function checkHash(): void {
 }
 
 export function boot(): void {
-  setTheme(loadTheme() ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'cream'));
+  // someone whose system asks for more contrast gets the theme made for that; anyone can change it afterwards
+  setTheme(loadTheme() ?? (matchMedia('(prefers-contrast: more)').matches ? 'contrast' : matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'cream'));
   const saved = loadSaved();
   app.firstRun = !saved;
   app.project = saved ? sanitize(saved) : starter();

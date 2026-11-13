@@ -218,7 +218,7 @@
   .livetab { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .livetab i { width: 8px; height: 8px; border-radius: 50%; background: var(--t3); box-shadow: 0 0 8px var(--t3); }
   .livetab i.off { background: var(--rec); box-shadow: none; animation: wait 1s steps(2, jump-none) infinite; }
-  .livetab b { padding: 0 5px; border-radius: 7px; background: var(--rec); color: #fff; font-size: 9px; }
+  .livetab b { padding: 0 5px; border-radius: 7px; background: var(--rec); color: var(--on-c); font-size: 9px; }
   @keyframes wait { 50% { opacity: 0.3; } }
   .content { min-height: 252px; }
 
@@ -231,6 +231,7 @@
   footer a { color: inherit; }
   footer kbd { font: inherit; padding: 1px 5px; border: 1px solid currentColor; border-radius: 4px; }
   :global([data-theme='slate']) footer, :global([data-theme='arcade']) footer, :global([data-theme='night']) footer { color: #9a9fab; }
+  :global([data-theme='contrast']) footer { color: #fff; opacity: 1; }
 
   .gate {
     position: fixed; inset: 0; z-index: 80; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
@@ -265,7 +266,7 @@
     font-size: 14px; font-weight: 600; box-shadow: 0 16px 40px -10px rgb(0 0 0 / 0.6); max-width: min(92vw, 520px);
   }
   .toast { animation: rise 0.22s cubic-bezier(.2,.9,.3,1.2); text-align: center; }
-  .toast.error { background: var(--rec); color: #fff; }
+  .toast.error { background: var(--rec); color: var(--on-c); }
   .busy { display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
   .bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--panel) 25%, transparent); overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--accent); transition: width 120ms; }

@@ -222,10 +222,10 @@
   }
   .list:focus-visible { box-shadow: inset 0 0 0 2px var(--c); }
   .row { display: flex; align-items: center; border-radius: 7px; }
-  .row.on { background: var(--c); color: #fff; }
+  .row.on { background: var(--c); color: var(--on-c); }
   .star { flex: none; width: 28px; height: 30px; border: 0; background: none; color: var(--dim); opacity: 0.45; font-size: 14px; }
   .star.on { opacity: 1; color: var(--t2); }
-  .row.on .star { color: #fff; }
+  .row.on .star { color: var(--on-c); }
   .pick {
     flex: 1; min-width: 0; height: 30px; display: flex; align-items: baseline; gap: 8px; padding: 0 8px 0 0; border: 0; background: none;
     color: inherit; text-align: left; font: 600 12px var(--mono);

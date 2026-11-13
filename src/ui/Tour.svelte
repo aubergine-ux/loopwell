@@ -90,7 +90,7 @@
   header { display: flex; align-items: center; gap: 8px; }
   header b { flex: 1; font-size: 15px; }
   .n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font: 700 11px var(--mono); }
-  .n.ok { background: var(--t3); color: #fff; }
+  .n.ok { background: var(--t3); color: var(--on-c); }
   .of { font: 600 10px var(--mono); color: var(--dim); }
   p { margin: 8px 0 10px; font-size: 13px; line-height: 1.45; }
   kbd { font: 600 10px var(--mono); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); background: var(--raise); }

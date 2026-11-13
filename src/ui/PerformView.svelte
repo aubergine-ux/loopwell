@@ -5,6 +5,7 @@
   import { PATTERN_NAMES } from '../core/types';
   import { app } from '../state.svelte';
   import { fade, onFlash } from '../visual';
+  import { byKeyboard } from './focus';
 
   // Pads first: the whole screen is for playing. Track pads on top, a second
   // bank that plays the selected track's notes or slices, pattern switching,
@@ -42,6 +43,21 @@
   });
   const notePad = (e: PointerEvent, pitch: number) => press(e, (vel) => { const t = app.sel; noteDown(t, pitch, vel); return () => noteUp(t, pitch); });
 
+  // from the keyboard: Enter plays a pad for as long as it is held
+  function padKey(e: KeyboardEvent, on: boolean, start: () => void, stop: () => void): void {
+    if (e.key !== 'Enter' || e.repeat) return;
+    e.preventDefault();
+    if (on) start(); else stop();
+  }
+  function sweepKey(e: KeyboardEvent): void {
+    if (!byKeyboard(e.currentTarget)) return;
+    const d = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -8 : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 8 : e.key === 'Home' || e.key === 'Escape' ? -p.fx.filter : 0;
+    if (!d && e.key !== 'Home') return;
+    p.fx.filter = Math.max(-64, Math.min(63, p.fx.filter + d));
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   // touch strip: sweeps the master filter while a finger is on it, and springs back when it lifts
   let sweeping = $state(false);
   let rest = 0;
@@ -69,7 +85,8 @@
   <div class="pads">
     {#each p.tracks as t, i (i)}
       <button class="pad" class:sel={app.sel === i} class:muted={t.mute} data-pad={i} style:--c="var(--t{t.color})" aria-label="Pad {i + 1}: {t.name}"
-        onpointerdown={(e) => trackPad(e, i)} onpointerup={release} onpointercancel={release} oncontextmenu={(e) => e.preventDefault()}>
+        onpointerdown={(e) => trackPad(e, i)} onpointerup={release} onpointercancel={release} oncontextmenu={(e) => e.preventDefault()}
+        onkeydown={(e) => padKey(e, true, () => { app.sel = i; padDown(i, 110); }, () => {})} onkeyup={(e) => padKey(e, false, () => {}, () => padUp(i))}>
         <i class="glow"></i>
         <span class="num">{i + 1}</span>
         <span class="nm">{t.name}</span>
@@ -81,7 +98,8 @@
     <div class="pads bank" style:--c="var(--t{cur.color})">
       {#each bank as b, i (i)}
         <button class="pad note" data-note={b.pitch} aria-label="{cur.name} {cur.kind === 'slice' ? 'slice' : 'note'} {b.label}"
-          onpointerdown={(e) => notePad(e, b.pitch)} onpointerup={release} onpointercancel={release} oncontextmenu={(e) => e.preventDefault()}>
+          onpointerdown={(e) => notePad(e, b.pitch)} onpointerup={release} onpointercancel={release} oncontextmenu={(e) => e.preventDefault()}
+          onkeydown={(e) => padKey(e, true, () => noteDown(app.sel, b.pitch, 110), () => {})} onkeyup={(e) => padKey(e, false, () => {}, () => noteUp(app.sel, b.pitch))}>
           <span class="num">{b.label}</span>
         </button>
       {/each}
@@ -108,7 +126,7 @@
     <div class="group wide">
       <span class="label">Filter sweep · hold and slide</span>
       <div class="touch" class:on={sweeping} onpointerdown={sweep} onpointermove={sweep} onpointerup={endSweep} onpointercancel={endSweep}
-        role="slider" tabindex="-1" aria-label="Filter sweep" aria-valuenow={p.fx.filter} aria-valuemin={-64} aria-valuemax={63}>
+        onkeydown={sweepKey} role="slider" tabindex="0" aria-label="Filter sweep. Arrow keys sweep, Home puts it back." aria-valuenow={p.fx.filter} aria-valuemin={-64} aria-valuemax={63}>
         <i style:left="{((p.fx.filter + 64) / 127) * 100}%"></i>
       </div>
     </div>
@@ -122,7 +140,7 @@
     position: relative; aspect-ratio: 1.5; min-height: 84px; border: 0; border-radius: 18px; padding: 10px;
     background: color-mix(in srgb, var(--c) 82%, var(--panel));
     box-shadow: 0 6px 0 color-mix(in srgb, var(--c) 55%, #000), inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -12px 22px -12px rgb(0 0 0 / 0.25);
-    display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; color: #fff; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; color: var(--on-c); overflow: hidden;
     touch-action: none; transition: transform 50ms, box-shadow 50ms;
   }
   .pad:global(.down) { transform: translateY(6px); box-shadow: 0 0 0 transparent, inset 0 2px 8px rgb(0 0 0 / 0.3); }

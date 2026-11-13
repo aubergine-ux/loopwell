@@ -8,6 +8,7 @@ export const THEMES = [
   { id: 'night', name: 'Night' },
   { id: 'slate', name: 'Slate' },
   { id: 'arcade', name: 'Arcade' },
+  { id: 'contrast', name: 'High contrast' },
 ];
 
 export const TABS: { id: Tab; label: string }[] = [

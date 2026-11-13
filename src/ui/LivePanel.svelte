@@ -101,7 +101,7 @@
   .right { padding-left: 22px; border-left: 1px solid var(--line); }
   .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .btn { height: 30px; font-size: 10px; padding: 0 10px; }
-  .badge { padding: 1px 7px; border-radius: 6px; background: var(--rec); color: #fff; font: 700 9.5px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+  .badge { padding: 1px 7px; border-radius: 6px; background: var(--rec); color: var(--on-c); font: 700 9.5px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
   .peers { display: flex; flex-wrap: wrap; gap: 6px; }
   .peer { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 14px; background: var(--inset); font-size: 13px; }
   .peer i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
@@ -116,7 +116,7 @@
     height: 24px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--raise); color: var(--dim);
     font: 700 9.5px var(--mono); letter-spacing: 0.06em;
   }
-  .lock.on { background: var(--c); color: #fff; border-color: transparent; }
+  .lock.on { background: var(--c); color: var(--on-c); border-color: transparent; }
   .feed { height: 150px; overflow-y: auto; padding: 8px 10px; border-radius: 12px; background: var(--inset); box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.14); user-select: text; -webkit-user-select: text; }
   .feed p { margin: 0 0 4px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
   .feed b { color: var(--c); }
