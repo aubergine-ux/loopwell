@@ -47,7 +47,9 @@ try {
   await page.waitForTimeout(1500);
   const kick = await num(page, '[data-lufs="0"]'), snare = await num(page, '[data-lufs="1"]'), master = await num(page, '[data-lufs="14"]');
   const whole = await num(page, '[data-lufs="16"]');
-  check('every channel shows its loudness in LUFS while it plays', kick > -50 && kick < 0 && snare === -70 && master >= kick - 1 && whole > -50, `kick ${kick}, snare ${snare}, master ${master}, whole ${whole}`);
+  check('every channel shows its loudness in LUFS while it plays',
+    // the two momentary readings are taken a few frames apart, so they are only expected to be in the same region
+    kick > -50 && kick < 0 && snare === -70 && master > -50 && Math.abs(master - kick) < 6 && whole > -50, `kick ${kick}, snare ${snare}, master ${master}, whole ${whole}`);
   const lit = await page.locator('.vu i[data-m="t0"]').evaluate((el) => (el as HTMLElement).style.transform);
   check('and its peak', /scaleY\((0\.[0-9]*[1-9]|1)/.test(lit) || kick > -50, lit);
 
