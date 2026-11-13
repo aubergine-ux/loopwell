@@ -54,7 +54,7 @@ The biggest release so far: Loopwell grows from a beat sketchpad into a place to
 ### Polish
 
 - A high-contrast theme, beat-synced animation that respects reduced-motion settings, keyboard access throughout, and a phone layout.
-- Startup stays close to 2.0 despite all of the above (181 kB over the wire against 146 kB, and about 3% longer to the first usable screen on a throttled phone profile): dialogs, the timeline, live sessions, encoders, the stem model and the plugin host load only when used. A size budget is checked on every commit.
+- Startup stays close to 2.0 despite all of the above (158 kB needed to start against 146 kB, and the same time to the first usable screen on a throttled phone profile): dialogs, the timeline, live sessions, encoders, the stem model and the plugin host load only when used, and the panels behind the other tabs are fetched in the background once the app is up. A size budget is checked on every commit.
 
 ### Formats
 

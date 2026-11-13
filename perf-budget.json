@@ -1,7 +1,7 @@
 {
-  "startJsGzip": 175,
-  "startJsRaw": 480,
-  "startCssGzip": 18,
+  "startJsGzip": 155,
+  "startJsRaw": 420,
+  "startCssGzip": 14,
   "embedGzip": 60,
   "lazy": {
     "live sessions (Yjs)": "^engine\\.svelte-.*\\.js$",

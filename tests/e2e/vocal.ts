@@ -158,6 +158,7 @@ try {
 
   // ---- it all travels ----
   await tab(page, 'Rack');
+  await page.waitForSelector('.rack .fx header b');
   const rackWas = await page.locator('.rack .fx header b').allTextContents();
   await page.getByRole('button', { name: 'Share' }).click();
   const link = await page.locator('#share-url').inputValue();
@@ -168,9 +169,11 @@ try {
   await page.waitForTimeout(500);
   await page.keyboard.press('Space').catch(() => {});
   await tab(page, 'Lyrics');
+  await page.waitForSelector('.lyrics li');
   const back = await page.locator('.lyrics li').evaluateAll((els) => els.map((e) => (e.querySelector('.text') as HTMLInputElement).value));
   check('a share link carries the lyrics', JSON.stringify(back) === JSON.stringify(pinned), back.join(' / '));
   await tab(page, 'Rack');
+  await page.waitForSelector('.rack .fx header b');
   const names = await page.locator('.rack .fx header b').allTextContents();
   check('and the vocal rack', names.length > 0 && JSON.stringify(names) === JSON.stringify(rackWas), names.join(', '));
 

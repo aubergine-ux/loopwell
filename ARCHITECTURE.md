@@ -77,6 +77,7 @@ The page starts with the sequencer, the engine and the panels under the grid. Ev
 | :-- | :-- |
 | A dialog is opened | That dialog (`ui/*Modal.svelte`) |
 | Song view, Pads view, Live view | `Timeline`, `PerformView`, `StageView` |
+| The app is up and idle | The panels behind the tabs other than Sound and Keys, so they are there by the time a tab is clicked |
 | A live session starts | `live/engine` and Yjs |
 | MP3/OGG export | The WebAssembly encoders |
 | Video export | `video/render` and Mediabunny |

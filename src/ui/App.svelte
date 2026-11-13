@@ -9,18 +9,12 @@
   import { app, TABS } from '../state.svelte';
   import { SOUND_TYPE } from './dragsound';
   import { initLibrary } from '../projects.svelte';
-  import FxPanel from './FxPanel.svelte';
   import PaletteModal from './PaletteModal.svelte';
   import Grid from './Grid.svelte';
   import { learn } from '../learn.svelte';
   import ChallengeBar from './ChallengeBar.svelte';
   // Dialogs and the less-used views are fetched when they are first opened, so they cost nothing at startup.
-  import CodePanel from './CodePanel.svelte';
-  import LyricsPanel from './LyricsPanel.svelte';
-  import MasterPanel from './MasterPanel.svelte';
   import Icon from './Icon.svelte';
-  import MixPanel from './MixPanel.svelte';
-  import RackPanel from './RackPanel.svelte';
   import Pads from './Pads.svelte';
   import RollPanel from './RollPanel.svelte';
   import { midimap, setLearning } from '../midimap.svelte';
@@ -30,7 +24,6 @@
   import { startTour } from '../tour.svelte';
   import Tips from './Tips.svelte';
   import Tour from './Tour.svelte';
-  import ToolsPanel from './ToolsPanel.svelte';
   import Transport from './Transport.svelte';
 
   boot();
@@ -71,6 +64,10 @@
   }
 
   onMount(() => {
+    // The panels behind the other tabs aren't needed to start, so they are fetched once the app is up and idle:
+    // by the time anyone clicks a tab it is already here.
+    const warm = () => { for (const load of [() => import('./ToolsPanel.svelte'), () => import('./RackPanel.svelte'), () => import('./MixPanel.svelte'), () => import('./FxPanel.svelte'), () => import('./LyricsPanel.svelte'), () => import('./CodePanel.svelte'), () => import('./MasterPanel.svelte')]) void load().catch(() => {}); };
+    if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 4000 }); else setTimeout(warm, 1500);
     void autoConnectMidi();
     // browsers only start audio after a gesture, so wake the engine on the first one
     const wake = () => void audio.resume();
@@ -117,13 +114,13 @@
         <div class="content" role="tabpanel">
           {#if app.tab === 'sound'}<SoundPanel />
           {:else if app.tab === 'keys'}<RollPanel />
-          {:else if app.tab === 'tools'}<ToolsPanel />
-          {:else if app.tab === 'rack'}<RackPanel />
-          {:else if app.tab === 'mix'}<MixPanel />
-          {:else if app.tab === 'fx'}<FxPanel />
-          {:else if app.tab === 'lyrics'}<LyricsPanel />
-          {:else if app.tab === 'code'}<CodePanel />
-          {:else if app.tab === 'master'}<MasterPanel />
+          {:else if app.tab === 'tools'}{#await import('./ToolsPanel.svelte') then m}<m.default />{/await}
+          {:else if app.tab === 'rack'}{#await import('./RackPanel.svelte') then m}<m.default />{/await}
+          {:else if app.tab === 'mix'}{#await import('./MixPanel.svelte') then m}<m.default />{/await}
+          {:else if app.tab === 'fx'}{#await import('./FxPanel.svelte') then m}<m.default />{/await}
+          {:else if app.tab === 'lyrics'}{#await import('./LyricsPanel.svelte') then m}<m.default />{/await}
+          {:else if app.tab === 'code'}{#await import('./CodePanel.svelte') then m}<m.default />{/await}
+          {:else if app.tab === 'master'}{#await import('./MasterPanel.svelte') then m}<m.default />{/await}
           {:else if app.tab === 'live' && live.on}{#await import('./LivePanel.svelte') then m}<m.default  />{/await}
           {:else}<SongPanel />{/if}
         </div>
