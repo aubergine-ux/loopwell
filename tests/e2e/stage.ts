@@ -113,6 +113,7 @@ try {
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(100);
   await page.getByRole('button', { name: 'Song', exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.tl .clip').length === 8, undefined, { timeout: 10000 }).catch(() => {});
   check('one undo brings the old arrangement back', (await page.locator('.tl .clip').count()) === 8, `${await page.locator('.tl .clip').count()} clips`);
   await page.getByRole('button', { name: 'Pattern', exact: true }).click();
   await page.locator('.row[data-row="0"] .name').click();
