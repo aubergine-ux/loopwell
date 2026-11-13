@@ -108,6 +108,8 @@ export function toY(doc: Y.Doc, p: Project, trackIds: string[], origin: unknown 
     // groups are few and small, so the list is replaced whole; left out until a beat has one
     if ((root.has('buses') || p.buses.length) && !same(root.get('buses'), p.buses)) root.set('buses', JSON.parse(JSON.stringify(p.buses)));
     if ((root.has('lyrics') || p.lyrics.length) && !same(root.get('lyrics'), p.lyrics)) root.set('lyrics', JSON.parse(JSON.stringify(p.lyrics)));
+    if ((root.has('code') || p.code) && root.get('code') !== p.code) root.set('code', p.code);
+    if (root.get('codeOn') !== p.codeOn && (root.has('codeOn') || !p.codeOn)) root.set('codeOn', p.codeOn);
     const mlanes: Json = {};
     for (const l of a.lanes) if (l.track < 0) mlanes[l.param] = laneValue(l);
     syncMap(child(root, 'mlanes', () => new Y.Map()), mlanes);
@@ -135,6 +137,8 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
   project.fx = (root.get('fx') as Y.Map<unknown> | undefined)?.toJSON() ?? {};
   project.buses = root.get('buses') ?? [];
   project.lyrics = root.get('lyrics') ?? [];
+  project.code = root.get('code') ?? '';
+  project.codeOn = root.get('codeOn') ?? true;
   project.mastering = (root.get('mastering') as Y.Map<unknown> | undefined)?.toJSON();
   const loop = ((root.get('loop') as Y.Map<unknown> | undefined)?.toJSON() ?? {}) as Json;
   const clips: Partial<Clip>[] = [], lanes: Json[] = [];
@@ -227,6 +231,7 @@ export function describeChange(before: Project, after: Project): string {
   if (!same(before.fx, after.fx)) say('master effects');
   if (!same(before.buses, after.buses)) say('groups');
   if (!same(before.lyrics, after.lyrics)) say('lyrics');
+  if (before.code !== after.code || before.codeOn !== after.codeOn) say('code');
   if (!same(before.mastering, after.mastering)) say('mastering');
   if (after.tracks.length > before.tracks.length) say(`added ${after.tracks[after.tracks.length - 1].name}`);
   if (after.tracks.length < before.tracks.length) say('removed a track');

@@ -1,6 +1,6 @@
 import { emptyProject, type Project } from './core/types';
 
-export type Tab = 'sound' | 'keys' | 'tools' | 'rack' | 'mix' | 'fx' | 'song' | 'lyrics' | 'master' | 'live';
+export type Tab = 'sound' | 'keys' | 'tools' | 'rack' | 'mix' | 'fx' | 'song' | 'lyrics' | 'master' | 'code' | 'live';
 export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders' | 'samples' | 'midi' | 'history' | 'palette' | 'stems' | 'video' | 'plugins' | 'plugin';
 
 export const THEMES = [
@@ -21,6 +21,7 @@ export const TABS: { id: Tab; label: string }[] = [
   { id: 'song', label: 'Song' },
   { id: 'lyrics', label: 'Lyrics' },
   { id: 'master', label: 'Master' },
+  { id: 'code', label: 'Code' },
 ];
 
 /** Everything the interface reads. `project` is the beat; the rest is view state. */

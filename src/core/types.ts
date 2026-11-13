@@ -252,6 +252,9 @@ export interface Project {
   master: number; // 100 = unity
   lyrics: LyricLine[]; // sorted by `at`
   mastering: Mastering;
+  /** Live code: patterns written as text (see mini.ts), played alongside the grid while `codeOn`. */
+  code: string;
+  codeOn: boolean;
 }
 
 /** Delay times in 16th-note steps. */
@@ -392,7 +395,7 @@ export function emptyProject(): Project {
     patterns: Array.from({ length: NUM_PATTERNS }, () => newPattern(tracks.length)),
     arr: emptyArrangement(tracks.length, 16), songMode: false,
     scaleRoot: 0, scaleType: 1, scaleLock: true,
-    fx: defaultFx(), master: 100, lyrics: [], mastering: defaultMastering(),
+    fx: defaultFx(), master: 100, lyrics: [], mastering: defaultMastering(), code: '', codeOn: true,
   };
 }
 
@@ -538,6 +541,7 @@ export function sanitize(raw: any): Project {
     lyrics: (Array.isArray(raw.lyrics) ? raw.lyrics.slice(0, MAX_LYRICS) : [])
       .map((l: any) => ({ at: int(l?.at, 0, MAX_SONG_STEPS - 1, 0), text: str(l?.text, 120, '') }))
       .sort((a: LyricLine, b: LyricLine) => a.at - b.at),
+    code: str(raw.code, 4000, ''), codeOn: raw.codeOn !== false,
     mastering: {
       on: !!raw.mastering?.on,
       low: int(raw.mastering?.low, 0, 127, 64), mid: int(raw.mastering?.mid, 0, 127, 64), high: int(raw.mastering?.high, 0, 127, 64),

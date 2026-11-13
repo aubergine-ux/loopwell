@@ -13,6 +13,7 @@ import { BassVoice, DrumVoice, emptyBassPatch, emptyDrumPatch, type BassPatch, t
 import { SampleVoice, SynthVoice, emptyPatch, type SampleData, type SynthPatch } from './dsp/voices';
 import { wavetable, type Wavetable } from './dsp/wavetable';
 import { PARAMS, paramIndex } from './params';
+import { codeInfo, codeKey, compileCode, type CodeLine } from './mini';
 import { toFrame } from './slicer';
 import { LoudnessMeter } from './loudness';
 import { DELAY_DIVS, LFO_DIVS, MAX_BUSES, MAX_INSERTS, MAX_TRACKS, emptyProject, type Clip, type InsertFx, type Pattern, type Project, type Track } from './types';
@@ -138,6 +139,9 @@ export class Engine {
   /** The sound plugins send back, a stereo pair per track. It joins the track before its effects, like a voice. */
   ext: ({ l: Float32Array; r: Float32Array } | undefined)[] = [];
   private extPos = 0;
+  // live code, compiled: remade only when the text (or what it refers to) changes
+  private code: CodeLine[] = [];
+  private codeKey = '';
   /** Where the block being made starts, counted from the start of the `process` call: add it to an `onPlug` offset. */
   blockAt = 0;
   private inBlock = false;
@@ -244,6 +248,10 @@ export class Engine {
 
   setProject(p: Project): void {
     this.project = p;
+    if (p.code) {
+      const key = codeKey(p.code, p);
+      if (key !== this.codeKey) { this.codeKey = key; this.code = compileCode(p.code, codeInfo(p), this.code); }
+    } else if (this.codeKey) { this.codeKey = ''; this.code = []; }
     if (!this.inSong) this.clock.bpm = p.bpm;
     this.clock.swing = p.swing;
     const sr = this.sampleRate;
@@ -640,6 +648,23 @@ export class Engine {
     return (x >>> 0) / 4294967296;
   }
 
+  /** Start the live-code hits that fall inside this step. `cyc` counts bars, for patterns that change from bar to bar. */
+  private codeStep(step: number, cyc: number, sps: number, offset: number): void {
+    const lines = this.code, steps = this.project.steps;
+    const lo = step / steps - 1e-9, hi = (step + 1) / steps - 1e-9;
+    for (let k = 0; k < lines.length; k++) {
+      const ln = lines[k];
+      if (!ln.cycles.length || ln.track >= this.project.tracks.length) continue;
+      const c = ln.cycles[cyc % ln.cycles.length], t = c.t;
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] < lo) continue;
+        if (t[i] >= hi) break;
+        const delay = (t[i] * steps - step) * sps;
+        this.at(offset, delay > 0 ? delay : 0, ln.track, c.v[i], c.p[i], Math.max(64, c.d[i] * steps * sps * 0.96));
+      }
+    }
+  }
+
   /** Play something `delay` frames after the frame the current step landed on. */
   private at(offset: number, delay: number, track: number, vel: number, pitch: number, gate: number): void {
     if (delay < 0.5) { this.emit(track, vel, pitch, gate); return; }
@@ -786,6 +811,7 @@ export class Engine {
       // notes are cut where their clip ends
       this.stepTrack(t, p.tracks[t], pat, along % p.steps, Math.floor(along / p.steps), s - bar, c.start + c.len - s, sps, offset);
     }
+    if (p.codeOn && this.code.length && s - bar < p.steps) this.codeStep(s - bar, Math.floor(bar / p.steps), sps, offset);
     if (this.metronome && (s - bar) % 4 === 0) this.click(s === bar, offset);
     if (this.onStep) {
       const info = this.info;
@@ -867,6 +893,7 @@ export class Engine {
       const pat = p.patterns[which === LAUNCH_FOLLOW ? this.pattern : which];
       if (pat) this.stepTrack(t, p.tracks[t], pat, step, this.loops, step, Infinity, sps, offset);
     }
+    if (p.codeOn && this.code.length) this.codeStep(step, this.chain ? this.songPos : this.loops, sps, offset);
     if (this.onStep) {
       const info = this.info; // reused: nothing on the audio path allocates
       info.step = step; info.pattern = this.pattern; info.song = -1; info.offset = offset; info.count = this.count;

@@ -19,7 +19,7 @@ import { DEFAULT_VEL, MAX_STEPS, NUM_PATTERNS, defaultMastering, newTrack, sanit
 
 const VERSION = 2;
 const V1_PATTERNS = 4;
-const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7, Mix = 8, Lyrics = 9, Master = 10, Plugins = 11 }
+const enum Chunk { Settings = 1, Tracks = 2, Patterns = 3, Timeline = 4, Sound = 5, Creative = 6, Instruments = 7, Mix = 8, Lyrics = 9, Master = 10, Plugins = 11, Code = 12 }
 const ALL_TRACKS = 255;
 export const HASH_KEY = 'b';
 
@@ -571,6 +571,7 @@ export function packProject(p: Project): Uint8Array {
   // last, because it changes what kind a track is and the patterns are read by kind
   if (p.tracks.some((t) => t.kind === 'bass' || t.kind === 'dsyn')) part(Chunk.Instruments, writeInstruments);
   if (p.tracks.some((t) => t.kind === 'plugin')) part(Chunk.Plugins, writePlugins);
+  if (p.code.trim()) part(Chunk.Code, (c) => { c.u8(p.codeOn ? 1 : 0); c.text(p.code); });
   return w.bytes();
 }
 
@@ -615,6 +616,9 @@ export function unpackProject(bytes: Uint8Array): Project {
     } else if (tag === Chunk.Instruments) {
       if (!raw.patterns) throw new Error('instruments before patterns');
       readInstruments(c, raw);
+    } else if (tag === Chunk.Code) {
+      raw.codeOn = !!(c.u8() & 1);
+      raw.code = c.text();
     } else if (tag === Chunk.Plugins) {
       if (!raw.patterns) throw new Error('plugins before patterns');
       readPlugins(c, raw);

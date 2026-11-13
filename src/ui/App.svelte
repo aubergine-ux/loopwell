@@ -20,6 +20,7 @@
   import JoinModal from './JoinModal.svelte';
   import LiveCursors from './LiveCursors.svelte';
   import LivePanel from './LivePanel.svelte';
+  import CodePanel from './CodePanel.svelte';
   import LyricsPanel from './LyricsPanel.svelte';
   import MasterPanel from './MasterPanel.svelte';
   import Icon from './Icon.svelte';
@@ -133,6 +134,7 @@
           {:else if app.tab === 'mix'}<MixPanel />
           {:else if app.tab === 'fx'}<FxPanel />
           {:else if app.tab === 'lyrics'}<LyricsPanel />
+          {:else if app.tab === 'code'}<CodePanel />
           {:else if app.tab === 'master'}<MasterPanel />
           {:else if app.tab === 'live' && live.on}<LivePanel />
           {:else}<SongPanel />{/if}
