@@ -61,8 +61,7 @@
     p.code = '';
   }
   function keys(e: KeyboardEvent): void {
-    // Tab moves on, as everywhere else; the app's own single-letter shortcuts stay out of the way of typing
-    e.stopPropagation();
+    // the app leaves its single-key shortcuts alone while something is being typed; Escape is the way back out to them
     if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur();
   }
   /** Put the cursor where a mistake is. */
@@ -104,7 +103,7 @@
       <button class="btn ghost" class:on={help} onclick={() => (help = !help)} aria-expanded={help}>How to write it</button>
       <span class="count" class:near={p.code.length > MAX_CODE - 200}>{p.code.length} / {MAX_CODE}</span>
     </div>
-    <textarea bind:this={area} value={p.code} oninput={input} onkeydown={keys} onkeyup={(e) => e.stopPropagation()} rows={Math.max(5, Math.min(14, rows + 1))}
+    <textarea bind:this={area} value={p.code} oninput={input} onkeydown={keys} rows={Math.max(5, Math.min(14, rows + 1))}
       spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Live code" aria-describedby="code-status"
       placeholder={'kick:  x ~ ~ x  ~ ~ x ~\nhat:   [x x x]*4\nlead:  <c4 eb4 g4> ~ [c5 g4]/2'}></textarea>
     <div id="code-status" class="status" role="status" aria-live="polite">

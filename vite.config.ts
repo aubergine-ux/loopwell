@@ -1,6 +1,9 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+
+const version = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
 // The desktop app (Tauri sets this while building) loads from disk, so it has no use for a service worker.
 const desktop = !!process.env.TAURI_ENV_PLATFORM;
@@ -8,6 +11,7 @@ const desktop = !!process.env.TAURI_ENV_PLATFORM;
 export default defineConfig({
   // relative base, so the build works from any path (GitHub Pages serves it from /loopwell/)
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
     svelte(),
     !desktop && VitePWA({

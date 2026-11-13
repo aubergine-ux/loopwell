@@ -63,6 +63,12 @@ try {
   check('letters and the space bar go into the text, not to the app\'s shortcuts', (await area.inputValue()).endsWith('snare: ~ x m s ') && (await loudest(page, 600)) > 0.05
     && (await page.locator('.row.off').count()) === 0);
 
+  await page.keyboard.press('Control+k');
+  await page.waitForSelector('.palette input');
+  check('the command palette still opens from inside the editor', true);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.palette'));
+
   // a mistake
   await area.fill('kick: x*4 [\nhat: [x x x]*4');
   await page.waitForTimeout(200);

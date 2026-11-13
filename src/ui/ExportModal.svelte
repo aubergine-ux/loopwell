@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { exportAudio, exportMidiFile, exportStems, handleFiles, saveProjectFile, type AudioFormat } from '../actions.svelte';
+  import { exportAudio, exportBundle, exportDawproject, exportMidiFile, exportStems, handleFiles, saveProjectFile, type AudioFormat } from '../actions.svelte';
   import { QUALITY_LABELS } from '../core/encode';
   import { LOUDNESS_TARGETS, type LoudnessTarget } from '../core/loudness';
   import { songEnd, stepToSeconds } from '../core/arrange';
@@ -73,6 +73,14 @@
     <button onclick={() => run(exportMidiFile)}>
       <Icon name="note" size={22} />
       <span><b>MIDI</b><small>Notes and drum hits as a standard .mid file</small></span>
+    </button>
+    <button onclick={() => run(exportBundle)}>
+      <Icon name="download" size={22} />
+      <span><b>MIDI and stems</b><small>Both in one zip, with the tempo and key written down: everything to carry on elsewhere</small></span>
+    </button>
+    <button onclick={() => run(exportDawproject)}>
+      <Icon name="file" size={22} />
+      <span><b>DAW project</b><small>A .dawproject that Bitwig Studio, Studio One and Cubase open: every track as audio, with its notes alongside</small></span>
     </button>
   </div>
   <h3>Project file</h3>

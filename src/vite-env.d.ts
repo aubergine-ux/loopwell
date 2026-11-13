@@ -9,3 +9,6 @@ declare module 'demucs-web' {
     separate(left: Float32Array, right: Float32Array): Promise<Record<string, { left: Float32Array; right: Float32Array }>>;
   }
 }
+
+/** The version in package.json, put in at build time. */
+declare const __APP_VERSION__: string;

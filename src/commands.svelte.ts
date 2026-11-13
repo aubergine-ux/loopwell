@@ -3,7 +3,7 @@
 // never disagree, and any command can be given a different key.
 
 import {
-  addTrack, autoMaster, clearPattern, clearTrack, cycleTheme, exportAudio, exportMidiFile, exportStems, redo, removeTrack, saveProjectFile, selectPattern,
+  addTrack, autoMaster, clearPattern, clearTrack, cycleTheme, exportAudio, exportBundle, exportDawproject, exportMidiFile, exportStems, redo, removeTrack, saveProjectFile, selectPattern,
   setSteps, setTheme, setView, tapTempo, toast, togglePlay, undo, useKit, useSample,
 } from './actions.svelte';
 import { applyEuclid, randomizePattern, randomizeSound, randomizeTrack } from './creative.svelte';
@@ -133,6 +133,8 @@ export const COMMANDS: Command[] = [
   { id: 'export-video', title: 'Export a video (MP4) for TikTok, Reels, YouTube', group: 'Export', words: 'visualizer mp4 film', run: open('video') },
   { id: 'export-stems', title: 'Export stems', group: 'Export', run: () => void exportStems() },
   { id: 'export-midi', title: 'Export MIDI', group: 'Export', run: exportMidiFile },
+  { id: 'export-bundle', title: 'Export MIDI and stems in one zip', group: 'Export', words: 'bundle everything', run: () => void exportBundle() },
+  { id: 'export-daw', title: 'Export a DAW project (.dawproject)', group: 'Export', words: 'bitwig studio one cubase ableton interop', run: () => void exportDawproject() },
   { id: 'export-project', title: 'Save a project file', group: 'Export', run: saveProjectFile },
   { id: 'tips', title: 'Tooltips on / off', group: 'Settings', words: 'hints help', run: () => { setPref('tips', !prefs.tips); toast(prefs.tips ? 'Tooltips on' : 'Tooltips off'); } },
   { id: 'calm', title: 'Reduce motion on / off', group: 'Settings', words: 'animation', run: () => { setPref('calm', !prefs.calm); toast(prefs.calm ? 'Less motion' : 'Full motion'); } },

@@ -1,10 +1,13 @@
 // Everything the interface can do to the beat. Components call these rather
 // than poking the engine themselves.
 
-import { zipSync } from 'fflate';
+import { strToU8, zipSync } from 'fflate';
 import { audio } from './audio/host';
 import { KITS, isBuiltin, isUser, slotLabel } from './core/kits';
+import { dawproject } from './core/dawproject';
 import { exportMidi, importMidi, midiToProject } from './core/midi';
+import { codeInfo, compileCode } from './core/mini';
+import { NOTE_NAMES, SCALES } from './core/scales';
 import { describeChange } from './live/ydoc';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
 import { renderProject } from './core/render';
@@ -12,7 +15,7 @@ import { pluginAudio, syncPlugins } from './plugins.svelte';
 import { beatFromHash, beatUrl, HASH_KEY } from './core/share';
 import { isDefaultArrangement, tempoAt, trackStepAt } from './core/arrange';
 import {
-  DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyArrangement, emptyProject, newId, newTrack, sanitize, usesNotes, usesSample,
+  DEFAULT_VEL, MAX_STEPS, MAX_TRACKS, clamp, emptyArrangement, emptyProject, isPitched, newId, newTrack, sanitize, usesNotes, usesSample,
   type Project, type TrackKind,
 } from './core/types';
 import { CODECS, encodeAudio, type Codec } from './core/encode';
@@ -734,27 +737,77 @@ export function exportAudio(format: AudioFormat = 'wav', loudness: LoudnessTarge
 
 export const exportWav = (): Promise<void> => exportAudio('wav');
 
+/** Every track that plays, rendered by itself: what the stems, the DAW project and the bundle are all made from. */
+async function renderStems(p: Project, chain: number[] | undefined, progress: (done: number) => Promise<void>): Promise<{ track: number; file: string; wav: Uint8Array<ArrayBuffer>; seconds: number; sampleRate: number }[]> {
+  await loadAllSamples(p);
+  const active = p.tracks.map((t, i) => i).filter((i) => trackHasNotes(p, i, chain) || (p.codeOn && codeTracks(p).has(i)));
+  if (!active.length) throw new Error(`Nothing to export yet: the ${chain ? 'pattern' : 'song'} is empty.`);
+  const ext = await played(p, chain);
+  const out = [];
+  for (let k = 0; k < active.length; k++) {
+    const i = active[k];
+    const r = await renderProject(p, audio.bank, {
+      sampleRate: audio.sampleRate, chain, stem: i, ext,
+      onProgress: (d) => progress((k + d) / active.length),
+    });
+    const name = p.tracks[i].name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'track';
+    out.push({ track: i, file: `${String(i + 1).padStart(2, '0')}-${name}.wav`, wav: encodeWav([r.l, r.r], r.sampleRate, 24), seconds: r.l.length / r.sampleRate, sampleRate: r.sampleRate });
+    await progress((k + 1) / active.length);
+  }
+  return out;
+}
+
+/** The tracks the live code plays. */
+const codeTracks = (p: Project) => new Set(p.code.trim() ? compileCode(p.code, codeInfo(p)).filter((l) => l.cycles.length).map((l) => l.track) : []);
+
 export function exportStems(): Promise<void> {
   return withBusy('Rendering stems', async (progress) => {
     const p = snapshot();
-    await loadAllSamples(p);
-    const chain = exportChain();
-    const active = p.tracks.map((t, i) => i).filter((i) => trackHasNotes(p, i, chain));
-    if (!active.length) throw new Error(`Nothing to export yet: the ${chain ? 'pattern' : 'song'} is empty.`);
+    const stems = await renderStems(p, exportChain(), progress);
     const files: Record<string, Uint8Array> = {};
-    const ext = await played(p, chain);
-    for (let k = 0; k < active.length; k++) {
-      const i = active[k];
-      const r = await renderProject(p, audio.bank, {
-        sampleRate: audio.sampleRate, chain, stem: i, ext,
-        onProgress: (d) => progress((k + d) / active.length),
-      });
-      const name = p.tracks[i].name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'track';
-      files[`${String(i + 1).padStart(2, '0')}-${name}.wav`] = encodeWav([r.l, r.r], r.sampleRate, 24);
-      await progress((k + 1) / active.length);
-    }
+    for (const s of stems) files[s.file] = s.wav;
     download(zipSync(files, { level: 0 }) as Uint8Array<ArrayBuffer>, `${slug()}-stems.zip`, 'application/zip');
-    toast(`${active.length} stems exported`);
+    toast(`${stems.length} stems exported`);
+  });
+}
+
+/** The MIDI file and the stems together in one zip, with a note of the tempo and key: everything another program needs. */
+export function exportBundle(): Promise<void> {
+  return withBusy('Rendering stems', async (progress) => {
+    const p = snapshot();
+    const chain = exportChain();
+    const stems = await renderStems(p, chain, progress);
+    const pitched = p.tracks.some((t) => isPitched(t.kind));
+    const files: Record<string, Uint8Array> = {
+      [`${slug()}.mid`]: exportMidi(p, chain),
+      'readme.txt': strToU8([
+        p.name && p.name !== 'untitled' ? p.name : 'Untitled beat', '',
+        `Tempo: ${p.bpm} BPM${!chain && p.arr.tempo.length ? ' at the start (it changes; the MIDI file has every change)' : ''}`,
+        ...(pitched ? [`Key: ${NOTE_NAMES[p.scaleRoot]} ${SCALES[p.scaleType]?.name.toLowerCase() ?? ''}`] : []),
+        `Audio: ${stems[0].sampleRate} Hz, 24-bit stereo`, '',
+        `${slug()}.mid has the notes and drum hits, a track for each part.`,
+        'stems/ has the sound of each track by itself, with its effects. Every file starts at bar 1,',
+        'so lining them all up at the start of a project puts the beat back together.', '',
+        'Made with Loopwell.', '',
+      ].join('\n')),
+    };
+    for (const s of stems) files[`stems/${s.file}`] = s.wav;
+    download(zipSync(files, { level: 0 }) as Uint8Array<ArrayBuffer>, `${slug()}-midi-and-stems.zip`, 'application/zip');
+    toast(`MIDI and ${stems.length} stems exported in one zip`);
+  });
+}
+
+/** A .dawproject: the beat as a project Bitwig Studio, Studio One, Cubase and others can open. */
+export function exportDawproject(): Promise<void> {
+  return withBusy('Rendering tracks', async (progress) => {
+    const p = snapshot();
+    const chain = exportChain();
+    const stems = await renderStems(p, chain, progress);
+    const xml = dawproject(p, chain, stems.map((s) => ({ track: s.track, path: `audio/${s.file}`, seconds: s.seconds, sampleRate: s.sampleRate })), __APP_VERSION__);
+    const files: Record<string, Uint8Array> = { 'project.xml': strToU8(xml.project), 'metadata.xml': strToU8(xml.metadata) };
+    for (const s of stems) files[`audio/${s.file}`] = s.wav;
+    download(zipSync(files, { level: 0 }) as Uint8Array<ArrayBuffer>, `${slug()}.dawproject`, 'application/zip');
+    toast('DAW project exported');
   });
 }
 
