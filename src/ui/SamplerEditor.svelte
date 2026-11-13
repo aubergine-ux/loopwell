@@ -5,6 +5,7 @@
   import { KITS, SLOTS, isBuiltin, slotLabel } from '../core/kits';
   import { isDesktop } from '../desktop';
   import { clamp } from '../core/types';
+  import { fitLoopToSong, loopInfo, type LoopInfo } from '../ideas.svelte';
   import { addSlice, auditionSlice, autoSlice, listInputs, removeSlice, setKind, sliceEvenly, startRecording, stopRecording } from '../sound.svelte';
   import { app } from '../state.svelte';
   import { onFrame } from '../visual';
@@ -26,6 +27,16 @@
   let input = $state('');
 
   const recHere = $derived(app.recording?.track === app.sel);
+
+  // is the sample a loop? (worked out from the audio, once it has arrived)
+  let loop = $state<LoopInfo | null>(null);
+  $effect(() => {
+    void t.sample; void loaded; void app.userSamples[t.sample];
+    const want = t.sample;
+    loop = null;
+    if (isBuiltin(want)) return; // the kits are single hits
+    void loopInfo(app.sel).then((info) => { if (app.project.tracks[app.sel]?.sample === want) loop = info; });
+  });
 
   // follow the selected track's kit
   $effect(() => {
@@ -202,6 +213,15 @@
     {/if}
   </div>
 
+  {#if loop}
+    <div class="tools loop">
+      <span class="label">Loop</span>
+      <span class="found">{loop.bpm} bpm · {loop.beats >= 4 ? `${loop.beats / 4} bar${loop.beats === 4 ? '' : 's'}` : `${loop.beats} beats`}</span>
+      <button class="btn" onclick={() => fitLoopToSong(app.sel)} title="Cut the loop on every 8th note and play the pieces in time with the song, stretched to fit its tempo">Fit to {p.bpm} bpm</button>
+      <button class="btn ghost" onclick={() => fitLoopToSong(app.sel, true)} title="Set the song's tempo to the loop's, and cut the loop to the beat">Song to {Math.round(loop.bpm)} bpm</button>
+    </div>
+  {/if}
+
   <div class="tools">
     <span class="label">Slice</span>
     <button class="btn" onclick={auto} title="Find the hits in the sample and slice at each one">Auto</button>
@@ -222,6 +242,7 @@
   .kits, .tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .kits .btn, .tools .btn { height: 30px; padding: 0 9px; font-size: 10px; }
   .kits .pick { max-width: 160px; }
+  .found { font: 700 11px var(--mono); }
   .rec i { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); }
   .rec.on { background: var(--rec); color: var(--on-c); }
   .rec.on i { background: #fff; animation: blink 1s steps(2, jump-none) infinite; }

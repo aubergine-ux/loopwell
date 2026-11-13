@@ -172,7 +172,7 @@
 {/if}
 
 {#if dropping}
-  <div class="drop"><div><Icon name="download" size={30} /><b>Drop audio to use it as a sample</b><span>or a .loopwell project file to open it</span></div></div>
+  <div class="drop"><div><Icon name="download" size={30} /><b>Drop audio to use it as a sample</b><span>or a .loopwell project or a MIDI file to open it</span></div></div>
 {/if}
 
 {#if midimap.learning}

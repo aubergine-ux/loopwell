@@ -4,7 +4,7 @@
 import { zipSync } from 'fflate';
 import { audio } from './audio/host';
 import { KITS, isBuiltin, isUser, slotLabel } from './core/kits';
-import { exportMidi } from './core/midi';
+import { exportMidi, importMidi, midiToProject } from './core/midi';
 import { describeChange } from './live/ydoc';
 import { packProjectFile, unpackProjectFile, type UserSample } from './core/projectfile';
 import { renderProject } from './core/render';
@@ -420,10 +420,14 @@ function recordTarget(t: number): { step: number; pattern: number; wait: number 
 }
 const heldNotes = new Map<string, { step: number; pattern: number; at: number; wait: number; vel: number }>();
 
+/** Called for every pad hit (finger, key or MIDI), for anything that wants to listen in. */
+export const padHooks: ((t: number, vel: number) => void)[] = [];
+
 export function padDown(t: number, vel = 110): void {
   const tr = app.project.tracks[t];
   if (!tr) return;
   void audio.resume();
+  for (const hook of padHooks) hook(t, vel);
   if (usesNotes(tr.kind)) return noteDown(t, tr.note, vel);
   audio.trigger(t, vel);
   flash(t, vel);
@@ -545,6 +549,10 @@ export async function handleFiles(files: File[], track = app.sel): Promise<void>
       await openProjectFile(f);
       return;
     }
+    if (/\.(mid|midi|smf)$/i.test(f.name)) {
+      await openMidiFile(f);
+      return;
+    }
     if (t >= app.project.tracks.length) {
       if (app.project.tracks.length >= MAX_TRACKS) { toast('All 8 tracks are in use.', 'error'); return; }
       addTrack('drum');
@@ -577,6 +585,26 @@ export async function openProjectBytes(bytes: Uint8Array, quiet = false): Promis
     return true;
   } catch (e) {
     toast(e instanceof Error ? e.message : 'Could not open that file.', 'error');
+    return false;
+  }
+}
+
+/** Open a MIDI file as a new beat: its drums on drum tracks, its other parts on synths, each bar a pattern. */
+export async function openMidiFile(file: File): Promise<boolean> {
+  if (file.size > 5 * 1024 * 1024) { toast('That MIDI file is too big.', 'error'); return false; }
+  try {
+    const kit = app.project.tracks.find((t) => t.kind === 'drum' && isBuiltin(t.sample))?.sample.split('/')[0] ?? KITS[0].id;
+    const got = midiToProject(importMidi(new Uint8Array(await file.arrayBuffer())), kit);
+    got.project.name = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'imported';
+    loadProject(got.project);
+    const left = [
+      got.bars < got.totalBars ? `the first ${got.bars} of its ${got.totalBars} bars (eight different patterns is the limit)` : '',
+      got.skipped ? `${got.skipped} part${got.skipped === 1 ? '' : 's'} left out (eight tracks is the limit)` : '',
+    ].filter(Boolean).join('; ');
+    toast(`Opened “${got.project.name}” from MIDI: ${got.project.tracks.length} tracks${left ? `, ${left}` : `, ${got.bars} bar${got.bars === 1 ? '' : 's'}`}.`);
+    return true;
+  } catch (e) {
+    toast(e instanceof Error ? e.message : 'Could not read that MIDI file.', 'error');
     return false;
   }
 }

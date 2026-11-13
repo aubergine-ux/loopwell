@@ -4,6 +4,8 @@
   import { CHORD_SIZES, CHORD_SIZE_LABELS, scaleChords, type Chord } from '../core/chords';
   import { ARP_MODES, ARP_RATE_LABELS, MAX_ARP_OCT } from '../core/creative';
   import { insertChord } from '../creative.svelte';
+  import { ideas, toggleHum } from '../ideas.svelte';
+  import { isPitched } from '../core/types';
   import { NOTE_NAMES, SCALES, inScale, noteName, scalePitches } from '../core/scales';
   import { DEFAULT_VEL, clamp, usesNotes, type Note } from '../core/types';
   import { setKind } from '../sound.svelte';
@@ -192,6 +194,13 @@
       <Icon name={p.scaleLock ? 'lock' : 'unlock'} size={13} />Scale lock
     </button>
     <span class="grow"></span>
+    {#if isPitched(t.kind)}
+      <button class="btn hum" class:on={!!ideas.humming} aria-pressed={!!ideas.humming} onclick={toggleHum} disabled={!!app.recording}
+        title="Hum or sing a melody into the microphone and it is written here as notes, in key. Press again when you have finished.">
+        <Icon name="mic" size={13} />{ideas.humming ? `Listening ${ideas.humming.seconds.toFixed(1)}s` : 'Hum'}
+        {#if ideas.humming}<i class="lvl" style:transform="scaleX({Math.min(1, Math.sqrt(ideas.level)).toFixed(2)})"></i>{/if}
+      </button>
+    {/if}
     {#if isSynth}
       <button class="btn ghost sq" onclick={() => scroller?.scrollBy({ top: -ROW * 7, behavior: 'smooth' })} aria-label="Scroll up an octave"><Icon name="up" /></button>
       <button class="btn ghost sq" onclick={() => scroller?.scrollBy({ top: ROW * 7, behavior: 'smooth' })} aria-label="Scroll down an octave"><Icon name="down" /></button>
@@ -309,6 +318,9 @@
   .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .bar .btn { height: 30px; }
   .grow { flex: 1; }
+  .hum { position: relative; overflow: hidden; gap: 5px; }
+  .hum.on { background: var(--rec); color: var(--on-c); }
+  .lvl { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--on-c); transform-origin: left; }
   .chordbar .pick { height: 26px; font-size: 11px; }
   .chordbar .seg button { min-width: 0; padding: 0 7px; font-size: 10px; }
   .chords { display: flex; gap: 3px; flex-wrap: wrap; }

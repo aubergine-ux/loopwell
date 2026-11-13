@@ -12,7 +12,8 @@ import { DEMOS } from './core/demos';
 import { KITS } from './core/kits';
 import { PRESETS } from './core/presets';
 import { NOTE_NAMES, SCALES } from './core/scales';
-import { MAX_TRACKS, NUM_PATTERNS, PATTERN_NAMES, clamp, usesNotes } from './core/types';
+import { MAX_TRACKS, NUM_PATTERNS, PATTERN_NAMES, clamp, isPitched, usesNotes } from './core/types';
+import { fitLoopToSong, startTap, toggleHum } from './ideas.svelte';
 import { entries } from './library.svelte';
 import { setLearning } from './midimap.svelte';
 import { addBus } from './mix.svelte';
@@ -87,6 +88,9 @@ export const COMMANDS: Command[] = [
   { id: 'pat-next', title: 'Next pattern', group: 'Patterns', keys: 'ArrowRight', run: () => selectPattern((app.pat + 1) % NUM_PATTERNS) },
   { id: 'steps-16', title: '16 steps', group: 'Patterns', run: () => setSteps(16) },
   { id: 'steps-32', title: '32 steps', group: 'Patterns', run: () => setSteps(32) },
+  { id: 'hum', title: 'Hum a melody into notes', group: 'Patterns', words: 'sing microphone pitch', when: () => isPitched(sel().kind), run: () => { app.perform = app.stage = false; app.tab = 'keys'; toggleHum(); } },
+  { id: 'tap-rhythm', title: 'Tap a rhythm into a drum pattern', group: 'Patterns', when: () => !usesNotes(sel().kind), run: () => { app.perform = app.stage = false; app.tab = 'tools'; startTap(); } },
+  { id: 'fit-loop', title: 'Fit the track\'s loop to the song\'s tempo', group: 'Patterns', words: 'slice bpm audio', when: () => sel().kind === 'drum' || sel().kind === 'slice', run: () => void fitLoopToSong() },
   { id: 'euclid', title: 'Euclidean rhythm on the selected track: 5 hits over 16', group: 'Patterns', run: () => applyEuclid(app.sel, 16, 5, 0) },
   { id: 'dice-pattern', title: 'Roll the dice: a new pattern on every unlocked track', group: 'Patterns', words: 'random randomize', run: () => { randomizePattern(); } },
   { id: 'dice-track', title: 'Roll the dice: a new part for the selected track', group: 'Patterns', words: 'random randomize', run: () => randomizeTrack() },

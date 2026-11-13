@@ -4,7 +4,7 @@
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { preview } from 'vite';
 
-export async function launch(opts: { width?: number; height?: number; touch?: boolean; video?: string; scale?: number; autoplay?: boolean } = {}): Promise<{
+export async function launch(opts: { width?: number; height?: number; touch?: boolean; video?: string; scale?: number; autoplay?: boolean; microphone?: string } = {}): Promise<{
   page: Page; browser: Browser; url: string; errors: string[]; close: () => Promise<void>;
 }> {
   const server = await preview({ preview: { port: 4179, strictPort: false }, logLevel: 'error' });
@@ -14,7 +14,9 @@ export async function launch(opts: { width?: number; height?: number; touch?: bo
     // pass autoplay: false to get the real-world policy, where sound needs a click first
     // a made-up microphone, so recording can be tested without hardware or a permission prompt
     args: [opts.autoplay === false ? '--autoplay-policy=document-user-activation-required' : '--autoplay-policy=no-user-gesture-required',
-      '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+      '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+      // `microphone` is a WAV file the made-up microphone plays, for testing things that listen (%noloop: once, then silence)
+      ...(opts.microphone ? [`--use-file-for-fake-audio-capture=${opts.microphone}%noloop`] : [])],
   });
   const size = { width: opts.width ?? 1440, height: opts.height ?? 900 };
   const ctx = await browser.newContext({

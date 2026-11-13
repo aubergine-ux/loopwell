@@ -80,10 +80,10 @@
     </button>
     <button onclick={() => picker.click()}>
       <Icon name="open" size={22} />
-      <span><b>Open project</b><small>Load a .loopwell file</small></span>
+      <span><b>Open project</b><small>A .loopwell file, or a MIDI file</small></span>
     </button>
   </div>
-  <input bind:this={picker} type="file" accept=".loopwell,.zip" hidden onchange={open} />
+  <input bind:this={picker} type="file" accept=".loopwell,.zip,.mid,.midi" hidden onchange={open} />
 </Modal>
 
 <style>

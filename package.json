@@ -24,7 +24,8 @@
     "test:workflow": "vite build && tsx tests/e2e/workflow.ts",
     "test:onboarding": "vite build && tsx tests/e2e/onboarding.ts",
     "test:polish": "vite build && tsx tests/e2e/polish.ts",
-    "test:features": "vite build && tsx tests/e2e/creative.ts && tsx tests/e2e/instruments.ts && tsx tests/e2e/stage.ts && tsx tests/e2e/mix.ts && tsx tests/e2e/workflow.ts && tsx tests/e2e/onboarding.ts && tsx tests/e2e/polish.ts",
+    "test:ideas": "vite build && tsx tests/e2e/ideas.ts",
+    "test:features": "vite build && tsx tests/e2e/creative.ts && tsx tests/e2e/instruments.ts && tsx tests/e2e/stage.ts && tsx tests/e2e/mix.ts && tsx tests/e2e/workflow.ts && tsx tests/e2e/onboarding.ts && tsx tests/e2e/polish.ts && tsx tests/e2e/ideas.ts",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri"

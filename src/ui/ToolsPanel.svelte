@@ -3,6 +3,7 @@
   import {
     SOUND_PARTS, SOUND_PART_LABELS, applyEuclid, randomizePattern, randomizeSound, randomizeTrack, setFill, setStepMod, stepMod, type SoundPart,
   } from '../creative.svelte';
+  import { cancelTap, finishTap, ideas, startTap, tap } from '../ideas.svelte';
   import { CHANCES, CONDITIONS, GROOVES, MAX_RATCHET, euclid, modChance, modCond, modRatchet } from '../core/creative';
   import { DEFAULT_VEL, usesNotes } from '../core/types';
   import { app } from '../state.svelte';
@@ -93,6 +94,25 @@
   </section>
 
   <section>
+    <h3>Tap <small>{t.name}</small></h3>
+    {#if usesNotes(t.kind)}
+      <p>Tapping writes hits on steps, so it is for drum tracks. Pick one, or hum a melody for this track in Keys.</p>
+    {:else if ideas.tapping}
+      <button class="tap on" onpointerdown={(e) => { e.preventDefault(); tap(); }} onkeydown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.stopPropagation(); tap(); } }}
+        aria-label="Tap the rhythm here">{ideas.tapping.count ? `${ideas.tapping.count} tap${ideas.tapping.count === 1 ? '' : 's'}` : 'Tap here'}</button>
+      <div class="row">
+        <button class="btn" onclick={finishTap} disabled={!ideas.tapping.count}>Done</button>
+        <button class="btn ghost" onclick={cancelTap}>Cancel</button>
+      </div>
+      <p>Tap here, on a pad, or with the number keys. It finishes by itself when you stop.</p>
+    {:else}
+      <button class="tap" onclick={() => startTap(app.sel)} title="Tap a rhythm and it becomes this track's pattern">Tap a rhythm</button>
+      <label class="check"><input type="checkbox" bind:checked={ideas.tapTempo} /> Set the tempo from my taps</label>
+      <p>The first tap is step 1. {ideas.tapTempo ? 'The song takes the tempo you tap at.' : `Taps are read at ${p.bpm} bpm.`}</p>
+    {/if}
+  </section>
+
+  <section>
     <h3>Groove</h3>
     <label class="field"><span class="label">Song</span>
       <select class="pick" bind:value={p.groove} aria-label="Groove for the whole song" title={GROOVES[p.groove].blurb}>
@@ -144,7 +164,14 @@
 </div>
 
 <style>
-  .tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .tools { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .tap {
+    height: 54px; border-radius: 12px; border: 1px solid var(--line); background: var(--raise); font: 700 12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+    box-shadow: 0 3px 0 var(--edge), inset 0 1px 0 var(--hi); touch-action: none;
+  }
+  .tap:active { transform: translateY(3px); box-shadow: none; }
+  .tap.on { background: var(--c); color: var(--on-c); border-color: transparent; }
+  .check { display: flex; align-items: center; gap: 6px; font: 600 10px var(--mono); color: var(--dim); }
   section {
     display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px;
     background: var(--inset); border-top: 3px solid var(--c); min-height: 170px; min-width: 0;
@@ -177,6 +204,7 @@
     background: transparent; color: var(--dim); font: 600 10px var(--mono);
   }
   .chip.on { background: var(--ink); color: var(--panel); border-color: transparent; }
+  @media (max-width: 1180px) { .tools { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 900px) { .tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 520px) { .tools { grid-template-columns: minmax(0, 1fr); } section { min-height: 0; } }
 </style>
