@@ -6,6 +6,7 @@ import {
 } from './actions.svelte';
 import { degreeToPitch } from './core/scales';
 import { NUM_PATTERNS, clamp } from './core/types';
+import { setFill } from './creative.svelte';
 import { deleteClip, duplicateClip } from './song.svelte';
 import { app, TABS } from './state.svelte';
 
@@ -25,6 +26,11 @@ function press(code: string): boolean {
     if (t >= p.tracks.length) return true;
     padDown(t);
     down.set(code, () => padUp(t));
+    return true;
+  }
+  if (code === 'Backslash') {
+    setFill(true);
+    down.set(code, () => setFill(false));
     return true;
   }
   const i = HOME.indexOf(code);

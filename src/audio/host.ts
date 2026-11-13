@@ -318,6 +318,11 @@ export class AudioHost {
     this.send({ t: 'pattern', pattern });
   }
 
+  /** Hold a fill: steps marked "fill only" play until it is let go. */
+  setFill(on: boolean): void {
+    this.send({ t: 'fill', on });
+  }
+
   trigger(track: number, vel: number, pitch?: number): void {
     this.send({ t: 'trig', track, vel, pitch });
   }

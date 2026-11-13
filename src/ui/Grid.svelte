@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { addTrack, padDown, padUp, sampleMissing, setStep, stepVel } from '../actions.svelte';
   import { audio } from '../audio/host';
+  import { modChance, modCond, modLabel, modRatchet } from '../core/creative';
   import { DEFAULT_VEL, MAX_TRACKS, clamp } from '../core/types';
   import { isLocked } from '../live/session.svelte';
   import { app } from '../state.svelte';
@@ -23,6 +24,20 @@
   // --- painting steps with the pointer ---
   type Drag = { t: number; s: number; paint: number; startY: number; startVel: number; mode: 'tap' | 'paint' | 'vel'; fresh: boolean };
   let drag: Drag | null = null;
+  let holdTimer = 0;
+
+  /** Pick a step for the Tools panel to edit (right-click, or press and hold). */
+  function pickStep(t: number, s: number): void {
+    app.sel = t;
+    app.step = { t, s };
+    app.tab = 'tools';
+  }
+  function menu(e: MouseEvent): void {
+    const c = cellOf(e.target as Element);
+    if (!c) return;
+    e.preventDefault();
+    pickStep(c.t, c.s);
+  }
 
   function cellOf(el: Element | null): { t: number; s: number } | null {
     const c = el?.closest<HTMLElement>('.cell');
@@ -41,6 +56,12 @@
       if (!app.playing) padTap(c.t);
     }
     drag = { ...c, paint: fresh ? DEFAULT_VEL : 0, startY: e.clientY, startVel: fresh ? DEFAULT_VEL : v, mode: 'tap', fresh };
+    clearTimeout(holdTimer);
+    holdTimer = window.setTimeout(() => {
+      if (!drag || drag.mode !== 'tap') return;
+      drag.fresh = true; // a held step stays as it is rather than toggling off on release
+      pickStep(drag.t, drag.s);
+    }, 480);
     rows.setPointerCapture(e.pointerId);
   }
 
@@ -69,16 +90,17 @@
   }
 
   function up(): void {
+    clearTimeout(holdTimer);
     if (drag && drag.mode === 'tap' && !drag.fresh) setStep(drag.t, drag.s, 0);
     drag = null;
   }
 
   function cellKey(e: KeyboardEvent, t: number, s: number): void {
-    if (e.key === 'Enter') {
-      setStep(t, s, stepVel(t, s) ? 0 : DEFAULT_VEL);
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    if (e.key === 'Enter' && e.shiftKey) pickStep(t, s);
+    else if (e.key === 'Enter') setStep(t, s, stepVel(t, s) ? 0 : DEFAULT_VEL);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   onMount(() => {
@@ -116,7 +138,7 @@
 
 <div class="scroller" bind:this={scroller}>
   <div class="rows" class:wide={p.steps === 32} bind:this={rows} style:--steps={p.steps}
-    onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} role="grid" tabindex="-1" aria-label="Step sequencer">
+    onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} oncontextmenu={menu} role="grid" tabindex="-1" aria-label="Step sequencer">
     {#each p.tracks as t, ti (ti)}
       <div class="row" class:sel={app.sel === ti} class:off={t.mute} data-row={ti} style:--c="var(--t{t.color})" role="row">
         <div class="head" role="rowheader">
@@ -135,9 +157,12 @@
         <div class="cells">
           {#each { length: p.steps } as _, s}
             {@const v = stepVel(ti, s)}
+            {@const m = pat.mods[ti]?.[s] ?? 0}
             <i class="cell" class:on={v > 0} class:hold={v === 0 && held(ti, s)} class:alt={(s >> 2) & 1} class:bar={s % 4 === 0}
-              data-t={ti} data-s={s} style:--v={v ? (0.25 + (v / 127) * 0.75).toFixed(2) : null}
-              role="gridcell" tabindex="-1" aria-label="{t.name} step {s + 1}{v ? `, velocity ${v}` : ''}" aria-selected={v > 0}
+              class:pick={app.step?.t === ti && app.step.s === s} class:maybe={v > 0 && (modChance(m) > 0 || modCond(m) > 0)}
+              data-t={ti} data-s={s} data-roll={v > 0 && modRatchet(m) > 1 ? modRatchet(m) : null} style:--v={v ? (0.25 + (v / 127) * 0.75).toFixed(2) : null}
+              role="gridcell" tabindex="-1" aria-label="{t.name} step {s + 1}{v ? `, velocity ${v}` : ''}{v && m ? `, ${modLabel(m)}` : ''}" aria-selected={v > 0}
+              title={v && m ? modLabel(m) : null}
               onkeydown={(e) => cellKey(e, ti, s)}></i>
           {/each}
         </div>
@@ -219,6 +244,16 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4);
   }
   .cell.on { background: color-mix(in srgb, var(--c) 22%, var(--well)); box-shadow: none; }
+  /* a roll shows as that many slices; a step that only sometimes plays is hatched */
+  .cell[data-roll]::before { mask: repeating-linear-gradient(90deg, #000 0 calc(100% / var(--n) - 2px), transparent 0 calc(100% / var(--n))); }
+  .cell[data-roll='2'] { --n: 2; }
+  .cell[data-roll='3'] { --n: 3; }
+  .cell[data-roll='4'] { --n: 4; }
+  .cell.maybe::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--panel) 55%, transparent) 3px 5px);
+  }
+  .cell.pick { outline: 2px dashed var(--ink); outline-offset: -2px; }
   :global(.cell.ph) { outline: 2px solid var(--ink); outline-offset: -2px; }
   :global(.cell.ph:not(.on)) { background: color-mix(in srgb, var(--ink) 16%, var(--well)); }
   :global(.cell.on.ph) { animation: hit 0.24s cubic-bezier(.2,.8,.3,1); z-index: 1; overflow: visible; }

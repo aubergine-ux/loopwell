@@ -126,6 +126,7 @@ export function fixSelection(): void {
   app.sel = clamp(app.sel, 0, app.project.tracks.length - 1);
   app.pat = clamp(app.pat, 0, app.project.patterns.length - 1);
   if (app.clip && !app.project.arr.clips.some((c) => c.id === app.clip)) app.clip = null;
+  if (app.step && (app.step.t >= app.project.tracks.length || app.step.s >= app.project.steps)) app.step = null;
 }
 
 /** Called whenever a different beat is loaded, so things tied to the old one can let go. */
@@ -141,6 +142,8 @@ export function loadProject(p: Project): void {
   app.sel = 0;
   app.cursor = 0;
   app.clip = null;
+  app.step = null;
+  app.locks = [];
   fixSelection();
   commit();
 }
@@ -233,6 +236,7 @@ export function setSteps(n: 16 | 32): void {
   p.steps = n;
   if (untouched) p.arr = emptyArrangement(p.tracks.length, n);
   for (const c of p.arr.clips) c.offset %= n;
+  fixSelection();
 }
 
 const taps: number[] = [];
@@ -261,6 +265,7 @@ export function stepVel(t: number, s: number, pat = app.pat): number {
 export function setStep(t: number, s: number, vel: number, pat = app.pat): void {
   const tr = app.project.tracks[t];
   const p = app.project.patterns[pat];
+  if (!vel) p.mods[t][s] = 0; // a step that is switched off forgets its extras
   if (tr.kind === 'drum') {
     p.steps[t][s] = vel;
   } else if (vel === 0) {
@@ -284,6 +289,7 @@ export function addTrack(kind: TrackKind): void {
   for (const pat of p.patterns) {
     pat.steps.push(new Array<number>(MAX_STEPS).fill(0));
     pat.notes.push([]);
+    pat.mods.push(new Array<number>(MAX_STEPS).fill(0));
   }
   app.sel = p.tracks.length - 1;
   hooks.tracks?.(true, app.sel);
@@ -295,9 +301,11 @@ export function removeTrack(i: number): void {
   const p = app.project;
   if (p.tracks.length <= 1) return;
   p.tracks.splice(i, 1);
+  app.locks.splice(i, 1);
   hooks.tracks?.(false, i);
   for (const pat of p.patterns) {
     pat.steps.splice(i, 1);
+    pat.mods.splice(i, 1);
     pat.notes.splice(i, 1);
   }
   const a = p.arr;
@@ -310,6 +318,7 @@ export function removeTrack(i: number): void {
 
 export function clearTrack(t: number, pat = app.pat): void {
   app.project.patterns[pat].steps[t].fill(0);
+  app.project.patterns[pat].mods[t].fill(0);
   app.project.patterns[pat].notes[t] = [];
 }
 

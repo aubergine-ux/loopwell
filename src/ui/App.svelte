@@ -28,6 +28,7 @@
   import SongPanel from './SongPanel.svelte';
   import SoundPanel from './SoundPanel.svelte';
   import Timeline from './Timeline.svelte';
+  import ToolsPanel from './ToolsPanel.svelte';
   import Transport from './Transport.svelte';
 
   boot();
@@ -103,6 +104,7 @@
         <div class="content" role="tabpanel">
           {#if app.tab === 'sound'}<SoundPanel />
           {:else if app.tab === 'keys'}<RollPanel />
+          {:else if app.tab === 'tools'}<ToolsPanel />
           {:else if app.tab === 'rack'}<RackPanel />
           {:else if app.tab === 'mix'}<MixPanel />
           {:else if app.tab === 'fx'}<FxPanel />

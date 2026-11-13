@@ -87,7 +87,7 @@ function watch(d: Y.Doc): void {
 
 /** Everything about one track that a lock protects, for comparing before and after. */
 function trackState(p: Project, i: number): unknown {
-  return [p.tracks[i], p.patterns.map((pat) => [pat.steps[i], pat.notes[i]]),
+  return [p.tracks[i], p.patterns.map((pat) => [pat.steps[i], pat.notes[i], pat.mods[i]]),
     p.arr.clips.filter((c) => c.track === i).map((c) => [c.pattern, c.start, c.len, c.offset]).sort(),
     p.arr.lanes.filter((l) => l.track === i).map((l) => [l.param, l.on, l.points])];
 }

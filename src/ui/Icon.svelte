@@ -23,6 +23,7 @@
     file: 'M6 3h8l4 4v14H6zM14 3v4h4',
     note: 'M9 18V5l10-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
     wave: 'M2 12h3l2-7 4 14 3-10 2 5 2-2h4',
+    dice: 'M5 5h14v14H5zM9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01',
   };
   let { name, size = 16, fill = false }: { name: string; size?: number; fill?: boolean } = $props();
 </script>

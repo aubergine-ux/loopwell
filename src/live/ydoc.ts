@@ -22,8 +22,9 @@
 import * as Y from 'yjs';
 import { MAX_STEPS, MAX_TRACKS, NUM_PATTERNS, type AutoLane, type Clip, type Note, type Project, type Track } from '../core/types';
 
-const SETTINGS = ['name', 'bpm', 'swing', 'steps', 'scaleRoot', 'scaleType', 'scaleLock', 'master'] as const;
-const TRACK_KNOBS = ['name', 'kind', 'color', 'sample', 'tune', 'decay', 'reverse', 'stretch', 'note', 'vol', 'pan', 'mute', 'solo', 'filter', 'rev', 'dly'] as const;
+const SETTINGS = ['name', 'bpm', 'swing', 'groove', 'grooveAmt', 'steps', 'scaleRoot', 'scaleType', 'scaleLock', 'master'] as const;
+const TRACK_KNOBS = ['name', 'kind', 'color', 'sample', 'tune', 'decay', 'reverse', 'stretch', 'note', 'vol', 'pan', 'mute', 'solo', 'filter', 'rev', 'dly',
+  'groove', 'grooveAmt', 'arpMode', 'arpRate', 'arpOct', 'arpGate'] as const;
 
 type Json = Record<string, unknown>;
 /** Deep equality that doesn't care what order an object's keys are in. */
@@ -70,11 +71,14 @@ function writeTrack(yt: Y.Map<unknown>, p: Project, t: Track, ti: number): void 
   while (pats.length < NUM_PATTERNS) pats.push([new Y.Map()]);
   for (let pi = 0; pi < NUM_PATTERNS; pi++) {
     const yp = pats.get(pi) as Y.Map<unknown>;
-    const steps: Json = {}, notes: Json = {};
+    const steps: Json = {}, notes: Json = {}, mods: Json = {};
     p.patterns[pi].steps[ti].forEach((v, s) => { if (v) steps[s] = v; });
+    p.patterns[pi].mods[ti].forEach((v, s) => { if (v) mods[s] = v; });
     for (const n of p.patterns[pi].notes[ti]) notes[`${n.s}:${n.p}`] = { l: n.l, v: n.v };
     syncMap(child(yp, 'steps', () => new Y.Map()), steps);
     syncMap(child(yp, 'notes', () => new Y.Map()), notes);
+    // only made once someone uses step extras, so sessions with an older client in them stay untouched
+    if (yp.has('mods') || Object.keys(mods).length) syncMap(child(yp, 'mods', () => new Y.Map()), mods);
   }
 
   const clips: Json = {}, lanes: Json = {};
@@ -128,7 +132,7 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
 
   const trackIds: string[] = [];
   const tracks: Json[] = [];
-  const patterns = Array.from({ length: NUM_PATTERNS }, () => ({ steps: [] as number[][], notes: [] as Note[][] }));
+  const patterns = Array.from({ length: NUM_PATTERNS }, () => ({ steps: [] as number[][], notes: [] as Note[][], mods: [] as number[][] }));
   // two people adding a track at the same moment can overshoot the limit; everyone drops the same extras
   ytracks.toArray().slice(0, MAX_TRACKS).forEach((yt, ti) => {
     if (!(yt instanceof Y.Map)) return;
@@ -145,6 +149,8 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
       const yp = pats?.get(pi);
       const steps = new Array<number>(MAX_STEPS).fill(0);
       const notes: Note[] = [];
+      const mods = new Array<number>(MAX_STEPS).fill(0);
+      (yp?.get('mods') as Y.Map<number> | undefined)?.forEach((v, s) => { if (+s < MAX_STEPS) mods[+s] = v; });
       (yp?.get('steps') as Y.Map<number> | undefined)?.forEach((v, s) => { if (+s < MAX_STEPS) steps[+s] = v; });
       (yp?.get('notes') as Y.Map<{ l: number; v: number }> | undefined)?.forEach((n, key) => {
         const [s, pitch] = key.split(':').map(Number);
@@ -152,6 +158,7 @@ export function fromY(doc: Y.Doc): { project: Json; trackIds: string[] } | null 
       });
       notes.sort((x, y) => x.s - y.s || x.p - y.p);
       patterns[pi].steps.push(steps);
+      patterns[pi].mods.push(mods);
       patterns[pi].notes.push(notes);
     }
     (yt.get('clips') as Y.Map<Json> | undefined)?.forEach((c, cid) => clips.push({ ...c, id: cid, track: ti }));
@@ -199,6 +206,7 @@ export function describeChange(before: Project, after: Project): string {
   const say = (s: string) => { if (!out.includes(s)) out.push(s); };
   if (before.bpm !== after.bpm) say(`tempo ${before.bpm} → ${after.bpm}`);
   if (before.swing !== after.swing) say('swing');
+  if (before.groove !== after.groove || before.grooveAmt !== after.grooveAmt) say('the groove');
   if (before.name !== after.name) say(`renamed the beat “${after.name}”`);
   if (before.steps !== after.steps) say(`${after.steps} steps`);
   if (before.master !== after.master) say('master volume');
@@ -214,10 +222,13 @@ export function describeChange(before: Project, after: Project): string {
     if (!same(a.fx, b.fx)) say(`${name}: effects`);
     if (a.mute !== b.mute) say(`${b.mute ? 'muted' : 'unmuted'} ${name}`);
     if (a.solo !== b.solo) say(`${b.solo ? 'soloed' : 'unsoloed'} ${name}`);
+    if (a.groove !== b.groove || a.grooveAmt !== b.grooveAmt) say(`${name}: groove`);
+    if (a.arpMode !== b.arpMode || a.arpRate !== b.arpRate || a.arpOct !== b.arpOct || a.arpGate !== b.arpGate) say(`${name}: arpeggiator`);
     if (a.vol !== b.vol || a.pan !== b.pan || a.filter !== b.filter || a.rev !== b.rev || a.dly !== b.dly) say(`${name}: mix`);
     if (a.name !== b.name) say(`renamed ${a.name} to ${name}`);
     for (let pi = 0; pi < NUM_PATTERNS; pi++) {
-      if (!same(before.patterns[pi].steps[t], after.patterns[pi].steps[t]) || !same(before.patterns[pi].notes[t], after.patterns[pi].notes[t])) {
+      if (!same(before.patterns[pi].steps[t], after.patterns[pi].steps[t]) || !same(before.patterns[pi].notes[t], after.patterns[pi].notes[t])
+        || !same(before.patterns[pi].mods[t], after.patterns[pi].mods[t])) {
         say(`${name}: pattern ${'ABCDEFGH'[pi]}`);
       }
     }

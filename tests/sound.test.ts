@@ -416,7 +416,7 @@ describe('insert effects', () => {
 
     // track 2 is a loud click on every beat; track 1 ducks to it even though track 2 is muted
     p.tracks.push(newTrack('drum', 1, 'KEY', 'test/k'));
-    for (const pat of p.patterns) { pat.steps.push(new Array(32).fill(0)); pat.notes.push([]); }
+    for (const pat of p.patterns) { pat.steps.push(new Array(32).fill(0)); pat.notes.push([]); pat.mods.push(new Array(32).fill(0)); }
     p.patterns[0].steps[1][4] = 127;
     p.tracks[1].mute = true;
     const duck = newInsert('duck'); duck.p = [2, 80, 127, 20];

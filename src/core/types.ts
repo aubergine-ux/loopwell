@@ -4,6 +4,7 @@
 import { INSERTS, INSERT_TYPES, type InsertType } from './dsp/inserts';
 import { MAX_UNISON, MOD_DESTS } from './dsp/voices';
 import { WAVETABLES } from './dsp/wavetable';
+import { ARP_MODES, ARP_RATES, GROOVES, MAX_ARP_OCT, MAX_MOD } from './creative';
 import { PARAMS } from './params';
 import { MAX_SLICES } from './slicer';
 
@@ -86,6 +87,12 @@ export interface Track {
   filter: number; // -64..63, negative = low-pass, positive = high-pass
   rev: number;
   dly: number;
+  groove: number; // 0 = follow the song's groove, otherwise an index into GROOVES
+  grooveAmt: number; // 0..100
+  arpMode: number; // index into ARP_MODES, 0 = off
+  arpRate: number; // index into ARP_RATES
+  arpOct: number; // 1..3 octaves
+  arpGate: number; // note length, 127 = the whole arp step
 }
 
 export interface Note {
@@ -98,6 +105,7 @@ export interface Note {
 export interface Pattern {
   steps: number[][]; // [track][step] velocity, 0 = off (drum tracks)
   notes: Note[][]; // [track] (synth tracks)
+  mods: number[][]; // [track][step] chance, condition and ratchet packed as in creative.ts; 0 = a plain step
 }
 
 export interface Fx {
@@ -159,6 +167,8 @@ export interface Project {
   name: string;
   bpm: number; // 40..240
   swing: number; // 0..100
+  groove: number; // index into GROOVES, for every track that doesn't pick its own
+  grooveAmt: number; // 0..100
   steps: 16 | 32;
   tracks: Track[];
   patterns: Pattern[];
@@ -218,6 +228,7 @@ export function newTrack(kind: TrackKind, color: number, name: string, sample = 
     synth: defaultSynth(), note: 48,
     vol: 100, pan: 0, mute: false, solo: false,
     filter: 0, rev: 0, dly: 0,
+    groove: 0, grooveAmt: 50, arpMode: 0, arpRate: 2, arpOct: 1, arpGate: 100,
   };
 }
 
@@ -225,6 +236,7 @@ export function newPattern(tracks: number): Pattern {
   return {
     steps: Array.from({ length: tracks }, () => new Array<number>(MAX_STEPS).fill(0)),
     notes: Array.from({ length: tracks }, () => [] as Note[]),
+    mods: Array.from({ length: tracks }, () => new Array<number>(MAX_STEPS).fill(0)),
   };
 }
 
@@ -285,7 +297,7 @@ export function emptyArrangement(tracks: number, steps: number): Arrangement {
 export function emptyProject(): Project {
   const tracks = defaultTracks();
   return {
-    v: 2, name: 'untitled', bpm: 120, swing: 0, steps: 16,
+    v: 2, name: 'untitled', bpm: 120, swing: 0, groove: 0, grooveAmt: 50, steps: 16,
     tracks,
     patterns: Array.from({ length: NUM_PATTERNS }, () => newPattern(tracks.length)),
     arr: emptyArrangement(tracks.length, 16), songMode: false,
@@ -348,6 +360,9 @@ export function sanitize(raw: any): Project {
       mute: !!t?.mute, solo: !!t?.solo,
       filter: int(t?.filter, -64, 63, 0),
       rev: int(t?.rev, 0, 127, 0), dly: int(t?.dly, 0, 127, 0),
+      groove: int(t?.groove, 0, GROOVES.length - 1, 0), grooveAmt: int(t?.grooveAmt, 0, 100, 50),
+      arpMode: int(t?.arpMode, 0, ARP_MODES.length - 1, 0), arpRate: int(t?.arpRate, 0, ARP_RATES.length - 1, 2),
+      arpOct: int(t?.arpOct, 1, MAX_ARP_OCT, 1), arpGate: int(t?.arpGate, 1, 127, 100),
     };
   });
   if (!tracks.length) tracks.push(...base.tracks);
@@ -359,6 +374,8 @@ export function sanitize(raw: any): Project {
     for (let t = 0; t < n; t++) {
       const rs = rp?.steps?.[t];
       if (Array.isArray(rs)) for (let s = 0; s < MAX_STEPS; s++) pat.steps[t][s] = int(rs[s], 0, 127, 0);
+      const rm = rp?.mods?.[t];
+      if (Array.isArray(rm)) for (let s = 0; s < MAX_STEPS; s++) pat.mods[t][s] = int(rm[s], 0, MAX_MOD, 0);
       const rn = rp?.notes?.[t];
       if (Array.isArray(rn)) {
         for (const x of rn.slice(0, 512)) {
@@ -378,6 +395,8 @@ export function sanitize(raw: any): Project {
     name: typeof raw.name === 'string' ? raw.name.slice(0, 40) : base.name,
     bpm: int(raw.bpm, 40, 240, 120),
     swing: int(raw.swing, 0, 100, 0),
+    groove: int(raw.groove, 0, GROOVES.length - 1, 0),
+    grooveAmt: int(raw.grooveAmt, 0, 100, 50),
     steps,
     tracks, patterns,
     arr: sanitizeArrangement(raw, n, steps),

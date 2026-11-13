@@ -21,6 +21,7 @@ export type ToWorklet =
   | { t: 'stop' }
   | { t: 'panic' }
   | { t: 'pattern'; pattern: number }
+  | { t: 'fill'; on: boolean }
   | { t: 'trig'; track: number; vel: number; pitch?: number }
   | { t: 'on'; track: number; pitch: number; vel: number }
   | { t: 'off'; track: number; pitch: number };
@@ -62,6 +63,7 @@ class LoopwellProcessor extends AudioWorkletProcessor {
       case 'stop': e.stop(); break;
       case 'panic': e.stop(); e.panic(); break;
       case 'pattern': e.setPattern(m.pattern); break;
+      case 'fill': e.fill = m.on; break;
       case 'trig': e.trigger(m.track, m.vel, m.pitch); break;
       case 'on': e.noteOn(m.track, m.pitch, m.vel); break;
       case 'off': e.noteOff(m.track, m.pitch); break;

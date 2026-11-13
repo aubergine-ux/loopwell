@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { auditionNote } from '../actions.svelte';
+  import { CHORD_SIZES, CHORD_SIZE_LABELS, scaleChords, type Chord } from '../core/chords';
+  import { ARP_MODES, ARP_RATE_LABELS, MAX_ARP_OCT } from '../core/creative';
+  import { insertChord } from '../creative.svelte';
   import { NOTE_NAMES, SCALES, inScale, noteName, scalePitches } from '../core/scales';
   import { DEFAULT_VEL, clamp, type Note } from '../core/types';
   import { setKind } from '../sound.svelte';
@@ -32,6 +35,18 @@
     return [...set].sort((a, b) => b - a);
   });
   const rowOf = (pitch: number) => rows.indexOf(pitch);
+
+  // --- chords in key ---
+  let chordSize = $state(0);
+  let chordLen = $state(4);
+  let chordAt = $state(0);
+  let inversion = $state(0);
+  const chords = $derived(scaleChords(p.scaleRoot, p.scaleType, CHORD_SIZES[chordSize]));
+  $effect(() => { if (chordAt >= p.steps) chordAt = 0; });
+  function addChord(c: Chord): void {
+    insertChord(c, chordAt, chordLen, Math.floor(t.note / 12) * 12, inversion);
+    chordAt = (chordAt + chordLen) % p.steps; // ready for the next one, so a progression is a row of clicks
+  }
 
   type Drag = { kind: 'new' | 'resize' | 'move'; note: Note; grab: number; moved: boolean };
   let drag: Drag | null = null;
@@ -147,6 +162,49 @@
     {/if}
   </div>
 
+  {#if t.kind === 'synth'}
+    <div class="bar chordbar" style:--c="var(--t{t.color})">
+      <span class="label">Chords</span>
+      {#if chords.length}
+        <div class="chords" role="group" aria-label="Chords in {NOTE_NAMES[p.scaleRoot]} {SCALES[p.scaleType].name}">
+          {#each chords as c}
+            <button class="chord" onclick={() => addChord(c)} title="Add {c.name} at step {chordAt + 1}"><small>{c.numeral}</small>{c.name}</button>
+          {/each}
+        </div>
+        <div class="seg" role="group" aria-label="Chord size">
+          {#each CHORD_SIZE_LABELS as l, i}<button class:on={chordSize === i} onclick={() => (chordSize = i)}>{l}</button>{/each}
+        </div>
+        <select class="pick" bind:value={chordLen} aria-label="Chord length" title="How long each chord lasts">
+          <option value={2}>1/8</option><option value={4}>1/4</option><option value={8}>1/2</option><option value={16}>1 bar</option>
+        </select>
+        <select class="pick" bind:value={inversion} aria-label="Inversion" title="Inversion: which note of the chord is lowest">
+          <option value={0}>Root</option><option value={1}>1st inv</option><option value={2}>2nd inv</option>
+        </select>
+        <select class="pick" bind:value={chordAt} aria-label="Step the next chord goes on" title="Where the next chord goes">
+          {#each { length: p.steps } as _, s}{#if s % 2 === 0}<option value={s}>at {s + 1}</option>{/if}{/each}
+        </select>
+      {:else}
+        <span class="none">Pick a scale other than Chromatic to get chords that fit it.</span>
+      {/if}
+      <span class="grow"></span>
+      <span class="label">Arp</span>
+      <select class="pick" bind:value={t.arpMode} aria-label="Arpeggiator" title="Arpeggiator: plays the notes of a held chord one after another">
+        {#each ARP_MODES as m, i}<option value={i}>{m}</option>{/each}
+      </select>
+      {#if t.arpMode}
+        <select class="pick" bind:value={t.arpRate} aria-label="Arpeggiator speed">
+          {#each ARP_RATE_LABELS as r, i}<option value={i}>{r}</option>{/each}
+        </select>
+        <select class="pick" bind:value={t.arpOct} aria-label="Arpeggiator octaves">
+          {#each { length: MAX_ARP_OCT } as _, i}<option value={i + 1}>{i + 1} oct</option>{/each}
+        </select>
+        <select class="pick" bind:value={t.arpGate} aria-label="Arpeggiator note length">
+          <option value={40}>Short</option><option value={100}>Medium</option><option value={127}>Long</option>
+        </select>
+      {/if}
+    </div>
+  {/if}
+
   {#if !isSynth}
     <div class="hint">
       <b>{t.name}</b> is a drum track, so it has no notes to draw.
@@ -208,6 +266,18 @@
   .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .bar .btn { height: 30px; }
   .grow { flex: 1; }
+  .chordbar .pick { height: 26px; font-size: 11px; }
+  .chordbar .seg button { min-width: 0; padding: 0 7px; font-size: 10px; }
+  .chords { display: flex; gap: 3px; flex-wrap: wrap; }
+  .chord {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 40px; height: 30px; padding: 0 6px;
+    border: 0; border-radius: 7px; background: color-mix(in srgb, var(--c) 24%, var(--well)); color: var(--ink);
+    font: 700 11px/1.05 var(--mono); touch-action: manipulation;
+  }
+  .chord small { font: 600 8px var(--mono); color: var(--dim); }
+  .chord:hover { background: color-mix(in srgb, var(--c) 45%, var(--well)); }
+  .chord:active { background: var(--c); color: #fff; }
+  .none { font-size: 12px; color: var(--dim); }
   .scroller {
     height: 216px; overflow: auto; border-radius: 10px; background: var(--inset);
     box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.16); scrollbar-width: thin; overscroll-behavior: contain;

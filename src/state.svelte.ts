@@ -1,6 +1,6 @@
 import { emptyProject, type Project } from './core/types';
 
-export type Tab = 'sound' | 'keys' | 'rack' | 'mix' | 'fx' | 'song' | 'live';
+export type Tab = 'sound' | 'keys' | 'tools' | 'rack' | 'mix' | 'fx' | 'song' | 'live';
 export type ModalName = 'share' | 'export' | 'help' | 'demos' | 'presets' | 'community' | 'join' | 'folders';
 
 export const THEMES = [
@@ -13,6 +13,7 @@ export const THEMES = [
 export const TABS: { id: Tab; label: string }[] = [
   { id: 'sound', label: 'Sound' },
   { id: 'keys', label: 'Keys' },
+  { id: 'tools', label: 'Tools' },
   { id: 'rack', label: 'Rack' },
   { id: 'mix', label: 'Mix' },
   { id: 'fx', label: 'FX' },
@@ -46,6 +47,12 @@ export const app = $state({
   recording: null as { track: number; seconds: number } | null,
   busy: null as { label: string; progress: number } | null,
   octave: 0, // computer-keyboard octave shift
+  /** The step whose chance, condition and roll the Tools panel is editing. */
+  step: null as { t: number; s: number } | null,
+  /** Tracks the dice leave alone, by index. */
+  locks: [] as boolean[],
+  /** A fill is being held. */
+  fill: false,
   canUndo: false,
   canRedo: false,
 });

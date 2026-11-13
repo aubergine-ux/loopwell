@@ -17,6 +17,7 @@
     "demos": "tsx scripts/demo-links.ts",
     "test:community": "vite build && tsx tests/e2e/community.ts",
     "test:live": "vite build && tsx tests/e2e/live.ts",
+    "test:tools": "vite build && tsx tests/e2e/creative.ts",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri"

@@ -121,7 +121,7 @@ describe('the shared document', () => {
     // A deletes track 2 (CLAP) while B, not knowing, writes steps on track 5 (PERC) and track 2
     const pa = clone(p);
     pa.tracks.splice(2, 1);
-    for (const pat of pa.patterns) { pat.steps.splice(2, 1); pat.notes.splice(2, 1); }
+    for (const pat of pa.patterns) { pat.steps.splice(2, 1); pat.notes.splice(2, 1); pat.mods.splice(2, 1); }
     pa.arr.clips = pa.arr.clips.filter((c) => c.track !== 2).map((c) => ({ ...c, track: c.track > 2 ? c.track - 1 : c.track }));
     const idsA = ids(p).filter((_, i) => i !== 2);
     const pb = clone(p);
@@ -142,7 +142,7 @@ describe('the shared document', () => {
     const add = (name: string) => {
       const q = clone(seven);
       q.tracks.push({ ...clone(q.tracks[0]), name });
-      for (const pat of q.patterns) { pat.steps.push(new Array(32).fill(0)); pat.notes.push([]); }
+      for (const pat of q.patterns) { pat.steps.push(new Array(32).fill(0)); pat.notes.push([]); pat.mods.push(new Array(32).fill(0)); }
       return q;
     };
     toY(a, add('A-NEW'), [...idsA, 'na']);
