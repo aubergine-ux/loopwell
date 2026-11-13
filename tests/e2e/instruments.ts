@@ -163,6 +163,10 @@ try {
   // drag a sound out of the browser onto a track behind it
   await page.locator('.sampler').getByRole('button', { name: 'Browse' }).click();
   await page.getByLabel('Search sounds').fill('glass crash');
+  // measure where the row is only once the list has narrowed and the dialog has finished arriving
+  await page.waitForFunction(() => /crash/i.test(document.querySelector('.browser .row')?.textContent ?? '')
+    && document.querySelector('.modal')!.getAnimations().every((x) => x.playState === 'finished'), undefined, { timeout: 10000 });
+  await page.waitForTimeout(150);
   const dragged = (await page.locator('.browser .row').first().boundingBox())!, onto = (await page.locator('.row[data-row="5"] .cells').boundingBox())!;
   await page.mouse.move(dragged.x + 80, dragged.y + 10);
   await page.mouse.down();
