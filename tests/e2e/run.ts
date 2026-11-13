@@ -515,6 +515,7 @@ await page.waitForFunction(() => document.querySelector('.row[data-row="0"] .nam
 check('loading an audio file makes it the track sample', (await page.locator('.wave .note').textContent())!.includes('My Kick.wav'));
 
 await page.locator('.source input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('this is not audio') });
+await page.waitForFunction(() => /notes\.txt/.test(document.querySelector('.toast')?.textContent ?? ''), undefined, { timeout: 15000 }).catch(() => {});
 check('a file that is not audio is rejected with a message', /Couldn't read notes\.txt/.test((await toastText(page)) ?? ''));
 await page.locator('.source input[type=file]').setInputFiles({ name: 'empty.wav', mimeType: 'audio/wav', buffer: Buffer.alloc(0) });
 await page.waitForFunction(() => /empty/.test(document.querySelector('.toast')?.textContent ?? ''), null, { timeout: 4000 }).catch(() => {});
