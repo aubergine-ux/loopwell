@@ -78,7 +78,8 @@ export class AudioHost {
 
   /** Create the context and worklet. Safe to call before any user gesture. */
   init(): Promise<void> {
-    return (this.starting ??= this.start());
+    // if starting fails (the browser cut the audio script off, say), the next call tries again rather than failing forever
+    return (this.starting ??= this.start().catch((e) => { this.starting = null; throw e; }));
   }
 
   private async start(): Promise<void> {

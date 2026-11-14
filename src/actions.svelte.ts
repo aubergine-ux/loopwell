@@ -827,9 +827,13 @@ async function openLink(p: Project): Promise<void> {
   loadProject(p);
   history.replaceState(null, '', location.pathname + location.search);
   if (customSampleCount()) toast('This beat uses custom samples that links can\'t carry. Those tracks are silent.', 'error');
-  await loadAllSamples(p);
-  if (await audio.resume()) await play();
-  else app.needsTap = true; // the browser wants a tap before it lets us make sound
+  try {
+    await loadAllSamples(p);
+    if (await audio.resume()) { await play(); return; }
+  } catch {
+    // sound couldn't be started on its own; the tap below starts it afresh
+  }
+  app.needsTap = true; // the browser wants a tap before it lets us make sound
 }
 
 function checkHash(): void {

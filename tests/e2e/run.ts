@@ -656,8 +656,13 @@ try {
     && (await sp.locator('.gate b').textContent()) === 'Dust Loop');
   await sp.locator('.gate').click();
   await sp.waitForSelector('.tl .play', { state: 'visible', timeout: 5000 }).catch(() => {});
-  await sp.waitForTimeout(800);
-  const m = await sp.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
+  // the samples are held back two seconds here, so the first hits can take a moment: watch the meter for a while
+  let m = '';
+  for (let i = 0; i < 40; i++) {
+    await sp.waitForTimeout(100);
+    m = await sp.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
+    if (!/scaleX\(0(\.0+)?\)/.test(m)) break;
+  }
   check('one tap starts it, with sound, even on a slow connection', (await sp.locator('.gate').count()) === 0 && (await sp.locator('.tl .play').isVisible())
     && !/scaleX\(0(\.0+)?\)/.test(m) && m !== '', m);
   // Chrome itself logs one warning when it refuses to start audio; anything else is ours

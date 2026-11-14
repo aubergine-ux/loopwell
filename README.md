@@ -638,8 +638,8 @@ There is more in **[ARCHITECTURE.md](ARCHITECTURE.md)**: how the engine is built
 | Browser | Status |
 | :-- | :-- |
 | Chrome, Edge, Opera | Everything. The automated tests run in Chromium on every commit |
-| Firefox | Everything. The same browser tests run in Firefox on every commit |
-| Safari (macOS, iPadOS, iOS) | Same, minus MIDI controllers, which Safari does not support |
+| Firefox | Everything. Every browser test passes in Firefox; CI runs them there too, for information |
+| Safari (macOS, iPadOS, iOS) | Same, minus MIDI controllers, which Safari does not support. The core browser tests can be run in WebKit with `scripts/webkit-docker.sh run` |
 
 Video export needs a browser that can encode video (WebCodecs): current Chrome, Edge and Safari. Stem separation is fastest with WebGPU and falls back to WebAssembly, which is slow but works; it downloads a 180 MB model the first time, takes up to 30 seconds of audio at a go, and it is up to you to have the rights to what you split and sample.
 

@@ -1,7 +1,7 @@
 // Shared helper for the browser-driven scripts: serves the production build
 // and opens it in headless Chromium.
 
-import { chromium, firefox, type Browser, type Page } from 'playwright-core';
+import { chromium, firefox, webkit, type Browser, type Page } from 'playwright-core';
 import { preview } from 'vite';
 
 export async function launch(opts: { width?: number; height?: number; touch?: boolean; video?: string; scale?: number; autoplay?: boolean; microphone?: string } = {}): Promise<{
@@ -11,7 +11,9 @@ export async function launch(opts: { width?: number; height?: number; touch?: bo
   const url = server.resolvedUrls!.local[0];
   // BROWSER=firefox runs the same checks in Firefox (npx playwright-core install firefox first). Sound may start
   // without a click and a made-up microphone stands in for a real one, as in Chromium below.
-  const browser = process.env.BROWSER === 'firefox' ? await firefox.launch({
+  // BROWSER=webkit runs them in WebKit, the engine of Safari. Without a display it paints about once a second, far too
+  // slowly for a music app, so where there is one (xvfb-run in scripts/webkit-docker.sh) it gets a real window.
+  const browser = process.env.BROWSER === 'webkit' ? await webkit.launch({ headless: !process.env.DISPLAY }) : process.env.BROWSER === 'firefox' ? await firefox.launch({
     firefoxUserPrefs: {
       'media.autoplay.default': opts.autoplay === false ? 1 : 0, 'media.autoplay.blocking_policy': 0,
       'media.navigator.streams.fake': true, 'media.navigator.permission.disabled': true,
