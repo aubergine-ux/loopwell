@@ -59,31 +59,34 @@ try {
   await page.waitForSelector('.cell');
 
   // ---- hum a melody ----
-  await page.locator('.row[data-row="7"] .name').click();
-  await page.getByRole('tab', { name: 'Keys', exact: true }).click();
-  await page.getByRole('button', { name: 'Clear' }).click();
-  await page.getByRole('button', { name: 'Hum' }).click();
-  await page.waitForFunction(() => /Listening/.test(document.querySelector('.hum')?.textContent ?? ''), undefined, { timeout: 6000 });
-  await shot(page, 'humming');
-  await page.waitForTimeout(3600);
-  await page.locator('.hum').click();
-  const said = (await toast(page)) ?? '';
-  await page.waitForTimeout(200);
-  const notes = await page.locator('.note').evaluateAll((els) => els.map((e) => [(e as HTMLElement).style.left, (e as HTMLElement).style.width]));
-  check('a hummed melody becomes notes', /4 notes from your melody, snapped to the key/.test(said) && notes.length === 4, `"${said}" ${notes.length} notes`);
-  check('in time: on steps 1, 3, 5 and 9, the long one twice as long', JSON.stringify(await onSteps(page, 7)) === '[0,2,4,8]' && notes[2]?.[1] === '25%', JSON.stringify(notes));
-  await shot(page, 'hummed');
-  await page.keyboard.press('Control+z');
-  await page.waitForTimeout(150);
-  check('and one undo takes them away', (await page.locator('.note').count()) === 0);
-  // the made-up microphone has finished its file: now there is nothing to hear
-  await page.getByRole('button', { name: 'Hum' }).click();
-  await page.waitForTimeout(900);
-  await page.locator('.hum').click();
-  // the message from the first hum may still be showing: wait for this one
-  await page.waitForFunction(() => /heard/.test(document.querySelector('.toast')?.textContent ?? ''), undefined, { timeout: 5000 }).catch(() => {});
-  const none = (await toast(page)) ?? '';
-  check('humming nothing says so and changes nothing', /No melody was heard|Nothing was heard/.test(none) && (await page.locator('.note').count()) === 0, `"${none}" ${await page.locator('.note').count()} notes`);
+  // only Chromium can be given a recording to use as its microphone; elsewhere the made-up one just beeps
+  if (process.env.BROWSER !== 'firefox') {
+    await page.locator('.row[data-row="7"] .name').click();
+    await page.getByRole('tab', { name: 'Keys', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await page.getByRole('button', { name: 'Hum' }).click();
+    await page.waitForFunction(() => /Listening/.test(document.querySelector('.hum')?.textContent ?? ''), undefined, { timeout: 6000 });
+    await shot(page, 'humming');
+    await page.waitForTimeout(3600);
+    await page.locator('.hum').click();
+    const said = (await toast(page)) ?? '';
+    await page.waitForTimeout(200);
+    const notes = await page.locator('.note').evaluateAll((els) => els.map((e) => [(e as HTMLElement).style.left, (e as HTMLElement).style.width]));
+    check('a hummed melody becomes notes', /4 notes from your melody, snapped to the key/.test(said) && notes.length === 4, `"${said}" ${notes.length} notes`);
+    check('in time: on steps 1, 3, 5 and 9, the long one twice as long', JSON.stringify(await onSteps(page, 7)) === '[0,2,4,8]' && notes[2]?.[1] === '25%', JSON.stringify(notes));
+    await shot(page, 'hummed');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(150);
+    check('and one undo takes them away', (await page.locator('.note').count()) === 0);
+    // the made-up microphone has finished its file: now there is nothing to hear
+    await page.getByRole('button', { name: 'Hum' }).click();
+    await page.waitForTimeout(900);
+    await page.locator('.hum').click();
+    // the message from the first hum may still be showing: wait for this one
+    await page.waitForFunction(() => /heard/.test(document.querySelector('.toast')?.textContent ?? ''), undefined, { timeout: 5000 }).catch(() => {});
+    const none = (await toast(page)) ?? '';
+    check('humming nothing says so and changes nothing', /No melody was heard|Nothing was heard/.test(none) && (await page.locator('.note').count()) === 0, `"${none}" ${await page.locator('.note').count()} notes`);
+  } else results.push('  --   humming needs a microphone that plays a recording: checked in Chromium only');
   await page.locator('.row[data-row="0"] .name').click();
   check('there is no hum button on a drum track', (await page.locator('.hum').count()) === 0);
 
@@ -145,6 +148,7 @@ try {
   await page.locator('.modal input[type=file]').setInputFiles({ name: 'Dust Loop.mid', mimeType: 'audio/midi', buffer: mid });
   await page.waitForFunction((x) => document.querySelector('.lcd .num')?.textContent === x, String(demo.bpm), { timeout: 6000 });
   const opened = (await toast(page)) ?? '';
+  await page.waitForSelector('.tl .clip', { timeout: 10000 }).catch(() => {});
   check('a MIDI file opens as a beat at its own tempo', /^Opened “Dust Loop” from MIDI: \d tracks/.test(opened) && (await page.locator('.tl .clip').count()) > 4, opened);
   await shot(page, 'midi-import');
   await page.keyboard.press('Space');

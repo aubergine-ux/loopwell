@@ -231,7 +231,8 @@ await ada.getByRole('button', { name: 'Community' }).click();
 await ada.waitForSelector('.modal');
 check('and says it could not reach the server', await modal(ada).getByText('Could not reach').isVisible());
 
-const real = b.errors.filter((e) => !/Failed to load resource|ERR_CONNECTION_REFUSED|net::ERR/.test(e));
+// the server is taken down on purpose above; Firefox reports that as a blocked cross-origin request
+const real = b.errors.filter((e) => !/Failed to load resource|ERR_CONNECTION_REFUSED|net::ERR|Cross-Origin Request Blocked.*CORS request did not succeed|NetworkError/.test(e));
 check('no errors in the console', real.length === 0, real.slice(0, 3).join(' | '));
 } catch (e) {
   check('test script ran to the end', false, String(e).split('\n')[0]);

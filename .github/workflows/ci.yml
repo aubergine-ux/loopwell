@@ -99,6 +99,38 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 
+  # The same browser tests in Firefox, so the app isn't quietly a Chrome-only one.
+  firefox:
+    name: Browser tests in Firefox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - run: npm ci
+      - name: Install the server's packages
+        run: npm ci
+        working-directory: server
+      - name: Install Firefox
+        run: npx playwright-core install --with-deps firefox
+      - name: End-to-end tests
+        run: npm run test:e2e
+        env:
+          BROWSER: firefox
+      - name: Every feature suite
+        run: npm run test:features
+        env:
+          BROWSER: firefox
+      - name: Community features against the real server
+        run: npm run test:community
+        env:
+          BROWSER: firefox
+
   # The browser tests above run on Linux. Everything that doesn't need a browser is also run where the
   # desktop app is built, so a path or line-ending mistake shows up here and not in a release.
   platforms:

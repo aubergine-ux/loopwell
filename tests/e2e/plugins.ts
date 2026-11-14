@@ -215,7 +215,8 @@ try {
   await ready(page, 1);
   check('a plugin can be loaded by its address', (await page.locator('.plugs .chain li.bad').count()) === 0);
 
-  const real = errors.filter((e) => !/favicon|404|Failed to load resource|ERR_FAILED|ERR_ABORTED/.test(e));
+  // the plugin that isn't there is meant to fail to load; each browser words that its own way
+  const real = errors.filter((e) => !/favicon|404|Failed to load resource|ERR_FAILED|ERR_ABORTED|Cross-Origin Request Blocked|Module source URI is not allowed|Loading (failed for the )?module|NetworkError/.test(e));
   check('no errors on the page', real.length === 0, real.join(' | '));
 } catch (e) {
   check('the run finished', false, e instanceof Error ? e.message : String(e));

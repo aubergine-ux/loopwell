@@ -525,7 +525,7 @@ Then open the address it prints, usually <http://localhost:5173>.
 
 `npm run check`, `test:community` and `test:live` also use the server's packages: run `npm install` in `server/` once first. The server has its own tests (`cd server && npm test`), and the desktop shell has a few (`cd src-tauri && cargo test`).
 
-The browser tests look for Chromium at `/usr/bin/chromium`. Point them somewhere else with `CHROMIUM=/path/to/chrome npm run test:e2e`.
+The browser tests look for Chromium at `/usr/bin/chromium`. Point them somewhere else with `CHROMIUM=/path/to/chrome npm run test:e2e`, or run them in Firefox with `npx playwright-core install firefox` and then `BROWSER=firefox npm run test:e2e`.
 
 The output of `npm run build` is a plain static site with relative paths, so it can be hosted from any folder on any static host.
 
@@ -638,7 +638,7 @@ There is more in **[ARCHITECTURE.md](ARCHITECTURE.md)**: how the engine is built
 | Browser | Status |
 | :-- | :-- |
 | Chrome, Edge, Opera | Everything. The automated tests run in Chromium on every commit |
-| Firefox | Uses only APIs Firefox supports, but is not covered by the automated tests |
+| Firefox | Everything. The same browser tests run in Firefox on every commit |
 | Safari (macOS, iPadOS, iOS) | Same, minus MIDI controllers, which Safari does not support |
 
 Video export needs a browser that can encode video (WebCodecs): current Chrome, Edge and Safari. Stem separation is fastest with WebGPU and falls back to WebAssembly, which is slow but works; it downloads a 180 MB model the first time, takes up to 30 seconds of audio at a go, and it is up to you to have the rights to what you split and sample.

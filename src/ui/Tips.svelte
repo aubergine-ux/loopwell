@@ -51,7 +51,9 @@
     // keyboard focus only: a click also focuses, and a tooltip then would just be in the way
     const focus = (e: FocusEvent) => { const el = e.target as Element; if (el.matches?.(':focus-visible')) aim(el, 350); };
     // focus is lost in the middle of a redraw when the focused control is taken off the screen; wait until the redraw is over
-    const leave = () => queueMicrotask(hide);
+    // By then the next control may already have asked for its own (browsers differ on which comes first), so only
+    // the bubble that belonged to the control being left is taken away.
+    const leave = () => { const was = target; queueMicrotask(() => { if (target === was) hide(); }); };
     const opts = { capture: true, passive: true } as const;
     document.addEventListener('pointerover', over, opts);
     document.addEventListener('pointerout', out, opts);

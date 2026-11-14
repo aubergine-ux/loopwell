@@ -81,6 +81,7 @@ check('dragging along a row paints steps', painted === 8, `${painted}/8`);
 // ---- undo / redo ----
 await page.waitForTimeout(500);
 await page.keyboard.press('Control+z');
+await page.waitForFunction(() => !document.querySelector('.cell[data-t="5"][data-s="3"]')?.classList.contains('on'), undefined, { timeout: 3000 }).catch(() => {});
 check('undo reverts the last edit', !(await isOn(page, 5, 3)));
 await page.keyboard.press('Control+Shift+z');
 check('redo brings it back', await isOn(page, 5, 3));
@@ -171,7 +172,8 @@ await page.keyboard.press('ArrowLeft');
 
 // ---- sampler: slices, reverse, stretch ----
 const meterNow = () => page.locator('.lcd .vu i').first().evaluate((el) => (el as HTMLElement).style.transform);
-const sounded = async () => { await page.waitForTimeout(120); return !/scaleX\(0(\.0+)?\)/.test(await meterNow()); };
+// the meter moves a little later in some browsers than others, so look for a while rather than once
+const sounded = async () => { for (let i = 0; i < 12; i++) { await page.waitForTimeout(60); if (!/scaleX\(0(\.0+)?\)/.test(await meterNow())) return true; } return false; };
 await page.locator('.row[data-row="0"] .name').click();
 await page.getByRole('tab', { name: 'Sound' }).click();
 await page.waitForSelector('.wave canvas');

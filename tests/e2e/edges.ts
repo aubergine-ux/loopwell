@@ -147,7 +147,8 @@ try {
   await page.getByLabel('Live code').fill('kick: x*4\nhat: [x x x]*4');
   check('and so does the code editor', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
 
-  const real = errors.filter((e) => !/ERR_INTERNET_DISCONNECTED|Failed to load resource|ERR_FAILED|decod/i.test(e));
+  // being offline is the point here: each browser reports the requests that fail in its own words
+  const real = errors.filter((e) => !/ERR_INTERNET_DISCONNECTED|Failed to load resource|ERR_FAILED|decod|Cross-Origin Request Blocked.*CORS request did not succeed|NetworkError/i.test(e));
   check('no errors on the page', real.length === 0, real.join(' | ').slice(0, 400));
 } catch (e) {
   check('the run finished', false, e instanceof Error ? e.message.split('\n').slice(0, 3).join(' ') : String(e));
