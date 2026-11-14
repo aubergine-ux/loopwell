@@ -127,12 +127,17 @@ jobs:
         run: npm run test:e2e
         env:
           BROWSER: firefox
-      - name: Every feature suite
-        run: npm run test:features
-        env:
-          BROWSER: firefox
-      - name: Community features against the real server
-        run: npm run test:community
+      # each suite on its own, so one that fails doesn't hide how the others do
+      - name: Every feature suite, one at a time
+        if: always()
+        run: |
+          failed=""
+          for suite in creative instruments stage mix workflow onboarding polish ideas vocal master video embed plugins code interop learn edges community; do
+            echo "::group::$suite"
+            npx tsx tests/e2e/$suite.ts || failed="$failed $suite"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "Failed in Firefox:$failed"; exit 1; fi
         env:
           BROWSER: firefox
 
