@@ -122,7 +122,7 @@ jobs:
       - name: Install Firefox
         run: npx playwright-core install --with-deps firefox
       - name: A sound card that plays into nothing, so Firefox's audio clock runs
-        run: scripts/virtual-sound-card.sh
+        run: sh scripts/virtual-sound-card.sh
       - name: End-to-end tests
         run: npm run test:e2e
         env:
