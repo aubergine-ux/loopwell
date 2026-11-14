@@ -64,6 +64,7 @@ The biggest release so far: Loopwell grows from a beat sketchpad into a place to
 
 ### Fixed
 
+- On a slow device, pressing play could be mistaken for the browser blocking sound, because audio was given only 300 ms to start even right after a tap.
 - In Firefox, tooltips showed for the first control reached with Tab and then stopped.
 - Automation is applied before the hits of its own step, not after.
 

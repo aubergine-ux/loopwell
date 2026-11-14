@@ -121,9 +121,11 @@ export class AudioHost {
   async resume(): Promise<boolean> {
     await this.init();
     if (this.ctx!.state !== 'running') {
-      // Without a gesture the promise from resume() never settles, so don't wait on it forever.
+      // Without a gesture the promise from resume() never settles, so don't wait on it forever. Right after a tap or
+      // a key it will settle, but a slow device can take a second or more to get its audio going: give it that long.
       const resumed = this.ctx!.resume().catch(() => {});
-      await Promise.race([resumed, new Promise((r) => setTimeout(r, 300))]);
+      const gesture = typeof navigator !== 'undefined' && (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive;
+      await Promise.race([resumed, new Promise((r) => setTimeout(r, gesture ? 3000 : 300))]);
     }
     return this.running;
   }
